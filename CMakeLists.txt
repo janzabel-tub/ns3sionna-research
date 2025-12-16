@@ -47,6 +47,7 @@ set(proto_source_files model/message.proto)
 set(SOURCE_FILES
         model/sionna-mobility-model.cc
         model/sionna-propagation-cache.cc
+        model/sionna-propagation-enforced-cache.cc
         model/sionna-propagation-delay-model.cc
         model/sionna-propagation-loss-model.cc
         model/sionna-spectrum-propagation-loss-model.cc
@@ -59,6 +60,7 @@ set(SOURCE_FILES
 set(HEADER_FILES
         model/sionna-mobility-model.h
         model/sionna-propagation-cache.h
+        model/sionna-propagation-enforced-cache.h
         model/sionna-propagation-delay-model.h
         model/sionna-propagation-loss-model.h
         model/sionna-spectrum-propagation-loss-model.h

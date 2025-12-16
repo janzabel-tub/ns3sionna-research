@@ -76,3 +76,9 @@ build_lib_example(
         LIBRARIES_TO_LINK ${libsionna} ${libwifi} ${libbuildings} ${libinternet} ${libapplications}
 )
 
+build_lib_example(
+        NAME ns3sionna-performance-sionna-tcp
+        SOURCE_FILES performance-sionna-tcp.cc
+        LIBRARIES_TO_LINK ${libsionna} ${libwifi} ${libbuildings} ${libinternet} ${libapplications}
+)
+
