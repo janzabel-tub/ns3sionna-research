@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="SshConfigs">
+    <configs>
+      <sshConfig authType="PASSWORD" host="hpc3.tkn.tu-berlin.de" id="8d1420b4-108f-4428-8f4a-4bf5280993b2" port="22" nameFormat="DESCRIPTIVE" username="jan.zabel" useOpenSSHConfig="false" />
+    </configs>
+  </component>
+</project>
