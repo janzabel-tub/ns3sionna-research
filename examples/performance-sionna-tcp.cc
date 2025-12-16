@@ -6,12 +6,16 @@
 * Author: Yannik Pilz <y.pilz@campus.tu-berlin.de>
 */
 
+#include <ostream>
+
 #include "ns3/sionna-helper.h"
 #include "ns3/sionna-mobility-model.h"
 #include "ns3/sionna-propagation-enforced-cache.h"
 #include "ns3/sionna-propagation-delay-model.h"
 #include "ns3/sionna-propagation-loss-model.h"
 
+#include "ns3/packet-sink-helper.h"
+#include "ns3/packet-sink.h"
 #include "ns3/applications-module.h"
 #include "ns3/core-module.h"
 #include "ns3/internet-module.h"
@@ -21,19 +25,35 @@
 #include "ns3/yans-wifi-helper.h"
 #include "ns3/wifi-net-device.h"
 #include "../../src/wifi/model/yans-wifi-phy.h"
-#include "ns3/tcp-westwood-plus.h
+#include "ns3/tcp-westwood-plus.h"
 // TODO: TCP Cubic (Set as default since 16.5.2 (NS-3.34))
-
 
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("PerformanceSionnaTCP");
 
-// Simulation allows for variable caching interval with parameter enforcedCaching in ns (so every 100ms = 100000)
+Ptr<PacketSink> sink;
+uint64_t lastTotalRx = 0;
+
+/**
+ * Calculate the throughput and shamelessly stolen
+ */
+void
+CalculateThroughput()
+{
+    Time now = Simulator::Now(); /* Return the simulator's virtual time. */
+    double cur = (sink->GetTotalRx() - lastTotalRx) * 8.0 /
+                 1e5; /* Convert Application RX Packets to MBits. */
+    std::cout << now.GetSeconds() << "s: \t" << cur << " Mbit/s" << std::endl;
+    lastTotalRx = sink->GetTotalRx();
+    Simulator::Schedule(MilliSeconds(100), &CalculateThroughput);
+}
+
+// Simulation allows for variable caching interval with parameter enforcedCachingT in ns (so every 100ms = 100000)
 double
 RunSimulation(const std::string environment, const uint32_t numStas, const int channel_no, const bool mobile_scenario,
               const double mobile_speed, const int udp_pkt_interval, const bool caching,
-              const int mode, const int sub_mode, const bool verbose, const int enforcedCaching)
+              const int mode, const int sub_mode, const bool verbose, const int enforcedCachingT, const bool enfCache)
 {
    // Create Station and Access Points, one access point and variable Stations
    NodeContainer wifiStaNodes;
@@ -47,11 +67,13 @@ RunSimulation(const std::string environment, const uint32_t numStas, const int c
    std::string server_url = "tcp://localhost:5555";
    SionnaHelper sionnaHelper(environment, server_url);
 
-   // JZA: EnforcedCaching implemented
+   // JZA: enforcedCachingT implemented
+    // TODO: Pointer error.
    Ptr<SionnaPropagationEnforcedCache> propagationCache = CreateObject<SionnaPropagationEnforcedCache>();
    propagationCache->SetSionnaHelper(sionnaHelper);
    propagationCache->SetCaching(caching);
-   propagationCache->SetEnforcedCaching(enforcedCaching);
+   propagationCache->SetEnforcedCachingT(enforcedCachingT);
+   propagationCache->SetEnfCache(enfCache);
 
    Ptr<SionnaPropagationDelayModel> delayModel = CreateObject<SionnaPropagationDelayModel>();
    delayModel->SetPropagationCache(propagationCache);
@@ -61,6 +83,16 @@ RunSimulation(const std::string environment, const uint32_t numStas, const int c
 
    channel->SetPropagationLossModel(lossModel);
    channel->SetPropagationDelayModel(delayModel);
+
+   // JZA: New Stuff for tcp TODO: Cubic might not work like this. Find out the name for Cubic, it exists!!!
+   // Until then, using TCP Westwood Plus
+   // JZA TODO: Currently everything is hardcoded, make things soft later.
+   DataRate dataRate("100Mb/s"); // Hardcoded Data Rate at 100Mbit/s
+   std::string tcpVariant{"ns3::TcpWestwoodPlus"};
+
+   Config::SetDefault("ns3::TcpL4Protocol::SocketType",
+                      TypeIdValue(TypeId::LookupByName(tcpVariant)));
+   Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(1472));
 
    YansWifiPhyHelper phy;
    phy.SetChannel(channel);
@@ -107,7 +139,7 @@ RunSimulation(const std::string environment, const uint32_t numStas, const int c
        mobility.Install(wifiApNode);
    }
 
-   // TODO: What does this do?
+   // TODO: What does this section do?
    wifiApNode.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(1.0, 2.0, 1.0));
 
    Ptr<UniformRandomVariable> randX = CreateObject<UniformRandomVariable>();
@@ -131,6 +163,9 @@ RunSimulation(const std::string environment, const uint32_t numStas, const int c
    Ipv4InterfaceContainer wifiStaInterfaces = address.Assign(staDevices);
    Ipv4InterfaceContainer wifiApInterfaces = address.Assign(apDevices);
 
+   // TODO: This is udp, remove and replace with tcp stuff.
+
+   /*
    UdpEchoServerHelper echoServer(9);
 
    ApplicationContainer serverApps = echoServer.Install(wifiStaNodes);
@@ -145,8 +180,31 @@ RunSimulation(const std::string environment, const uint32_t numStas, const int c
    ApplicationContainer clientApps = echoClient.Install(wifiApNode);
    clientApps.Start(Seconds(1.0));
    clientApps.Stop(Seconds(10.0));
+   */
 
    Ipv4GlobalRoutingHelper::PopulateRoutingTables();
+
+    /* Install TCP Receiver on the access point*/
+   PacketSinkHelper sinkHelper("ns3::TcpSocketFactory",
+                                    InetSocketAddress(Ipv4Address::GetAny(), 9));
+   ApplicationContainer clientApps = sinkHelper.Install(wifiApNode);
+   sink = StaticCast<PacketSink>(clientApps.Get(0));
+
+    /* Install TCP/UDP Transmitter on the station */
+    OnOffHelper server("ns3::TcpSocketFactory", (InetSocketAddress(wifiApInterfaces.GetAddress(0), 9)));
+    server.SetAttribute("PacketSize", UintegerValue(1472));
+    server.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
+    server.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
+    server.SetAttribute("DataRate", DataRateValue(DataRate(dataRate)));
+    ApplicationContainer serverApps = server.Install(wifiStaNodes);
+
+    // JZA: Start applications.
+    clientApps.Start(Seconds(1.0));
+    clientApps.Stop(Seconds(10.0));
+
+    serverApps.Start(Seconds(0.9));
+    serverApps.Stop(Seconds(10.0));
+    Simulator::Schedule(Seconds(1.1), &CalculateThroughput);
 
    // set center frequency & bandwidth for Sionna
     double channelWidth = get_channel_width(apDevices.Get(0));
@@ -192,15 +250,27 @@ RunSimulation(const std::string environment, const uint32_t numStas, const int c
        }
    }
 
-   Simulator::Stop(Seconds(10.0));
+   // JZA: Modified t0 10 + 1 Seconds
+   Simulator::Stop(Seconds(11.0));
 
    auto startTime = std::chrono::system_clock::now();
 
    sionnaHelper.Start();
 
    Simulator::Run();
+    // Average throughput doesn't work because simulation time isn't defined. TODO: Define SimTime.
+    /*
+   auto averageThroughput =
+        (static_cast<double>(sink->GetTotalRx() * 8) / simulationTime.GetMicroSeconds());
+   */
    Simulator::Destroy();
 
+   /*if (averageThroughput < 10) {
+        NS_LOG_ERROR("Throughput is outside of expectations. Something went wrong or the connection sucks.");
+        exit(1);
+   }*/
+
+    //std::cout << "\nAverage Throughput: " << averageThroughput << " Mbit/s" << std::endl;
     std::cout << "Ns3-sionna: cache hit ratio: " <<  propagationCache->GetStats() << std::endl;
 
    sionnaHelper.Destroy();
@@ -219,7 +289,8 @@ main(int argc, char* argv[])
 {
    bool verbose = false;
    bool caching = true;
-   int enforcedCaching = 100000; // Standard coherence time of 10ms (JZA: TODO: Find better time.)
+   bool enfCache = false;
+   int enforcedCachingT = 100000; // Standard coherence time of 10ms (JZA: TODO: Find better time.)
    std::string environment = "simple_room/simple_room.xml";
    int wifi_channel_num = 1;
    bool mobile_scenario = false;
@@ -242,7 +313,8 @@ main(int argc, char* argv[])
    cmd.AddValue("mode", "The Sionna mode", mode);
    cmd.AddValue("sub_mode", "The Sionna submode", sub_mode);
    cmd.AddValue("verbose", "Enable logging", verbose);
-   cmd.AddValue("enforcedCaching","Set a fixed time between calculating the channel",enforcedCaching);
+   cmd.AddValue("enfCache","Enable or Disable fixed Caching time",enfCache);
+   cmd.AddValue("enforcedCachingT","Set a fixed time between calculating the channel",enforcedCachingT);
    cmd.Parse(argc, argv);
 
    if (verbose)
@@ -270,7 +342,7 @@ main(int argc, char* argv[])
    while (computationTime < 2 * 60 * 60 && numStas <= (uint32_t)sim_max_stas) // as long as a single run is below 2h
    {
        computationTime = RunSimulation(environment, numStas, wifi_channel_num, mobile_scenario,
-                                       mobile_speed, udp_pkt_interval, caching, mode, sub_mode, verbose);
+                                       mobile_speed, udp_pkt_interval, caching, mode, sub_mode, verbose, enforcedCachingT, enfCache);
        numStas = numStas * 2;
    }
 

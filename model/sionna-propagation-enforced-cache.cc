@@ -6,7 +6,7 @@
  * Author: Yannik Pilz <y.pilz@campus.tu-berlin.de>
  */
 
-#include "sionna-propagation-cache.h"
+#include "sionna-propagation-enforced-cache.h"
 
 #include "message.pb.h"
 #include "sionna-mobility-model.h"
@@ -164,13 +164,19 @@ SionnaPropagationEnforcedCache::SetCaching(bool caching)
     m_caching = caching;
 }
 
-// New function for enforced caching
+// JZA: New function for enforced caching
 void
-SionnaPropagationEnforcedCache::SetEnforcedCaching(uint32_t enf_Cache_Interval)
+SionnaPropagationEnforcedCache::SetEnforcedCachingT(uint32_t enf_Cache_Interval)
 {
     m_cache_interval = enf_Cache_Interval;
 }
-// JZA: TODO: Doesn't do anything yet.
+
+void
+SionnaPropagationEnforcedCache::SetEnfCache(bool enf_Cache)
+{
+    m_enfCache = enf_Cache;
+}
+// JZA: TODO: Test if this works now.
 
 void
 SionnaPropagationEnforcedCache::SetOptimize(bool optimize)
@@ -285,10 +291,17 @@ SionnaPropagationEnforcedCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<Mob
     // result contains also future CSI; fill-up the cache
     for (int csi_i=0; csi_i < csi_response.csi_size(); csi_i++) {
         Time start_time = NanoSeconds(csi_response.csi(csi_i).start_time());
-        // This sets the cache time as a fixed value. TODO: Make this value a parameter to be set. DOneone
+
+        // This sets the cache time as a fixed value if enfCache is set to true (default is false, no changes then)
         // Set as parameter in performance-sionna-tcp.cc
-        Time end_time = NanoSeconds(csi_response.csi(csi_i).start_time()) + NanoSeconds(m_cache_interval);
-        // Time end_time = NanoSeconds(csi_response.csi(csi_i).end_time());
+        if (m_enfCache) {
+            Time end_time = NanoSeconds(csi_response.csi(csi_i).start_time()) + NanoSeconds(m_cache_interval);
+        }
+        Time end_time = NanoSeconds(csi_response.csi(csi_i).end_time());
+
+        if (m_enfCache) {
+            end_time = NanoSeconds(csi_response.csi(csi_i).start_time()) + NanoSeconds(m_cache_interval);
+        }
 
         NS_LOG_DEBUG("\t\t: CSI ts= (" << start_time.GetNanoSeconds() << "ns"
             << " - " << end_time.GetNanoSeconds() << "ns), delta="
