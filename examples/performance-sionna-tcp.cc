@@ -10,7 +10,8 @@
 
 #include "ns3/sionna-helper.h"
 #include "ns3/sionna-mobility-model.h"
-#include "ns3/sionna-propagation-enforced-cache.h"
+
+#include "ns3/sionna-propagation-cache.h"
 #include "ns3/sionna-propagation-delay-model.h"
 #include "ns3/sionna-propagation-loss-model.h"
 #include "ns3/sionna-spectrum-propagation-loss-model.h"
@@ -25,9 +26,9 @@
 #include "ns3/mobility-module.h"
 #include "ns3/network-module.h"
 #include "ns3/ssid.h"
-#include "ns3/yans-wifi-helper.h"
+
+// JZA: TODO: Remove Yans. Done!
 #include "ns3/wifi-net-device.h"
-#include "../../src/wifi/model/yans-wifi-phy.h"
 #include "ns3/tcp-westwood-plus.h"
 // TODO: TCP Cubic (Set as default since 16.5.2 (NS-3.34))
 
@@ -37,8 +38,6 @@ NS_LOG_COMPONENT_DEFINE("PerformanceSionnaTCP");
 
 Ptr<PacketSink> sink;
 uint64_t lastTotalRx = 0;
-
-// JZA: TODO: Rate Adaptions
 
 /**
  * Calculate the throughput and shamelessly stolen
@@ -54,19 +53,15 @@ CalculateThroughput()
     Simulator::Schedule(MilliSeconds(100), &CalculateThroughput);
 }
 
-// Simulation allows for variable caching interval with parameter enforcedCachingT in ns (so every 100ms = 100000)
 double
 RunSimulation(  const std::string environment,
                 const uint32_t numStas,
                 const bool mobile_scenario,
                 const double mobile_speed,
-                const int udp_pkt_interval,
                 const bool caching,
                 const int mode,
                 const int sub_mode,
-                const bool verbose,
-                const int enforcedCachingT,
-                const bool enfCache)
+                const bool verbose)
 {
     // Wifi config
     int wifi_channel_num = 40; // center at 5200
@@ -81,145 +76,154 @@ RunSimulation(  const std::string environment,
     NodeContainer wifiApNode;
     wifiApNode.Create(1);
 
-    Ptr<YansWifiChannel> channel = CreateObject<YansWifiChannel>();
-
+    // What does this do?
     Config::Set("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Phy/ChannelWidth",
                 UintegerValue(channel_width));
 
-    // JZA: enforcedCachingT implemented
-    // TODO: Pointer error.
-    Ptr<SionnaPropagationEnforcedCache> propagationCache = CreateObject<SionnaPropagationEnforcedCache>();
+    Ptr<SionnaPropagationCache> propagationCache =
+        CreateObject<SionnaPropagationCache>();
     propagationCache->SetSionnaHelper(sionnaHelper);
     propagationCache->SetCaching(caching);
-    propagationCache->SetEnforcedCachingT(enforcedCachingT);
-    propagationCache->SetEnfCache(enfCache);
 
+    // new Channel thingy
+    Ptr<MultiModelSpectrumChannel> spectrumChannel =
+        CreateObject<MultiModelSpectrumChannel>();
 
-    // new
-    Ptr<MultiModelSpectrumChannel> spectrumChannel = CreateObject<MultiModelSpectrumChannel>();
-
-    Ptr<SionnaPropagationDelayModel> delayModel = CreateObject<SionnaPropagationDelayModel>();
-    delayModel->SetPropagationCache(propagationCache);
-
-    Ptr<SionnaPropagationLossModel> lossModel = CreateObject<SionnaPropagationLossModel>();
+    Ptr<SionnaPropagationLossModel> lossModel =
+        CreateObject<SionnaPropagationLossModel>();
     lossModel->SetPropagationCache(propagationCache);
-
-    // SISO only
-    Ptr<SionnaSpectrumPropagationLossModel> spectrumLossModel =
-            CreateObject<SionnaSpectrumPropagationLossModel>();
-        spectrumLossModel->SetPropagationCache(propagationCache);
 
     spectrumChannel->AddPropagationLossModel(lossModel);
 
-    channel->SetPropagationLossModel(lossModel);
-    channel->SetPropagationDelayModel(delayModel);
+    // SISO only
+    Ptr<SionnaSpectrumPropagationLossModel> spectrumLossModel =
+        CreateObject<SionnaSpectrumPropagationLossModel>();
+    spectrumLossModel->SetPropagationCache(propagationCache);
 
-    // JZA: New Stuff for tcp TODO: Cubic might not work like this. Find out the name for Cubic, it exists!!!
-    // Until then, using TCP Westwood Plus
-    // JZA TODO: Currently everything is hardcoded, make things soft later.
+    spectrumChannel->AddSpectrumPropagationLossModel(spectrumLossModel);
+
+    Ptr<SionnaPropagationDelayModel> delayModel =
+        CreateObject<SionnaPropagationDelayModel>();
+    delayModel->SetPropagationCache(propagationCache);
+
+    spectrumChannel->SetPropagationDelayModel(delayModel);
+
+    // Yet more new Stuff with Spectrum Phy
+    SpectrumWifiPhyHelper spectrumPhy;
+    spectrumPhy.SetChannel(spectrumChannel);
+    spectrumPhy.SetErrorRateModel("ns3::NistErrorRateModel");
+    spectrumPhy.Set("TxPowerStart", DoubleValue(20));
+    spectrumPhy.Set("TxPowerEnd", DoubleValue(20));
+
+    // Wifi and MAC
+    WifiMacHelper mac;
+    Ssid ssid = Ssid("ns-3-ssid");
+
+    WifiHelper wifi;
+
+    // WifiStandard wifi_standard = WIFI_STANDARD_80211g;
+    WifiStandard wifi_standard = WIFI_STANDARD_80211ax;
+    wifi.SetStandard(wifi_standard);
+
+    std::string channelStr = "{" + std::to_string(wifi_channel_num) + ", " +
+                             std::to_string(channel_width) + ", BAND_5GHZ, 0}";
+    spectrumPhy.Set("ChannelSettings", StringValue(channelStr));
+
+    std::string wifiManager("Ideal");
+    uint32_t rtsThreshold = 999999; // disabled even for large A-MPDU
+    wifi.SetRemoteStationManager("ns3::" + wifiManager + "WifiManager",
+                                 "RtsCtsThreshold",
+                                 UintegerValue(rtsThreshold));
+
+    // TCP Setup
     DataRate dataRate("100Mb/s"); // Hardcoded Data Rate at 100Mbit/s
     std::string tcpVariant{"ns3::TcpWestwoodPlus"};
 
-   Config::SetDefault("ns3::TcpL4Protocol::SocketType",
-                      TypeIdValue(TypeId::LookupByName(tcpVariant)));
-   Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(1472));
+    Config::SetDefault("ns3::TcpL4Protocol::SocketType",
+        TypeIdValue(TypeId::LookupByName(tcpVariant)));
+    Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(1472));
 
-   YansWifiPhyHelper phy;
-   phy.SetChannel(channel);
+    NetDeviceContainer staDevices;
+    mac.SetType("ns3::StaWifiMac",
+                "Ssid",
+                SsidValue(ssid),
+                "ActiveProbing",
+                BooleanValue(false));
+    spectrumPhy.Set("ChannelSettings", StringValue(channelStr));
+    staDevices = wifi.Install(spectrumPhy, mac, wifiStaNodes);
 
-   WifiMacHelper mac;
-   Ssid ssid = Ssid("ns-3-ssid");
+    NetDeviceContainer apDevices;
+    mac.SetType("ns3::ApWifiMac",
+                "Ssid",
+                SsidValue(ssid),
+                "BeaconGeneration",
+                BooleanValue(true),
+                "BeaconInterval",
+                TimeValue(Seconds(5.120)),
+                "EnableBeaconJitter",
+                BooleanValue(false));
+    spectrumPhy.Set("ChannelSettings", StringValue(channelStr));
+    apDevices = wifi.Install(spectrumPhy, mac, wifiApNode);
 
-   WifiHelper wifi;
+    MobilityHelper mobility;
 
-   // WifiStandard wifi_standard = WIFI_STANDARD_80211g;
-   // Updated wifi standard to ax
-   WifiStandard wifi_standard = WIFI_STANDARD_80211ax;
-   wifi.SetStandard(wifi_standard);
+    if (mobile_scenario)
+    {
+        // static AP
+        mobility.SetMobilityModel("ns3::SionnaMobilityModel");
+        mobility.Install(wifiApNode);
+        // mobile STA
+        mobility.SetMobilityModel("ns3::SionnaMobilityModel",
+                                  "Model",
+                                  EnumValue(SionnaMobilityModel::MODEL_RANDOM_WALK),
+                                  "Speed",
+                                  StringValue("ns3::ConstantRandomVariable[Constant=" +
+                                              std::to_string(mobile_speed) + "]"),
+                                  "Wall",
+                                  BooleanValue(true));
+        mobility.Install(wifiStaNodes);
+    }
+    else
+    {
+        // all nodes are static
+        mobility.SetMobilityModel("ns3::SionnaMobilityModel");
+        mobility.Install(wifiStaNodes);
+        mobility.Install(wifiApNode);
+    }
 
-   std::string channelStr = "{" + std::to_string(wifi_channel_num) + ", " +
-                                std::to_string(channel_width) + ", BAND_5GHZ, 0}";
-   phy.Set("ChannelSettings", StringValue(channelStr));
+    // random placement of all nodes
+    wifiApNode.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(1.0, 2.0, 1.0));
 
-   NetDeviceContainer staDevices;
-   mac.SetType("ns3::StaWifiMac", "Ssid", SsidValue(ssid), "ActiveProbing", BooleanValue(false));
-   staDevices = wifi.Install(phy, mac, wifiStaNodes);
+    Ptr<UniformRandomVariable> randX = CreateObject<UniformRandomVariable>();
+    Ptr<UniformRandomVariable> randY = CreateObject<UniformRandomVariable>();
+    randX->SetAttribute("Min", DoubleValue(0.1));
+    randX->SetAttribute("Max", DoubleValue(5.9));
+    randY->SetAttribute("Min", DoubleValue(0.1));
+    randY->SetAttribute("Max", DoubleValue(3.9));
+    for (uint32_t i = 0; i < numStas; i++)
+    {
+        wifiStaNodes.Get(i)->GetObject<MobilityModel>()->SetPosition(
+            Vector(randX->GetValue(), randY->GetValue(), 1.0));
+    }
 
-   NetDeviceContainer apDevices;
-   mac.SetType("ns3::ApWifiMac", "Ssid", SsidValue(ssid), "BeaconGeneration", BooleanValue(true));
-   apDevices = wifi.Install(phy, mac, wifiApNode);
+    // configure IP
+    InternetStackHelper stack;
+    stack.Install(wifiApNode);
+    stack.Install(wifiStaNodes);
 
-   MobilityHelper mobility;
+    Ipv4AddressHelper address;
 
-   if (mobile_scenario)
-   {
-       mobility.SetMobilityModel("ns3::SionnaMobilityModel");
-       mobility.Install(wifiApNode);
+    address.SetBase("10.1.1.0", "255.255.255.0");
+    Ipv4InterfaceContainer wifiStaInterfaces = address.Assign(staDevices);
+    Ipv4InterfaceContainer wifiApInterfaces = address.Assign(apDevices);
 
-       mobility.SetMobilityModel("ns3::SionnaMobilityModel",
-                                 "Model",
-                                 EnumValue(SionnaMobilityModel::MODEL_RANDOM_WALK),
-                                 "Speed",
-                                 StringValue("ns3::ConstantRandomVariable[Constant=" + std::to_string(mobile_speed) + "]"));
-       mobility.Install(wifiStaNodes);
-   }
-   else
-   {
-       mobility.SetMobilityModel("ns3::SionnaMobilityModel");
-       mobility.Install(wifiStaNodes);
-       mobility.Install(wifiApNode);
-   }
-
-   // TODO: What does this section do?
-   wifiApNode.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(1.0, 2.0, 1.0));
-
-   Ptr<UniformRandomVariable> randX = CreateObject<UniformRandomVariable>();
-   Ptr<UniformRandomVariable> randY = CreateObject<UniformRandomVariable>();
-   randX->SetAttribute("Min", DoubleValue(0.1));
-   randX->SetAttribute("Max", DoubleValue(5.9));
-   randY->SetAttribute("Min", DoubleValue(0.1));
-   randY->SetAttribute("Max", DoubleValue(3.9));
-   for (uint32_t i = 0; i < numStas; i++)
-   {
-       wifiStaNodes.Get(i)->GetObject<MobilityModel>()->SetPosition(Vector(randX->GetValue(), randY->GetValue(), 1.0));
-   }
-
-   InternetStackHelper stack;
-   stack.Install(wifiApNode);
-   stack.Install(wifiStaNodes);
-
-   Ipv4AddressHelper address;
-
-   address.SetBase("10.1.1.0", "255.255.255.0");
-   Ipv4InterfaceContainer wifiStaInterfaces = address.Assign(staDevices);
-   Ipv4InterfaceContainer wifiApInterfaces = address.Assign(apDevices);
-
-   // TODO: This is udp, remove and replace with tcp stuff.
-
-   /*
-   UdpEchoServerHelper echoServer(9);
-
-   ApplicationContainer serverApps = echoServer.Install(wifiStaNodes);
-   serverApps.Start(Seconds(0.9));
-   serverApps.Stop(Seconds(10.0));
-
-   UdpEchoClientHelper echoClient(Ipv4Address ("255.255.255.255"), 9);
-   echoClient.SetAttribute("MaxPackets", UintegerValue(1e9));
-   echoClient.SetAttribute("Interval", TimeValue(MilliSeconds(udp_pkt_interval)));
-   echoClient.SetAttribute("PacketSize", UintegerValue(100));
-
-   ApplicationContainer clientApps = echoClient.Install(wifiApNode);
-   clientApps.Start(Seconds(1.0));
-   clientApps.Stop(Seconds(10.0));
-   */
-
-   Ipv4GlobalRoutingHelper::PopulateRoutingTables();
+    Ipv4GlobalRoutingHelper::PopulateRoutingTables();
 
     /* Install TCP Receiver on the access point*/
-   PacketSinkHelper sinkHelper("ns3::TcpSocketFactory",
-                                    InetSocketAddress(Ipv4Address::GetAny(), 9));
-   ApplicationContainer clientApps = sinkHelper.Install(wifiApNode);
-   sink = StaticCast<PacketSink>(clientApps.Get(0));
+    PacketSinkHelper sinkHelper("ns3::TcpSocketFactory",
+        InetSocketAddress(Ipv4Address::GetAny(), 9));
+    ApplicationContainer clientApps = sinkHelper.Install(wifiApNode);
+    sink = StaticCast<PacketSink>(clientApps.Get(0));
 
     /* Install TCP/UDP Transmitter on the station */
     OnOffHelper server("ns3::TcpSocketFactory", (InetSocketAddress(wifiApInterfaces.GetAddress(0), 9)));
@@ -227,108 +231,66 @@ RunSimulation(  const std::string environment,
     server.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
     server.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
     server.SetAttribute("DataRate", DataRateValue(DataRate(dataRate)));
+
     ApplicationContainer serverApps = server.Install(wifiStaNodes);
 
-    // JZA: Start applications.
+    // Start applications.
     clientApps.Start(Seconds(1.0));
     clientApps.Stop(Seconds(10.0));
 
     serverApps.Start(Seconds(0.9));
     serverApps.Stop(Seconds(10.0));
-    Simulator::Schedule(Seconds(1.1), &CalculateThroughput);
+    // Simulator::Schedule(Seconds(1.1), &CalculateThroughput);
 
-   // set center frequency & bandwidth for Sionna
-    double channelWidth = get_channel_width(apDevices.Get(0));
-   sionnaHelper.Configure(get_center_freq(apDevices.Get(0)),
-       channelWidth, getFFTSize(wifi_standard, channelWidth), getSubcarrierSpacing(wifi_standard));
-   sionnaHelper.SetMode(mode);
-   sionnaHelper.SetSubMode(sub_mode);
+    // set center frequency for Sionna
+    double fc = get_center_freq(apDevices.Get(0));
 
-   if (verbose)
-   {
-       std::cout << "----------Node Information----------" << std::endl;
-       NodeContainer c = NodeContainer::GetGlobal();
-       for (auto iter = c.Begin(); iter != c.End(); ++iter)
-       {
-           std::cout << "NodeID: " << (*iter)->GetId() << ", ";
+    // set center frequency & bandwidth for Sionna
+    // JZA: TODO: This seems very much like the thing I was trying to implement.
+    int min_coherence_time_ms = 50;
+    sionnaHelper.Configure(fc,
+                           channel_width,
+                           getFFTSize(wifi_standard, channel_width),
+                           getSubcarrierSpacing(wifi_standard),
+                           min_coherence_time_ms);
 
-           Ptr<MobilityModel> mobilityModel = (*iter)->GetObject<MobilityModel>();
-           if (mobilityModel)
-           {
-               std::cout << mobilityModel->GetInstanceTypeId().GetName() << " (";
-               Vector position = mobilityModel->GetPosition();
-               Vector velocity = mobilityModel->GetVelocity();
-               std::cout << "Pos: [" << position.x << ", " << position.y << ", " << position.z << "]" << ", ";
-               std::cout << "Vel: [" << velocity.x << ", " << velocity.y << ", " << velocity.z << "]";
+    sionnaHelper.SetMode(mode);
+    sionnaHelper.SetSubMode(sub_mode);
 
-               Ptr<SionnaMobilityModel> sionnaMobilityModel = DynamicCast<SionnaMobilityModel>(mobilityModel);
-               if (sionnaMobilityModel)
-               {
-                   std::cout << ", " << "Model: " << sionnaMobilityModel->GetModel() << ", ";
-                   std::cout << "Mode: " << sionnaMobilityModel->GetMode() << ", ";
-                   std::cout << "ModeTime: " << sionnaMobilityModel->GetModeTime().GetSeconds() << ", ";
-                   std::cout << "ModeDistance: " << sionnaMobilityModel->GetModeDistance() << ", ";
-                   std::cout << "Speed: " << sionnaMobilityModel->GetSpeed()->GetInstanceTypeId().GetName() << ", ";
-                   std::cout << "Direction: " << sionnaMobilityModel->GetDirection()->GetInstanceTypeId().GetName();
-               }
+    Simulator::Stop(Seconds(10.0));
 
-               std::cout << ")" << std::endl;
-           }
-           else
-           {
-               std::cout << "No MobilityModel" << std::endl;
-           }
-       }
-   }
+    auto startTime = std::chrono::system_clock::now();
 
-   // JZA: Modified t0 10 + 1 Seconds
-   Simulator::Stop(Seconds(11.0));
+    sionnaHelper.Start();
 
-   auto startTime = std::chrono::system_clock::now();
+    Simulator::Run();
+    Simulator::Destroy();
 
-   sionnaHelper.Start();
+    propagationCache->PrintStats();
 
-   Simulator::Run();
-    // Average throughput doesn't work because simulation time isn't defined. TODO: Define SimTime.
-    /*
-   auto averageThroughput =
-        (static_cast<double>(sink->GetTotalRx() * 8) / simulationTime.GetMicroSeconds());
-   */
-   Simulator::Destroy();
+    sionnaHelper.Destroy();
 
-   /*if (averageThroughput < 10) {
-        NS_LOG_ERROR("Throughput is outside of expectations. Something went wrong or the connection sucks.");
-        exit(1);
-   }*/
+    auto endTime = std::chrono::system_clock::now();
+    std::chrono::duration<double> elapsedTime = endTime - startTime;
+    double computationTime = elapsedTime.count();
+    std::cout << "Finished simulation with " << numStas << " stations in " << computationTime
+              << " sec";
 
-    //std::cout << "\nAverage Throughput: " << averageThroughput << " Mbit/s" << std::endl;
-    std::cout << "Ns3-sionna: cache hit ratio: " <<  propagationCache->GetStats() << std::endl;
-
-   sionnaHelper.Destroy();
-
-   auto endTime = std::chrono::system_clock::now();
-   std::chrono::duration<double> elapsedTime = endTime - startTime;
-   double computationTime = elapsedTime.count();
-   std::cout << "Finished simulation with " << numStas << " stations in " << computationTime << " sec";
-
-   std::cout << std::endl << std::endl;
-   return computationTime;
+    std::cout << std::endl << std::endl;
+    return computationTime;
 }
 
 int
 main(int argc, char* argv[])
 {
-   bool verbose = false;
+   bool verbose = true;
    bool caching = true;
-   bool enfCache = false;
-   int enforcedCachingT = 100000; // Standard coherence time of 10ms (JZA: TODO: Find better time.)
    std::string environment = "simple_room/simple_room.xml";
-   int wifi_channel_num = 1;
+   int wifi_channel_num = 40;
    bool mobile_scenario = false;
-   double mobile_speed = 1.0;
-   int udp_pkt_interval = 1;
+   double mobile_speed = 20.0;
    int sim_min_stas = 1;
-   int sim_max_stas = 1;
+   int sim_max_stas = 4;
    int mode = 3;
    int sub_mode = 16;
 
@@ -336,7 +298,6 @@ main(int argc, char* argv[])
    cmd.AddValue("channel", "The WiFi channel number", wifi_channel_num);
    cmd.AddValue("mobile_scenario", "Enable node movement", mobile_scenario);
    cmd.AddValue("mobile_speed", "STA speed when mobile_scenario is true", mobile_speed);
-   cmd.AddValue("udp_pkt_interval", "UDP packet interval (in ms) used by STAs", udp_pkt_interval);
    cmd.AddValue("sim_min_stas", "Min number of STAs to be simulated", sim_min_stas);
    cmd.AddValue("sim_max_stas", "Max number of STAs to be simulated", sim_max_stas);
    cmd.AddValue("environment", "Xml file of Sionna environment", environment);
@@ -344,27 +305,19 @@ main(int argc, char* argv[])
    cmd.AddValue("mode", "The Sionna mode", mode);
    cmd.AddValue("sub_mode", "The Sionna submode", sub_mode);
    cmd.AddValue("verbose", "Enable logging", verbose);
-   cmd.AddValue("enfCache","Enable or Disable fixed Caching time",enfCache);
-   cmd.AddValue("enforcedCachingT","Set a fixed time between calculating the channel",enforcedCachingT);
    cmd.Parse(argc, argv);
 
    if (verbose)
    {
-       LogComponentEnable("UdpEchoClientApplication", LOG_LEVEL_INFO);
-       LogComponentEnable("UdpEchoClientApplication", LOG_PREFIX_TIME);
-       LogComponentEnable("UdpEchoServerApplication", LOG_LEVEL_INFO);
-       LogComponentEnable("UdpEchoServerApplication", LOG_PREFIX_TIME);
-       LogComponentEnable("YansWifiChannel", LOG_DEBUG);
-       LogComponentEnable("YansWifiChannel", LOG_PREFIX_TIME);
+       LogComponentEnable("SionnaPropagationEnforcedCache", LOG_LEVEL_DEBUG);
+       LogComponentEnable("SionnaHelper", LOG_LEVEL_DEBUG);
        LogComponentEnable("SionnaPropagationDelayModel", LOG_INFO);
        LogComponentEnable("SionnaPropagationDelayModel", LOG_PREFIX_TIME);
-       LogComponentEnable("SionnaPropagationEnforcedCache", LOG_INFO);
-       LogComponentEnable("SionnaPropagationEnforcedCache", LOG_PREFIX_TIME);
    }
 
    std::cout << "Performance test: 1 AP and N STAs with ns3sionna" << std::endl;
    std::cout << "Config: ch " << wifi_channel_num << " mob " << mobile_scenario;
-   std::cout << " speed " << mobile_speed << " pktinterval " << udp_pkt_interval;
+   std::cout << " speed " << mobile_speed;
    std::cout << " caching " << caching << " env " << environment;
    std::cout << " mode " << mode << " submode " << sub_mode << std::endl;
 
@@ -372,8 +325,8 @@ main(int argc, char* argv[])
    double computationTime = 0.0;
    while (computationTime < 2 * 60 * 60 && numStas <= (uint32_t)sim_max_stas) // as long as a single run is below 2h
    {
-       computationTime = RunSimulation(environment, numStas, wifi_channel_num, mobile_scenario,
-                                       mobile_speed, udp_pkt_interval, caching, mode, sub_mode, verbose, enforcedCachingT, enfCache);
+       computationTime = RunSimulation(environment, numStas, mobile_scenario, mobile_speed, caching, mode,
+            sub_mode, verbose);
        numStas = numStas * 2;
    }
 
