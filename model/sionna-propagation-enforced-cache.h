@@ -31,6 +31,7 @@
 
 #include <ns3/propagation-delay-model.h>
 #include "ns3/propagation-loss-model.h"
+#include "ns3/sionna-propagation-cache.h"
 
 namespace ns3
 {
@@ -40,7 +41,7 @@ namespace ns3
  *
  * TODO: garbage collection - purge too old values from cache
  */
-class SionnaPropagationEnforcedCache : public ns3::Object
+class SionnaPropagationEnforcedCache : public ns3::SionnaPropagationCache
 {
     public:
         static TypeId GetTypeId();
