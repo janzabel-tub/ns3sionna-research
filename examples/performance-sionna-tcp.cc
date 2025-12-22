@@ -1,5 +1,5 @@
 /*
-* Copyright (c) 2024 Yannik Pilz, Zubow
+* Copyright (c) 2024 Yannik Pilz, Zubow, Jan
 *
 * SPDX-License-Identifier: GPL-2.0-only
 *
@@ -13,6 +13,9 @@
 #include "ns3/sionna-propagation-enforced-cache.h"
 #include "ns3/sionna-propagation-delay-model.h"
 #include "ns3/sionna-propagation-loss-model.h"
+#include "ns3/sionna-spectrum-propagation-loss-model.h"
+#include "ns3/spectrum-module.h"
+#include "ns3/spectrum-wifi-helper.h"
 
 #include "ns3/packet-sink-helper.h"
 #include "ns3/packet-sink.h"
@@ -35,6 +38,8 @@ NS_LOG_COMPONENT_DEFINE("PerformanceSionnaTCP");
 Ptr<PacketSink> sink;
 uint64_t lastTotalRx = 0;
 
+// JZA: TODO: Rate Adaptions
+
 /**
  * Calculate the throughput and shamelessly stolen
  */
@@ -51,44 +56,69 @@ CalculateThroughput()
 
 // Simulation allows for variable caching interval with parameter enforcedCachingT in ns (so every 100ms = 100000)
 double
-RunSimulation(const std::string environment, const uint32_t numStas, const int channel_no, const bool mobile_scenario,
-              const double mobile_speed, const int udp_pkt_interval, const bool caching,
-              const int mode, const int sub_mode, const bool verbose, const int enforcedCachingT, const bool enfCache)
+RunSimulation(  const std::string environment,
+                const uint32_t numStas,
+                const bool mobile_scenario,
+                const double mobile_speed,
+                const int udp_pkt_interval,
+                const bool caching,
+                const int mode,
+                const int sub_mode,
+                const bool verbose,
+                const int enforcedCachingT,
+                const bool enfCache)
 {
-   // Create Station and Access Points, one access point and variable Stations
-   NodeContainer wifiStaNodes;
-   wifiStaNodes.Create(numStas);
+    // Wifi config
+    int wifi_channel_num = 40; // center at 5200
+    int channel_width = 20;
 
-   NodeContainer wifiApNode;
-   wifiApNode.Create(1);
+    SionnaHelper sionnaHelper(environment, "tcp://localhost:5555");
 
-   Ptr<YansWifiChannel> channel = CreateObject<YansWifiChannel>();
+    // Create Station and Access Points, one access point and variable Stations
+    NodeContainer wifiStaNodes;
+    wifiStaNodes.Create(numStas);
 
-   std::string server_url = "tcp://localhost:5555";
-   SionnaHelper sionnaHelper(environment, server_url);
+    NodeContainer wifiApNode;
+    wifiApNode.Create(1);
 
-   // JZA: enforcedCachingT implemented
+    Ptr<YansWifiChannel> channel = CreateObject<YansWifiChannel>();
+
+    Config::Set("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Phy/ChannelWidth",
+                UintegerValue(channel_width));
+
+    // JZA: enforcedCachingT implemented
     // TODO: Pointer error.
-   Ptr<SionnaPropagationEnforcedCache> propagationCache = CreateObject<SionnaPropagationEnforcedCache>();
-   propagationCache->SetSionnaHelper(sionnaHelper);
-   propagationCache->SetCaching(caching);
-   propagationCache->SetEnforcedCachingT(enforcedCachingT);
-   propagationCache->SetEnfCache(enfCache);
+    Ptr<SionnaPropagationEnforcedCache> propagationCache = CreateObject<SionnaPropagationEnforcedCache>();
+    propagationCache->SetSionnaHelper(sionnaHelper);
+    propagationCache->SetCaching(caching);
+    propagationCache->SetEnforcedCachingT(enforcedCachingT);
+    propagationCache->SetEnfCache(enfCache);
 
-   Ptr<SionnaPropagationDelayModel> delayModel = CreateObject<SionnaPropagationDelayModel>();
-   delayModel->SetPropagationCache(propagationCache);
 
-   Ptr<SionnaPropagationLossModel> lossModel = CreateObject<SionnaPropagationLossModel>();
-   lossModel->SetPropagationCache(propagationCache);
+    // new
+    Ptr<MultiModelSpectrumChannel> spectrumChannel = CreateObject<MultiModelSpectrumChannel>();
 
-   channel->SetPropagationLossModel(lossModel);
-   channel->SetPropagationDelayModel(delayModel);
+    Ptr<SionnaPropagationDelayModel> delayModel = CreateObject<SionnaPropagationDelayModel>();
+    delayModel->SetPropagationCache(propagationCache);
 
-   // JZA: New Stuff for tcp TODO: Cubic might not work like this. Find out the name for Cubic, it exists!!!
-   // Until then, using TCP Westwood Plus
-   // JZA TODO: Currently everything is hardcoded, make things soft later.
-   DataRate dataRate("100Mb/s"); // Hardcoded Data Rate at 100Mbit/s
-   std::string tcpVariant{"ns3::TcpWestwoodPlus"};
+    Ptr<SionnaPropagationLossModel> lossModel = CreateObject<SionnaPropagationLossModel>();
+    lossModel->SetPropagationCache(propagationCache);
+
+    // SISO only
+    Ptr<SionnaSpectrumPropagationLossModel> spectrumLossModel =
+            CreateObject<SionnaSpectrumPropagationLossModel>();
+        spectrumLossModel->SetPropagationCache(propagationCache);
+
+    spectrumChannel->AddPropagationLossModel(lossModel);
+
+    channel->SetPropagationLossModel(lossModel);
+    channel->SetPropagationDelayModel(delayModel);
+
+    // JZA: New Stuff for tcp TODO: Cubic might not work like this. Find out the name for Cubic, it exists!!!
+    // Until then, using TCP Westwood Plus
+    // JZA TODO: Currently everything is hardcoded, make things soft later.
+    DataRate dataRate("100Mb/s"); // Hardcoded Data Rate at 100Mbit/s
+    std::string tcpVariant{"ns3::TcpWestwoodPlus"};
 
    Config::SetDefault("ns3::TcpL4Protocol::SocketType",
                       TypeIdValue(TypeId::LookupByName(tcpVariant)));
@@ -107,7 +137,8 @@ RunSimulation(const std::string environment, const uint32_t numStas, const int c
    WifiStandard wifi_standard = WIFI_STANDARD_80211ax;
    wifi.SetStandard(wifi_standard);
 
-   std::string channelStr = "{" + std::to_string(channel_no) + ", " + std::to_string(20) + ", BAND_2_4GHZ, 0}";
+   std::string channelStr = "{" + std::to_string(wifi_channel_num) + ", " +
+                                std::to_string(channel_width) + ", BAND_5GHZ, 0}";
    phy.Set("ChannelSettings", StringValue(channelStr));
 
    NetDeviceContainer staDevices;
