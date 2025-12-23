@@ -27,10 +27,9 @@
 #include "ns3/network-module.h"
 #include "ns3/ssid.h"
 
-// JZA: TODO: Remove Yans. Done!
 #include "ns3/wifi-net-device.h"
 #include "ns3/tcp-westwood-plus.h"
-// TODO: TCP Cubic (Set as default since 16.5.2 (NS-3.34))
+#include "ns3/minstrel-wifi-manager.h"
 
 using namespace ns3;
 
@@ -137,7 +136,8 @@ RunSimulation(  const std::string environment,
 
     // TCP Setup
     DataRate dataRate("100Mb/s"); // Hardcoded Data Rate at 100Mbit/s
-    std::string tcpVariant{"ns3::TcpWestwoodPlus"};
+    std::string tcpVariant{"ns3::TcpCubic"};
+    // std::string tcpVariant{"ns3::TcpWestwoodPlus"};
 
     Config::SetDefault("ns3::TcpL4Protocol::SocketType",
         TypeIdValue(TypeId::LookupByName(tcpVariant)));
@@ -283,12 +283,12 @@ RunSimulation(  const std::string environment,
 int
 main(int argc, char* argv[])
 {
-   bool verbose = true;
+   bool verbose = false;
    bool caching = true;
    std::string environment = "simple_room/simple_room.xml";
    int wifi_channel_num = 40;
    bool mobile_scenario = false;
-   double mobile_speed = 20.0;
+   double mobile_speed = 1.0;
    int sim_min_stas = 1;
    int sim_max_stas = 4;
    int mode = 3;
