@@ -240,14 +240,14 @@ RunSimulation(  const std::string environment,
 
     serverApps.Start(Seconds(0.9));
     serverApps.Stop(Seconds(10.0));
-    // Simulator::Schedule(Seconds(1.1), &CalculateThroughput);
+    Simulator::Schedule(Seconds(1.1), &CalculateThroughput);
 
     // set center frequency for Sionna
     double fc = get_center_freq(apDevices.Get(0));
 
     // set center frequency & bandwidth for Sionna
     // JZA: TODO: This seems very much like the thing I was trying to implement.
-    int min_coherence_time_ms = 50;
+    int min_coherence_time_ms = 100;
     sionnaHelper.Configure(fc,
                            channel_width,
                            getFFTSize(wifi_standard, channel_width),
