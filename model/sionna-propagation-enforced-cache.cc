@@ -35,7 +35,7 @@ SionnaPropagationEnforcedCache::GetTypeId()
 }
 
 SionnaPropagationEnforcedCache::SionnaPropagationEnforcedCache()
-    : m_sionnaHelper(nullptr), m_caching(true), m_cache_hits(0), m_cache_miss(0), m_optimize(true)
+    : m_sionnaHelper(nullptr), m_caching(true), m_cache_hits(0), m_cache_miss(0), m_optimize(true), m_enfCache(false), m_cache_interval(0)
 {
     m_friisLossModel = CreateObject<FriisPropagationLossModel>();
     m_constSpeedDelayModel = CreateObject<ConstantSpeedPropagationDelayModel>();
@@ -176,7 +176,6 @@ SionnaPropagationEnforcedCache::SetEnfCache(bool enf_Cache)
 {
     m_enfCache = enf_Cache;
 }
-// JZA: TODO: Test if this works now.
 
 void
 SionnaPropagationEnforcedCache::SetOptimize(bool optimize)
@@ -292,13 +291,10 @@ SionnaPropagationEnforcedCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<Mob
     for (int csi_i=0; csi_i < csi_response.csi_size(); csi_i++) {
         Time start_time = NanoSeconds(csi_response.csi(csi_i).start_time());
 
-        // This sets the cache time as a fixed value if enfCache is set to true (default is false, no changes then)
-        // Set as parameter in performance-sionna-tcp.cc
-        if (m_enfCache) {
-            Time end_time = NanoSeconds(csi_response.csi(csi_i).start_time()) + NanoSeconds(m_cache_interval);
-        }
         Time end_time = NanoSeconds(csi_response.csi(csi_i).end_time());
 
+        // This sets the cache time as a fixed value if enfCache is set to true (default is false, no changes then)
+        // Set as parameter in performance-sionna-tcp.cc
         if (m_enfCache) {
             end_time = NanoSeconds(csi_response.csi(csi_i).start_time()) + NanoSeconds(m_cache_interval);
         }
