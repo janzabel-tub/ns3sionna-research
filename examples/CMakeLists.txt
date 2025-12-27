@@ -61,6 +61,12 @@ build_lib_example(
         LIBRARIES_TO_LINK ${libsionna} ${libwifi} ${libbuildings} ${libinternet} ${libapplications}
 )
 
+build_lib_example(
+        NAME ns3sionna-example-sionna-sensing-mobile-tcp
+        SOURCE_FILES example-sionna-sensing-mobile-tcp.cc
+        LIBRARIES_TO_LINK ${libsionna} ${libwifi} ${libbuildings} ${libinternet} ${libapplications}
+)
+
 
 # performance & benchmark scripts
 

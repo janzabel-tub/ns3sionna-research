@@ -46,6 +46,8 @@ using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("ExampleSionnaSensing");
 
+Ptr<PacketSink> sink;
+
 // mapping of IPv4 addr to nodeIds
 std::map<Ipv4Address, uint32_t> g_ipToNodeIdMap;
 
@@ -147,9 +149,9 @@ main(int argc, char* argv[])
         Setting parameters for tcp.
     */
     uint32_t payloadSize = 1472;
-    std::string dataRate = "100Mbps";
+    // std::string dataRate = "100Mbps";
     std::string tcpVariant = "TcpCubic";
-    std::string phyRate = "HtMcs7" // Physical layer bitrate, whatever this does
+    std::string phyRate = "HtMcs7"; // Physical layer bitrate, whatever this does
 
     CommandLine cmd(__FILE__);
     cmd.AddValue("verbose", "Enable logging", verbose);
@@ -234,7 +236,7 @@ main(int argc, char* argv[])
 
     // TCP Setup
     DataRate dataRate("100Mb/s"); // Hardcoded Data Rate at 100Mbit/s
-    std::string tcpVariant{"ns3::TcpCubic"};
+    // std::string tcpVariant{"ns3::TcpCubic"};
 
     NetDeviceContainer staDevices;
     mac.SetType("ns3::StaWifiMac", "Ssid", SsidValue(ssid), "ActiveProbing", BooleanValue(false));
@@ -295,7 +297,7 @@ main(int argc, char* argv[])
     server.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
     server.SetAttribute("DataRate", DataRateValue(DataRate(dataRate)));
 
-    ApplicationContainer serverApps = server.Install(wifiStaNodes);
+    ApplicationContainer serverApps = server.Install(wifiStaNode);
 
     // Start applications.
     clientApps.Start(Seconds(1.0));
@@ -305,8 +307,7 @@ main(int argc, char* argv[])
     serverApps.Stop(Seconds(30.0));
 
     // App layer tracing of RX events to capture CSI
-    Config::Connect("/NodeList/*/ApplicationList/*/$ns3::UdpEchoServer/RxWithAddresses",
-                    MakeCallback(&RxTraceWithAddresses));
+    Config::Connect("/NodeList/*/ApplicationList/*/$ns3::UdpEchoServer/RxWithAddresses", MakeCallback(&RxTraceWithAddresses));
 
     Ipv4Address wifi_ip_addr = wifiApInterfaces.GetAddress(0);
 
