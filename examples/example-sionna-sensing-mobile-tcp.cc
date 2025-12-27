@@ -40,8 +40,6 @@
  *  To run: ./example-sionna-sensing-mobile.sh
  */
 
- // TODO: Implement TCP for sender instead of packages every 50 ms. Also, understand code.
-
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("ExampleSionnaSensing");
@@ -105,7 +103,7 @@ uint32_t GetNodeIdFromIpv4Address (Ipv4Address targetAddr)
  * Trace application layer, here the UdpEchoServer.
  * For each the received packet the CFR (CSI) is retrieved from the tag and dumped to file.
  */
-void RxTraceWithAddresses(std::string context, Ptr<const Packet> packet, const Address &from, const Address &to) {
+void RxTraceWithAddresses(std::string context, Ptr<const Packet> packet, const Address &from) {
 
     // Lookup ID of transmitter & receiver
     uint32_t src_nodeId = GetNodeIdFromIpv4Address(InetSocketAddress::ConvertFrom(from).GetIpv4());
@@ -114,9 +112,11 @@ void RxTraceWithAddresses(std::string context, Ptr<const Packet> packet, const A
     Vector pos = mobility->GetPosition();
     NS_LOG_INFO(Simulator::Now().GetSeconds() << "s: Node: " << src_node->GetId() << ": Pos: (" << pos.x << "," << pos.y << "," << pos.z << ")");
 
-    NS_LOG_INFO("*** " << Simulator::Now().GetSeconds() << "s [" << context << "]: Server received packet of " << packet->GetSize() << " bytes"
-        << " from: " << InetSocketAddress::ConvertFrom(from).GetIpv4() << "(" << src_nodeId << ") port "
-        << " to: " << InetSocketAddress::ConvertFrom(to).GetIpv4() << "(/) port " << InetSocketAddress::ConvertFrom(to).GetPort());
+
+    NS_LOG_INFO("*** " << Simulator::Now().GetSeconds() << "s [" << context << "]: Sink received packet of " << packet->GetSize() << " bytes");
+    // NS_LOG_INFO("*** " << Simulator::Now().GetSeconds() << "s [" << context << "]: Server received packet of " << packet->GetSize() << " bytes"
+    //    << " from: " << InetSocketAddress::ConvertFrom(from).GetIpv4() << "(" << src_nodeId << ") port "
+    //    << " to: " << InetSocketAddress::ConvertFrom(to).GetIpv4() << "(/) port " << InetSocketAddress::ConvertFrom(to).GetPort());
 
     // check to see whether packet is tagged with CSI/CFR
     CFRTag tag;
@@ -143,14 +143,13 @@ main(int argc, char* argv[])
     int wifi_channel_num = 42; // center at 5210
     int sim_end_time_sec = 10;
     int channel_width = 80;
-    int min_coherence_time_ms = 100; // total sim duration //JZA: Is this really the total sim *duration*???
+    int min_coherence_time_ms = 10; // total sim duration //JZA: Is this really the total sim *duration*???
     /*  New stuff, mostly copied
         Source: https://www.nsnam.org/docs/release/3.33/doxygen/wifi-tcp_8cc_source.html
         Setting parameters for tcp.
     */
     uint32_t payloadSize = 1472;
-    // std::string dataRate = "100Mbps";
-    std::string tcpVariant = "TcpCubic";
+    std::string tcpVariant = "ns3::TcpCubic";
     std::string phyRate = "HtMcs7"; // Physical layer bitrate, whatever this does
 
     CommandLine cmd(__FILE__);
@@ -235,7 +234,7 @@ main(int argc, char* argv[])
                                  UintegerValue(rtsThreshold));
 
     // TCP Setup
-    DataRate dataRate("100Mb/s"); // Hardcoded Data Rate at 100Mbit/s
+    std::string dataRate("100Mb/s"); // Hardcoded Data Rate at 100Mbit/s
     // std::string tcpVariant{"ns3::TcpCubic"};
 
     NetDeviceContainer staDevices;
@@ -307,35 +306,9 @@ main(int argc, char* argv[])
     serverApps.Stop(Seconds(30.0));
 
     // App layer tracing of RX events to capture CSI
-    Config::Connect("/NodeList/*/ApplicationList/*/$ns3::UdpEchoServer/RxWithAddresses", MakeCallback(&RxTraceWithAddresses));
+    Config::Connect("/NodeList/*/ApplicationList/*/$ns3::PacketSink/Rx", MakeCallback(&RxTraceWithAddresses));
 
-    Ipv4Address wifi_ip_addr = wifiApInterfaces.GetAddress(0);
-
-/*
-    // Set up applications
-    UdpEchoServerHelper echoServer(9);
-
-    ApplicationContainer serverApps = echoServer.Install(wifiApNode);
-    serverApps.Start(Seconds(1.0));
-    serverApps.Stop(Seconds(30.0));
-
-    // App layer tracing of RX events to capture CSI
-    Config::Connect("/NodeList/*/ApplicationList/*/$ns3::UdpEchoServer/RxWithAddresses",
-                    MakeCallback(&RxTraceWithAddresses));
-
-    Ipv4Address wifi_ip_addr = wifiApInterfaces.GetAddress(0);
-    //std::cout << "AP IP: " << wifi_ip_addr << std::endl;
-
-    UdpEchoClientHelper echoClient(wifi_ip_addr, 9);
-    echoClient.SetAttribute("MaxPackets", UintegerValue(1000000));
-    echoClient.SetAttribute("Interval", TimeValue(MilliSeconds(50)));
-    echoClient.SetAttribute("PacketSize", UintegerValue(1024));
-
-    ApplicationContainer clientApps = echoClient.Install(wifiStaNode);
-    clientApps.Start(Seconds(1.0));
-    clientApps.Stop(Seconds(sim_end_time_sec));
-
-*/
+    // Ipv4Address wifi_ip_addr = wifiApInterfaces.GetAddress(0);
 
     Ipv4GlobalRoutingHelper::PopulateRoutingTables();
 
