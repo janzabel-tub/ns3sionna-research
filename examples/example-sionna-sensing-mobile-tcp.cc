@@ -100,7 +100,7 @@ uint32_t GetNodeIdFromIpv4Address (Ipv4Address targetAddr)
 }
 
 /*
- * Trace application layer, here the UdpEchoServer.
+ * Trace application layer, here the TCP Server.
  * For each the received packet the CFR (CSI) is retrieved from the tag and dumped to file.
  */
 void RxTraceWithAddresses(std::string context, Ptr<const Packet> packet, const Address &from) {
@@ -227,7 +227,7 @@ main(int argc, char* argv[])
 
     std::string channelStr = "{" + std::to_string(wifi_channel_num) + ", " + std::to_string(channel_width) + ", BAND_5GHZ, 0}";
 
-    std::string wifiManager("Ideal");
+    std::string wifiManager("MinstrelHt");
     uint32_t rtsThreshold = 999999; // disabled even for large A-MPDU
     wifi.SetRemoteStationManager("ns3::" + wifiManager + "WifiManager",
                                  "RtsCtsThreshold",
