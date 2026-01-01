@@ -103,6 +103,7 @@ uint32_t GetNodeIdFromIpv4Address (Ipv4Address targetAddr)
  * Trace application layer, here the TCP Server.
  * For each the received packet the CFR (CSI) is retrieved from the tag and dumped to file.
  */
+ /*
 void RxTraceWithAddresses(std::string context, Ptr<const Packet> packet, const Address &from) {
 
     // Lookup ID of transmitter & receiver
@@ -131,7 +132,39 @@ void RxTraceWithAddresses(std::string context, Ptr<const Packet> packet, const A
         ofs_tp << Simulator::Now().GetSeconds() << "," << pos.x << "," << pos.y << "," << pos.z << std::endl;
     }
 }
+*/
+/*
+ * Trace application layer, here the TCP Server.
+ * For each the received packet the CFR (CSI) is retrieved from the tag and dumped to file.
+ */
+void RxTraceWithAddresses(std::string context, Ptr<const Packet> packet, Ptr<Ipv4> ipv4, uint32_t interface) {
+    Ipv4Header ipHeader;
+    packet->PeekHeader(ipHeader);
+    Ipv4Address srcIp = ipHeader.GetSource();
 
+    // Lookup ID of transmitter & receiver
+    uint32_t src_nodeId = GetNodeIdFromIpv4Address(srcIp);
+
+    if (src_nodeId == 0xFFFFFFFF) return;
+
+    Ptr<Node> src_node = NodeList::GetNode(src_nodeId);
+    Ptr<MobilityModel> mobility = src_node->GetObject<MobilityModel>();
+    Vector pos = mobility->GetPosition();
+
+    // check to see whether packet is tagged with CSI/CFR
+    CFRTag tag;
+    if (packet->PeekPacketTag(tag))
+    {
+        NS_LOG_INFO("*** " << Simulator::Now().GetSeconds() << "s: Node: " << src_nodeId << " Size: " << packet->GetSize() << " bytes");
+        // dump CSI
+        dumpComplexVecToStream(tag.GetComplexes(), ofs_csi);
+        // dump pathloss
+        double pathLossDb = tag.GetPathloss();
+        ofs_pl << pathLossDb << std::endl;
+        // dump rx node position
+        ofs_tp << Simulator::Now().GetSeconds() << "," << pos.x << "," << pos.y << "," << pos.z << std::endl;
+    }
+}
 
 int
 main(int argc, char* argv[])
@@ -143,7 +176,7 @@ main(int argc, char* argv[])
     int wifi_channel_num = 42; // center at 5210
     int sim_end_time_sec = 10;
     int channel_width = 80;
-    int min_coherence_time_ms = 10; // total sim duration //JZA: Is this really the total sim *duration*???
+    int min_coherence_time_ms = 500; // total sim duration //JZA: Is this really the total sim *duration*???
     /*  New stuff, mostly copied
         Source: https://www.nsnam.org/docs/release/3.33/doxygen/wifi-tcp_8cc_source.html
         Setting parameters for tcp.
@@ -178,7 +211,6 @@ main(int argc, char* argv[])
     std::cout << "Example spectrum model wifi scenario with sionna" << std::endl << std::endl;
 
     SionnaHelper sionnaHelper(environment, "tcp://localhost:5555");
-    // TODO: Implement TCP
     // Create nodes
     NodeContainer wifiStaNode;
     wifiStaNode.Create(1);
@@ -306,7 +338,7 @@ main(int argc, char* argv[])
     serverApps.Stop(Seconds(30.0));
 
     // App layer tracing of RX events to capture CSI
-    Config::Connect("/NodeList/*/ApplicationList/*/$ns3::PacketSink/Rx", MakeCallback(&RxTraceWithAddresses));
+    Config::Connect("/NodeList/*/$ns3::Ipv4L3Protocol/Rx", MakeCallback(&RxTraceWithAddresses));
 
     // Ipv4Address wifi_ip_addr = wifiApInterfaces.GetAddress(0);
 
