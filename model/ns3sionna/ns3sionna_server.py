@@ -181,7 +181,7 @@ class SionnaEnv:
                 self.chan_coh_time_mode3 = compute_coherence_time(speed_arr[0], self.fc, model='rappaport2')
             else:
                 self.chan_coh_time_mode3 = MAX_COHERENCE_TIME
-            # JZA: Set Tc to min
+            # JZA: TODO: Change this to optionally fixed time
             if self.chan_coh_time_mode3 < self.min_coherence_time_ms:
                 self.chan_coh_time_mode3 = self.min_coherence_time_ms
 
@@ -496,7 +496,7 @@ class SionnaEnv:
                                             pos_tx=self.node_info[comp_rx_node_id].pos,
                                             pos_rx=self.node_info[tx_node_id].pos)
             # JZA: This is used most often
-            # print("Current TC: ", tc)
+            print("Current TC: ", tc)
             if self.min_coherence_time_ms != -1:
                 tc = self.min_coherence_time_ms
             '''
