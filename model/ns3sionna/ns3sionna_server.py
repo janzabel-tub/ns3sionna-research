@@ -267,9 +267,12 @@ class SionnaEnv:
                                                     pos_tx=self.node_info[node_id].pos,
                                                     pos_rx=self.node_info[tx_node_id].pos)
                     # JZA: Set min Tc
-
+                    if self.min_coherence_time_ms != -1:
+                        tc = self.min_coherence_time_ms
+                    '''
                     if tc < self.min_coherence_time_ms:
                         tc = self.min_coherence_time_ms
+                    '''
                     csi_tc_arr.append(tc)
 
             # take the worst case Tc from all RX nodes
@@ -383,8 +386,12 @@ class SionnaEnv:
                                                 pos_tx=self.node_info[curr_rx_node].get_pos_at(lah_time),
                                                 pos_rx=self.node_info[tx_node_id].pos)
 
+                if self.min_coherence_time_ms != -1:
+                    tc = self.min_coherence_time_ms
+                '''
                 if tc < self.min_coherence_time_ms:
                     tc = self.min_coherence_time_ms
+                '''
 
                 rx_node_info.end_time2 = csi.start_time + tc
                 csi_tc_arr.append(tc)
@@ -490,8 +497,12 @@ class SionnaEnv:
                                             pos_rx=self.node_info[tx_node_id].pos)
             # JZA: This is used most often
             # print("Current TC: ", tc)
+            if self.min_coherence_time_ms != -1:
+                tc = self.min_coherence_time_ms
+            '''
             if tc < self.min_coherence_time_ms:
                 tc = self.min_coherence_time_ms
+            '''
 
             rx_node_info.end_time2 = tc
             csi_tc_arr.append(tc)
