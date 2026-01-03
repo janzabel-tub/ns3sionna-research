@@ -37,7 +37,7 @@
  *
  * Limitations: only SISO so far
  *
- *  To run: ./example-sionna-sensing-mobile.sh
+ *  To run: ./example-sionna-sensing-mobile-tcp.sh
  */
 
 using namespace ns3;
@@ -50,13 +50,13 @@ Ptr<PacketSink> sink;
 std::map<Ipv4Address, uint32_t> g_ipToNodeIdMap;
 
 // CSI
-std::string csiFname = "example-sionna-sensing-mobile.csv";
+std::string csiFname = "example-sionna-sensing-mobile-tcp.csv";
 std::ofstream ofs_csi(csiFname);
 // Pathloss
-std::string plFname = "example-sionna-sensing-mobile-pathloss.csv";
+std::string plFname = "example-sionna-sensing-mobile-pathloss-tcp.csv";
 std::ofstream ofs_pl(plFname);
 // RX (STA) node location
-std::string tpFname = "example-sionna-sensing-mobile-time-pos.csv";
+std::string tpFname = "example-sionna-sensing-mobile-time-pos-tcp.csv";
 std::ofstream ofs_tp(tpFname);
 
 void BuildIpToNodeIdMap ()
@@ -122,7 +122,7 @@ void RxTraceWithAddresses(std::string context, Ptr<const Packet> packet, Ptr<Ipv
     CFRTag tag;
     if (packet->PeekPacketTag(tag))
     {
-        // NS_LOG_INFO("*** " << Simulator::Now().GetSeconds() << "s: Node: " << src_nodeId << " Size: " << packet->GetSize() << " bytes");
+        NS_LOG_INFO("*** " << Simulator::Now().GetSeconds() << "s: Node: " << src_nodeId << " Size: " << packet->GetSize() << " bytes");
         // dump CSI
         dumpComplexVecToStream(tag.GetComplexes(), ofs_csi);
         // dump pathloss
@@ -143,7 +143,8 @@ main(int argc, char* argv[])
     int wifi_channel_num = 42; // center at 5210
     int sim_end_time_sec = 10;
     int channel_width = 80;
-    int min_coherence_time_ms = 100; // total sim duration //JZA: Is this really the total sim *duration*???
+    // TODO: This set to -1 causes a large coherence time, check server.
+    int min_coherence_time_ms = 50; // total sim duration
     /*  New stuff, mostly copied
         Source: https://www.nsnam.org/docs/release/3.33/doxygen/wifi-tcp_8cc_source.html
         Setting parameters for tcp.
@@ -233,7 +234,7 @@ main(int argc, char* argv[])
                                  UintegerValue(rtsThreshold));
 
     // TCP Setup
-    std::string dataRate("100Mb/s"); // Hardcoded Data Rate at 100Mbit/s
+    std::string dataRate("1Mb/s"); // Hardcoded Data Rate at 100Mbit/s
     // std::string tcpVariant{"ns3::TcpCubic"};
 
     NetDeviceContainer staDevices;
@@ -257,7 +258,7 @@ main(int argc, char* argv[])
                               "Model",
                               EnumValue(SionnaMobilityModel::MODEL_RANDOM_WALK),
                               "Speed",
-                              StringValue("ns3::ConstantRandomVariable[Constant=1.0]"),
+                              StringValue("ns3::ConstantRandomVariable[Constant=7.0]"),
                               "Wall",
                               BooleanValue(true));
     mobility.Install(wifiStaNode);

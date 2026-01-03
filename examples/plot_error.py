@@ -26,5 +26,3 @@ mse = np.mean(np.abs(all_csi - all_csi_b) ** 2)
 # JZA: TODO: Calculate precision
 
 print("Mean squared error: ", mse)
-
-
