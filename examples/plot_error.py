@@ -30,12 +30,12 @@ all_csi = csi.reshape(N, NFFT)
 print(all_csi)
 
 N_b = int(csi_baseline.shape[0] / NFFT)
-all_csi_b = csi.reshape(N_b, NFFT)
+all_csi_b = csi_baseline.reshape(N_b, NFFT)
 print(all_csi_b)
 
 # Calculate Mean squared error (Accuracy?) between the two files.
-mse = np.mean(np.abs(all_csi - all_csi_b) ** 2)
+mse = np.sqrt(np.mean(np.abs(all_csi - all_csi_b) ** 2))
 
 # JZA: TODO: Calculate precision
 
-print("Mean squared error: ", mse)
+print("Root Mean squared error: ", mse)
