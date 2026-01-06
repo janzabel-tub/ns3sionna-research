@@ -177,9 +177,9 @@ main(int argc, char* argv[])
 
     std::stringstream csiFname, plFname, tpFname;
 
-    csiFname << "example-sionna-sensing-mobile-tcp-" << min_coherence_time_ms <<".csv";
-    ofs_pl << "example-sionna-sensing-mobile-pathloss-tcp-" << min_coherence_time_ms <<".csv";
-    ofs_tp << "example-sionna-sensing-mobile-time-pos-tcp-" << min_coherence_time_ms <<".csv";
+    csiFname << "example-sionna-sensing-mobile-tcp-" << min_coherence_time_ms << ".csv";
+    plFname << "example-sionna-sensing-mobile-pathloss-tcp-" << min_coherence_time_ms << ".csv";
+    tpFname << "example-sionna-sensing-mobile-time-pos-tcp-" << min_coherence_time_ms << ".csv";
 
     ofs_csi.open(csiFname.str());
     ofs_pl.open(plFname.str());
