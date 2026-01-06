@@ -9,13 +9,19 @@ print("\nPATH:       ", sys.argv[1], "\nOTHER PATH: ", sys.argv[2])
 fname = sys.argv[1]
 csi = np.asarray([complex(line.strip()) for line in open(fname, 'r')])
 
+time_1 = fname.rpartition('-')[-1].replace('.csv', '')
+
 # Load baseline CSI with high channel calculations
 fname_b = sys.argv[2]
 csi_baseline = np.asarray([complex(line.strip()) for line in open(fname_b, 'r')])
 
-print(len(csi_baseline))
+time_2 = fname_b.rpartition('-')[-1].replace('.csv', '')
 
-print(len(csi))
+# print(len(csi_baseline))
+
+# print(len(csi))
+
+print(time_1, ' ', time_2)
 
 if np.array_equal(csi, csi_baseline):
     print("IDENTICAL!")
@@ -27,20 +33,20 @@ NFFT = 3073
 
 N = int(csi.shape[0] / NFFT)
 all_csi = csi.reshape(N, NFFT)
-print(all_csi)
+# print(all_csi)
 
 N_b = int(csi_baseline.shape[0] / NFFT)
 all_csi_b = csi_baseline.reshape(N_b, NFFT)
-print(all_csi_b)
+# print(all_csi_b)
 
 # Calculate Mean squared error (Accuracy?) between the two files.
-mse = np.sqrt(np.mean(np.abs(all_csi - all_csi_b) ** 2))
+rmse = np.sqrt(np.mean(np.abs(all_csi - all_csi_b) ** 2))
 
 csi_diff = np.abs(all_csi - all_csi_b)
 
 # JZA: TODO: Calculate precision
 
-print("Root Mean squared error: ", mse)
+print("Root Mean squared error: ", rmse)
 
 # plot mag squared
 mag_csi = csi_diff ** 2
@@ -65,15 +71,21 @@ surf = ax.plot_surface(X, Y, mag_csi, cmap='viridis')
 # Labels and colorbar
 ax.set_xlabel('OFDM subcarrier [idx]')
 ax.set_ylabel('CSI sample [id]')
-ax.set_zlabel('RMSE')
+ax.set_zlabel('Difference |h|^2')
 # fig.colorbar(surf, ax=ax, shrink=0.5, aspect=15)
 
 ax.tick_params(axis='both', which='major', pad=5)
 
 plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
 
-fig_name = "error.png"
-plt.savefig(fig_name, dpi = 300, bbox_inches='tight', pad_inches=0.25)
+fig.text(0.50, 0.05, f'Coherence Time: {time_1}ms and {time_2}ms\nSpeed: 1.0\nRMSE: {rmse}',
+         fontsize=10,
+         ha='right',
+         va='bottom',
+         transform=fig.transFigure)
+
+fig_name = f"error{time_1}_{time_2}.png"
+plt.savefig(fig_name, dpi = 300, bbox_inches='tight', pad_inches=0.4)
 print("Plot saved as: ", fig_name)
 
 plt.close(fig)
