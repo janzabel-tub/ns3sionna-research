@@ -50,13 +50,13 @@ Ptr<PacketSink> sink;
 std::map<Ipv4Address, uint32_t> g_ipToNodeIdMap;
 
 // CSI
-std::string csiFname = "example-sionna-sensing-mobile-tcp.csv";
+std::string csiFname = "example-sionna-sensing-mobile-tcp-100.csv";
 std::ofstream ofs_csi(csiFname);
 // Pathloss
-std::string plFname = "example-sionna-sensing-mobile-pathloss-tcp.csv";
+std::string plFname = "example-sionna-sensing-mobile-pathloss-tcp-100.csv";
 std::ofstream ofs_pl(plFname);
 // RX (STA) node location
-std::string tpFname = "example-sionna-sensing-mobile-time-pos-tcp.csv";
+std::string tpFname = "example-sionna-sensing-mobile-time-pos-tcp-100.csv";
 std::ofstream ofs_tp(tpFname);
 
 void BuildIpToNodeIdMap ()
@@ -143,15 +143,14 @@ main(int argc, char* argv[])
     int wifi_channel_num = 42; // center at 5210
     int sim_end_time_sec = 10;
     int channel_width = 80;
-    // TODO: This set to -1 causes a large coherence time, check server.
-    int min_coherence_time_ms = 50; // total sim duration
+    int min_coherence_time_ms = 0; // total sim duration
     /*  New stuff, mostly copied
         Source: https://www.nsnam.org/docs/release/3.33/doxygen/wifi-tcp_8cc_source.html
         Setting parameters for tcp.
     */
     uint32_t payloadSize = 1472;
     std::string tcpVariant = "ns3::TcpCubic";
-    std::string phyRate = "HtMcs7"; // Physical layer bitrate, whatever this does
+    std::string phyRate = "HtMcs7";
 
     CommandLine cmd(__FILE__);
     cmd.AddValue("verbose", "Enable logging", verbose);
@@ -258,7 +257,7 @@ main(int argc, char* argv[])
                               "Model",
                               EnumValue(SionnaMobilityModel::MODEL_RANDOM_WALK),
                               "Speed",
-                              StringValue("ns3::ConstantRandomVariable[Constant=7.0]"),
+                              StringValue("ns3::ConstantRandomVariable[Constant=1.0]"),
                               "Wall",
                               BooleanValue(true));
     mobility.Install(wifiStaNode);
