@@ -50,14 +50,14 @@ Ptr<PacketSink> sink;
 std::map<Ipv4Address, uint32_t> g_ipToNodeIdMap;
 
 // CSI
-std::string csiFname = "example-sionna-sensing-mobile-tcp-100.csv";
-std::ofstream ofs_csi(csiFname);
+//std::string csiFname = "example-sionna-sensing-mobile-tcp-100.csv";
+std::ofstream ofs_csi; // (csiFname);
 // Pathloss
-std::string plFname = "example-sionna-sensing-mobile-pathloss-tcp-100.csv";
-std::ofstream ofs_pl(plFname);
+//std::string plFname = "example-sionna-sensing-mobile-pathloss-tcp-100.csv";
+std::ofstream ofs_pl; //(plFname);
 // RX (STA) node location
-std::string tpFname = "example-sionna-sensing-mobile-time-pos-tcp-100.csv";
-std::ofstream ofs_tp(tpFname);
+//std::string tpFname = "example-sionna-sensing-mobile-time-pos-tcp-100.csv";
+std::ofstream ofs_tp; //(tpFname);
 
 void BuildIpToNodeIdMap ()
 {
@@ -103,7 +103,6 @@ uint32_t GetNodeIdFromIpv4Address (Ipv4Address targetAddr)
  * Trace application layer, here the TCP Server.
  * For each the received packet the CFR (CSI) is retrieved from the tag and dumped to file.
  */
- // TODO: Make logging more efficient (Bind to coherence time?), currently creates huge files.
 void RxTraceWithAddresses(std::string context, Ptr<const Packet> packet, Ptr<Ipv4> ipv4, uint32_t interface) {
     Ipv4Header ipHeader;
     packet->PeekHeader(ipHeader);
@@ -144,6 +143,8 @@ main(int argc, char* argv[])
     int sim_end_time_sec = 10;
     int channel_width = 80;
     int min_coherence_time_ms = 0; // total sim duration
+    int data_Rate_mbps = 1;
+    double speed = 1.0;
     /*  New stuff, mostly copied
         Source: https://www.nsnam.org/docs/release/3.33/doxygen/wifi-tcp_8cc_source.html
         Setting parameters for tcp.
@@ -161,6 +162,8 @@ main(int argc, char* argv[])
     cmd.AddValue("simEndTimeSec", "The total simulation time", sim_end_time_sec);
     cmd.AddValue("channelWidth", "The WiFi channel width in MHz", channel_width);
     cmd.AddValue("minCoherenceTimeMs", "The minimal coherence time in msec", min_coherence_time_ms);
+    cmd.AddValue("dataRate", "Data Rate in Mb/s", data_Rate_mbps);
+    cmd.AddValue("speed", "Speed in m/s", speed);
     cmd.Parse(argc, argv);
 
     if (verbose)
@@ -171,7 +174,18 @@ main(int argc, char* argv[])
         LogComponentEnable("SionnaPropagationCache", LOG_INFO);
         LogComponentEnable("SionnaSpectrumPropagationLossModel", LOG_INFO);
     }
-    // Ne stuff for Tcp
+
+    std::stringstream csiFname, plFname, tpFname;
+
+    csiFname << "example-sionna-sensing-mobile-tcp-" << min_coherence_time_ms <<".csv";
+    ofs_pl << "example-sionna-sensing-mobile-pathloss-tcp-" << min_coherence_time_ms <<".csv";
+    ofs_tp << "example-sionna-sensing-mobile-time-pos-tcp-" << min_coherence_time_ms <<".csv";
+
+    ofs_csi.open(csiFname.str());
+    ofs_pl.open(plFname.str());
+    ofs_tp.open(tpFname.str());
+
+    // New stuff for Tcp
     Config::SetDefault ("ns3::TcpL4Protocol::SocketType", TypeIdValue (TypeId::LookupByName (tcpVariant)));
     Config::SetDefault ("ns3::TcpSocket::SegmentSize", UintegerValue (payloadSize));
 
@@ -233,7 +247,8 @@ main(int argc, char* argv[])
                                  UintegerValue(rtsThreshold));
 
     // TCP Setup
-    std::string dataRate("1Mb/s"); // Hardcoded Data Rate at 100Mbit/s
+    // TODO: Make Data rate non hardcoded.
+    std::string dataRate("10Mb/s");
     // std::string tcpVariant{"ns3::TcpCubic"};
 
     NetDeviceContainer staDevices;
@@ -257,7 +272,7 @@ main(int argc, char* argv[])
                               "Model",
                               EnumValue(SionnaMobilityModel::MODEL_RANDOM_WALK),
                               "Speed",
-                              StringValue("ns3::ConstantRandomVariable[Constant=1.0]"),
+                              StringValue("ns3::ConstantRandomVariable[Constant=" + std::to_string(speed) + "]"),
                               "Wall",
                               BooleanValue(true));
     mobility.Install(wifiStaNode);
@@ -341,8 +356,8 @@ main(int argc, char* argv[])
     ofs_csi.close();
     ofs_pl.close();
     ofs_tp.close();
-    std::cout << "CSI results can be found in: " << csiFname << std::endl;
-    std::cout << "For plotting run: python plot3d_mobile_csi.py " << csiFname << " " << plFname << " " << tpFname << std::endl;
+    std::cout << "CSI results can be found in: " << csiFname.str() << std::endl;
+    std::cout << "For plotting run: python plot3d_mobile_csi.py " << csiFname.str() << " " << plFname.str() << " " << tpFname.str() << std::endl;
 
     return 0;
 }
