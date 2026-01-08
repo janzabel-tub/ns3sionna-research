@@ -145,7 +145,7 @@ class SionnaEnv:
         self.fc = sim_init_msg.frequency * 1e6
         self.fft_size = sim_init_msg.fft_size  # max FFT size
         if sim_init_msg.min_coherence_time_ms != 0:
-            self.min_coherence_time_ms = sim_init_msg.min_coherence_time_ms * 1000000 # min Tc, multiplied for ms
+            self.min_coherence_time_ms = sim_init_msg.min_coherence_time_ms * 100000 # min Tc, multiplied for 0.1ms
         else:
             self.min_coherence_time_ms = 0
         self.subcarrier_spacing = sim_init_msg.subcarrier_spacing # in Hz
@@ -500,12 +500,12 @@ class SionnaEnv:
             # JZA: This is used most often
             if self.min_coherence_time_ms != 0:
                 tc = self.min_coherence_time_ms
-                print("TC SET")
+                # print("TC SET")
             '''
             if tc < self.min_coherence_time_ms:
                 tc = self.min_coherence_time_ms
             '''
-            print("Current TC: ", tc)
+            # print("Current TC: ", tc)
             rx_node_info.end_time2 = tc
             csi_tc_arr.append(tc)
 

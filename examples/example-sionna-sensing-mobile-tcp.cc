@@ -50,14 +50,11 @@ Ptr<PacketSink> sink;
 std::map<Ipv4Address, uint32_t> g_ipToNodeIdMap;
 
 // CSI
-//std::string csiFname = "example-sionna-sensing-mobile-tcp-100.csv";
-std::ofstream ofs_csi; // (csiFname);
+std::ofstream ofs_csi;
 // Pathloss
-//std::string plFname = "example-sionna-sensing-mobile-pathloss-tcp-100.csv";
-std::ofstream ofs_pl; //(plFname);
+std::ofstream ofs_pl;
 // RX (STA) node location
-//std::string tpFname = "example-sionna-sensing-mobile-time-pos-tcp-100.csv";
-std::ofstream ofs_tp; //(tpFname);
+std::ofstream ofs_tp;
 
 void BuildIpToNodeIdMap ()
 {
@@ -135,15 +132,19 @@ void RxTraceWithAddresses(std::string context, Ptr<const Packet> packet, Ptr<Ipv
 int
 main(int argc, char* argv[])
 {
-    bool verbose = true;
+    // TODO: Implement timer to measure the time it takes for the simulation to run, measure performance gains
+    // TODO: Try different environments
+    // TODO; Measure average coherence time?
+    // TODO: Different server setting, diffraction, scattering, reflection, see how it affects the signal.
+    bool verbose = false;
     bool tracing = true;
     bool caching = true;
     std::string environment = "simple_room/simple_room.xml";
     int wifi_channel_num = 42; // center at 5210
     int sim_end_time_sec = 10;
     int channel_width = 80;
-    int min_coherence_time_ms = 0; // total sim duration
-    int data_Rate_mbps = 1;
+    int min_coherence_time_ms = 0;
+    int data_Rate_mbps = 150;
     double speed = 1.0;
     /*  New stuff, mostly copied
         Source: https://www.nsnam.org/docs/release/3.33/doxygen/wifi-tcp_8cc_source.html
@@ -247,9 +248,7 @@ main(int argc, char* argv[])
                                  UintegerValue(rtsThreshold));
 
     // TCP Setup
-    // TODO: Make Data rate non hardcoded.
-    std::string dataRate("10Mb/s");
-    // std::string tcpVariant{"ns3::TcpCubic"};
+    std::string dataRate("150Mb/s");
 
     NetDeviceContainer staDevices;
     mac.SetType("ns3::StaWifiMac", "Ssid", SsidValue(ssid), "ActiveProbing", BooleanValue(false));

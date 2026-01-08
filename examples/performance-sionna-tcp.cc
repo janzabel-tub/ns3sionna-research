@@ -38,6 +38,9 @@ NS_LOG_COMPONENT_DEFINE("PerformanceSionnaTCP");
 Ptr<PacketSink> sink;
 uint64_t lastTotalRx = 0;
 
+// std::ofstream ofs_tp("throughput_results.csv"); // This name is also used for pathloss
+std::ofstream ofs_throughput("throughput_results.csv");
+
 /**
  * Calculate the throughput and shamelessly stolen
  */
@@ -49,6 +52,9 @@ CalculateThroughput()
                  1e5; /* Convert Application RX Packets to MBits. */
     std::cout << now.GetSeconds() << "s: \t" << cur << " Mbit/s" << std::endl;
     lastTotalRx = sink->GetTotalRx();
+
+    ofs_throughput << Simulator::Now().GetSeconds() << "," << cur << "\n"; // std::endl or \n?
+
     Simulator::Schedule(MilliSeconds(100), &CalculateThroughput);
 }
 
@@ -65,6 +71,8 @@ RunSimulation(  const std::string environment,
     // Wifi config
     int wifi_channel_num = 40; // center at 5200
     int channel_width = 20;
+    // Set the seed
+    RngSeedManager::SetSeed(1);
 
     SionnaHelper sionnaHelper(environment, "tcp://localhost:5555");
 
@@ -128,16 +136,16 @@ RunSimulation(  const std::string environment,
                              std::to_string(channel_width) + ", BAND_5GHZ, 0}";
     spectrumPhy.Set("ChannelSettings", StringValue(channelStr));
 
-    std::string wifiManager("Ideal");
+    std::string wifiManager("MinstrelHt");
     uint32_t rtsThreshold = 999999; // disabled even for large A-MPDU
     wifi.SetRemoteStationManager("ns3::" + wifiManager + "WifiManager",
                                  "RtsCtsThreshold",
                                  UintegerValue(rtsThreshold));
 
     // TCP Setup
-    DataRate dataRate("100Mb/s"); // Hardcoded Data Rate at 100Mbit/s
-    std::string tcpVariant{"ns3::TcpCubic"};
-    // std::string tcpVariant{"ns3::TcpWestwoodPlus"};
+    DataRate dataRate("150Mb/s"); // Hardcoded Data Rate at 100Mbit/s
+    //std::string tcpVariant{"ns3::TcpCubic"};
+    std::string tcpVariant{"ns3::TcpWestwoodPlus"};
 
     Config::SetDefault("ns3::TcpL4Protocol::SocketType",
         TypeIdValue(TypeId::LookupByName(tcpVariant)));
@@ -235,19 +243,18 @@ RunSimulation(  const std::string environment,
     ApplicationContainer serverApps = server.Install(wifiStaNodes);
 
     // Start applications.
-    clientApps.Start(Seconds(1.0));
+    clientApps.Start(Seconds(0.9));
     clientApps.Stop(Seconds(10.0));
 
-    serverApps.Start(Seconds(0.9));
+    serverApps.Start(Seconds(1.0));
     serverApps.Stop(Seconds(10.0));
-    // Simulator::Schedule(Seconds(1.1), &CalculateThroughput);
+    Simulator::Schedule(Seconds(1.1), &CalculateThroughput);
 
     // set center frequency for Sionna
     double fc = get_center_freq(apDevices.Get(0));
 
     // set center frequency & bandwidth for Sionna
-    // JZA: TODO: This seems very much like the thing I was trying to implement.
-    int min_coherence_time_ms = 10;
+    int min_coherence_time_ms = 1000;
     sionnaHelper.Configure(fc,
                            channel_width,
                            getFFTSize(wifi_standard, channel_width),
@@ -261,6 +268,9 @@ RunSimulation(  const std::string environment,
 
     auto startTime = std::chrono::system_clock::now();
 
+    // Log for throughput:
+    ofs_throughput << "Time,Throughput_Mbps\n";
+
     sionnaHelper.Start();
 
     Simulator::Run();
@@ -269,6 +279,8 @@ RunSimulation(  const std::string environment,
     // propagationCache->PrintStats();
 
     sionnaHelper.Destroy();
+
+    ofs_throughput.close();
 
     auto endTime = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsedTime = endTime - startTime;
