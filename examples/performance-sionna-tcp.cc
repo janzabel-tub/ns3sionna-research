@@ -66,7 +66,9 @@ RunSimulation(  const std::string environment,
                 const bool caching,
                 const int mode,
                 const int sub_mode,
-                const bool verbose)
+                const bool verbose,
+                const int min_coherence_time_ms,
+                const int data_Rate_mbps)
 {
     // Wifi config
     int wifi_channel_num = 40; // center at 5200
@@ -143,7 +145,7 @@ RunSimulation(  const std::string environment,
                                  UintegerValue(rtsThreshold));
 
     // TCP Setup
-    DataRate dataRate("150Mb/s"); // Hardcoded Data Rate at 100Mbit/s
+    DataRate dataRate(std::to_string(data_Rate_mbps) + "Mb/s"); // Hardcoded Data Rate at 100Mbit/s
     //std::string tcpVariant{"ns3::TcpCubic"};
     std::string tcpVariant{"ns3::TcpWestwoodPlus"};
 
@@ -254,7 +256,7 @@ RunSimulation(  const std::string environment,
     double fc = get_center_freq(apDevices.Get(0));
 
     // set center frequency & bandwidth for Sionna
-    int min_coherence_time_ms = 1000;
+    // int min_coherence_time_ms = tc;
     sionnaHelper.Configure(fc,
                            channel_width,
                            getFFTSize(wifi_standard, channel_width),
@@ -305,6 +307,8 @@ main(int argc, char* argv[])
    int sim_max_stas = 4;
    int mode = 3;
    int sub_mode = 16;
+   int min_coherence_time_ms = 0;
+   int data_Rate_mbps = 150;
 
    CommandLine cmd(__FILE__);
    cmd.AddValue("channel", "The WiFi channel number", wifi_channel_num);
@@ -317,6 +321,9 @@ main(int argc, char* argv[])
    cmd.AddValue("mode", "The Sionna mode", mode);
    cmd.AddValue("sub_mode", "The Sionna submode", sub_mode);
    cmd.AddValue("verbose", "Enable logging", verbose);
+   cmd.AddValue("minCoherenceTimeMs", "The minimal coherence time in msec", min_coherence_time_ms);
+   cmd.AddValue("dataRate", "Data Rate in Mb/s", data_Rate_mbps);
+
    cmd.Parse(argc, argv);
 
    if (verbose)
@@ -338,7 +345,7 @@ main(int argc, char* argv[])
    while (computationTime < 2 * 60 * 60 && numStas <= (uint32_t)sim_max_stas) // as long as a single run is below 2h
    {
        computationTime = RunSimulation(environment, numStas, mobile_scenario, mobile_speed, caching, mode,
-            sub_mode, verbose);
+            sub_mode, verbose, min_coherence_time_ms, data_Rate_mbps);
        numStas = numStas * 2;
    }
 
