@@ -147,7 +147,7 @@ RunSimulation(  const std::string environment,
     // TCP Setup
     DataRate dataRate(std::to_string(data_Rate_mbps) + "Mb/s"); // Hardcoded Data Rate at 100Mbit/s
     //std::string tcpVariant{"ns3::TcpCubic"};
-    std::string tcpVariant{"ns3::TcpWestwoodPlus"};
+    std::string tcpVariant{"ns3::TcpCubic"};
 
     Config::SetDefault("ns3::TcpL4Protocol::SocketType",
         TypeIdValue(TypeId::LookupByName(tcpVariant)));
