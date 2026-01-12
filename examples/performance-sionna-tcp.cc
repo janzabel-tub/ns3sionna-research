@@ -68,7 +68,8 @@ RunSimulation(  const std::string environment,
                 const int sub_mode,
                 const bool verbose,
                 const int min_coherence_time_ms,
-                const int data_Rate_mbps)
+                const int data_Rate_mbps,
+                const int seed)
 {
     // Wifi config
     int wifi_channel_num = 40; // center at 5200
@@ -309,6 +310,7 @@ main(int argc, char* argv[])
    int sub_mode = 16;
    int min_coherence_time_ms = 0;
    int data_Rate_mbps = 150;
+   int seed = 1;
 
    CommandLine cmd(__FILE__);
    cmd.AddValue("channel", "The WiFi channel number", wifi_channel_num);
@@ -323,6 +325,7 @@ main(int argc, char* argv[])
    cmd.AddValue("verbose", "Enable logging", verbose);
    cmd.AddValue("minCoherenceTimeMs", "The minimal coherence time in msec", min_coherence_time_ms);
    cmd.AddValue("dataRate", "Data Rate in Mb/s", data_Rate_mbps);
+   cmd.AddValue("seed", "Set the seed for the run", seed);
 
    cmd.Parse(argc, argv);
 
@@ -345,7 +348,7 @@ main(int argc, char* argv[])
    while (computationTime < 2 * 60 * 60 && numStas <= (uint32_t)sim_max_stas) // as long as a single run is below 2h
    {
        computationTime = RunSimulation(environment, numStas, mobile_scenario, mobile_speed, caching, mode,
-            sub_mode, verbose, min_coherence_time_ms, data_Rate_mbps);
+            sub_mode, verbose, min_coherence_time_ms, data_Rate_mbps, seed);
        numStas = numStas * 2;
    }
 
