@@ -75,7 +75,7 @@ RunSimulation(  const std::string environment,
     int wifi_channel_num = 40; // center at 5200
     int channel_width = 20;
     // Set the seed
-    RngSeedManager::SetSeed(1);
+    RngSeedManager::SetSeed(seed);
 
     SionnaHelper sionnaHelper(environment, "tcp://localhost:5555");
 

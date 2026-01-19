@@ -138,7 +138,7 @@ main(int argc, char* argv[])
     int wifi_channel_num = 42; // center at 5210
     int sim_end_time_sec = 10;
     int channel_width = 80;
-    int min_coherence_time_ms = 10; // total sim duration
+    int min_coherence_time_ms = 0; // total sim duration
 
     CommandLine cmd(__FILE__);
     cmd.AddValue("verbose", "Enable logging", verbose);
