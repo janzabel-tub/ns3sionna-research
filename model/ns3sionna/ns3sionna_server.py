@@ -1,4 +1,6 @@
 import sionna.rt # must be the first import as otherwise Python crashes
+import drjit as dr
+# dr.set_flag(dr.JitFlag.Debug, True)
 
 import os
 import argparse
@@ -112,6 +114,7 @@ class SionnaEnv:
         filepath = os.path.join(self.model_folder, sim_init_msg.scene_fname)
         try:
             self.scene = load_scene(filepath)
+            self.p_solver  = PathSolver()
         except Exception as e:
             return False, "Failed to load scene file in: " + filepath + ", error: " + str(e)
 
@@ -294,10 +297,10 @@ class SionnaEnv:
         self._place_tx_rx_nodes_with_lah(lah_time_vec, tx_node_id, rx_nodes)
 
         # create pathsolver; todo: check reuse
-        p_solver  = PathSolver()
+        # p_solver  = PathSolver()
 
         # Compute propagation paths
-        paths = p_solver(scene=self.scene,
+        paths = self.p_solver(scene=self.scene,
                          max_depth=self.rt_max_depth,
                          samples_per_src=self.rt_samples_per_src,
                          los=self.rt_los,
@@ -312,6 +315,7 @@ class SionnaEnv:
         # AZU: sampling_frequency is only used if num_time_steps > 1
         # a: shape [num_rx, num_rx_ant, num_tx, num_tx_ant, num_paths, num_time_steps],
         a, tau = paths.cir(sampling_frequency=1e9, normalize_delays=False, out_type="numpy")
+        dr.eval()
 
         # shape: [num_rx, num_rx_ant, num_tx, num_tx_ant, num_ofdm_symbols, num_subcarriers]
         h_raw = paths.cfr(frequencies=self.frequencies,
@@ -322,6 +326,7 @@ class SionnaEnv:
                   # antennas of a transmitter and receiver arrives at tau=0
                   normalize=False,  # Normalize energy
                   out_type="numpy")
+        dr.eval()
 
         # max single transmitter
         assert h_raw.shape[2] == 1
@@ -642,10 +647,10 @@ class SionnaEnv:
         self._place_tx_rx_node(tx_node, rx_nodes)
 
         # create pathsolver; todo: check reuse
-        p_solver  = PathSolver()
+        # p_solver  = PathSolver()
 
         # Compute propagation paths
-        paths = p_solver(scene=self.scene,
+        paths = self.p_solver(scene=self.scene,
                          max_depth=self.rt_max_depth,
                          samples_per_src=self.rt_samples_per_src,
                          los=self.rt_los,
@@ -660,6 +665,7 @@ class SionnaEnv:
         # AZU: sampling_frequency is only used if num_time_steps > 1
         # a: shape [num_rx, num_rx_ant, num_tx, num_tx_ant, num_paths, num_time_steps],
         a, tau = paths.cir(sampling_frequency=1e9, normalize_delays=False, out_type="numpy")
+        dr.eval()
 
         # shape: [num_rx, num_rx_ant, num_tx, num_tx_ant, num_ofdm_symbols, num_subcarriers]
         h_raw = paths.cfr(frequencies=self.frequencies,
@@ -670,6 +676,7 @@ class SionnaEnv:
                   # antennas of a transmitter and receiver arrives at tau=0
                   normalize=False,  # Normalize energy
                   out_type="numpy")
+        dr.eval()
 
         lnk_delay_arr = []
         lnk_loss_arr = []
@@ -835,6 +842,8 @@ class SionnaEnv:
     def release(self):
         # delete / release the scene before loading a new one
         del self.scene
+        del self.p_solver
+        dr.sync_thread()
         gc.collect()  # force garbage collection
 
 
