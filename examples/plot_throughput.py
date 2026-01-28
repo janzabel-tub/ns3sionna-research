@@ -5,6 +5,14 @@ import os
 import seaborn as sns
 import csv
 
+# TODO: High mobility
+# TODO: DONE Median unter Plot
+# Munich outdoor
+# 80Mhz Kanal
+# IQR (Inter quantil distanzen)
+# Jupyter
+# TODO: DONE Zeit messen
+
 throughput_1 = []
 throughput_10 = []
 throughput_100 = []
@@ -67,16 +75,33 @@ throughput = [throughput_1, throughput_10, throughput_100,throughput_1000]
 
 # print(len(throughput[0]), len(throughput[1]))
 
-sns.boxplot(data=throughput, widths=0.5)
+box_plot = sns.boxplot(data=throughput, widths=0.5)
+
+# Write medians onto the plot (slightly above the median line)
+medians = [np.median(t) for t in throughput]
+
+vertical_offset = [m * 0.01 for m in medians]
+
+# print(medians)
+
+# TODO: Check if white or black text looks better.
+for xtick in box_plot.get_xticks():
+    box_plot.text(
+        xtick,
+        medians[xtick] + vertical_offset[xtick],
+        f'{medians[xtick]:.2f}',
+        horizontalalignment='center',
+        size='x-small',
+        color='white',
+        weight='semibold'
+    )
 
 plt.xlabel("Coherence Time in ms")
 plt.ylabel("Mbps")
 
 plt.xticks(ticks=[0, 1, 2, 3], labels=["0.1 ms", "1 ms", "10 ms", "100 ms"])
-plt.ylim(15, 110)
+plt.ylim(0, 110)
 
 plt.title("Throughput Boxplot, TCP Cubic, 20MHz channel, low mobility")
 
 plt.savefig("throughput_boxplot.png")
-
-

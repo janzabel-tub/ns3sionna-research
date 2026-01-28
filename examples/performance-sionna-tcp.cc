@@ -40,6 +40,7 @@ uint64_t lastTotalRx = 0;
 
 // std::ofstream ofs_tp("throughput_results.csv"); // This name is also used for pathloss
 std::ofstream ofs_throughput("throughput_results.csv");
+std::ofstream ofs_compTime("computationtime.csv");
 
 /**
  * Calculate the throughput and shamelessly stolen
@@ -55,7 +56,7 @@ CalculateThroughput()
 
     ofs_throughput << Simulator::Now().GetSeconds() << "," << cur << "\n"; // std::endl or \n?
 
-    Simulator::Schedule(MilliSeconds(100), &CalculateThroughput);
+    Simulator::Schedule(MilliSeconds(10), &CalculateThroughput);
 }
 
 double
@@ -76,6 +77,7 @@ RunSimulation(  const std::string environment,
     int channel_width = 20;
     // Set the seed
     RngSeedManager::SetSeed(seed);
+    // check run number with setrun
 
     SionnaHelper sionnaHelper(environment, "tcp://localhost:5555");
 
@@ -251,7 +253,7 @@ RunSimulation(  const std::string environment,
 
     serverApps.Start(Seconds(1.0));
     serverApps.Stop(Seconds(10.0));
-    Simulator::Schedule(Seconds(1.1), &CalculateThroughput);
+    Simulator::Schedule(Seconds(1.01), &CalculateThroughput);
 
     // set center frequency for Sionna
     double fc = get_center_freq(apDevices.Get(0));
@@ -349,6 +351,7 @@ main(int argc, char* argv[])
    {
        computationTime = RunSimulation(environment, numStas, mobile_scenario, mobile_speed, caching, mode,
             sub_mode, verbose, min_coherence_time_ms, data_Rate_mbps, seed);
+       ofs_compTime << min_coherence_time_ms << "," << computationTime << "," << mobile_speed << "," << seed << "\n";
        numStas = numStas * 2;
    }
 
