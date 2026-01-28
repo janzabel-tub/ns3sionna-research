@@ -7,11 +7,12 @@ import csv
 
 # TODO: High mobility
 # TODO: DONE Median unter Plot
-# Munich outdoor
-# 80Mhz Kanal
-# IQR (Inter quantil distanzen)
-# Jupyter
+# TODO: Munich outdoor
+# TODO: 80Mhz Kanal
+# TODO: IQR (Inter quantil distanzen) Was genau meinte ich damit?
+# TODO: DONE Jupyter
 # TODO: DONE Zeit messen
+# TODO: Zeit plotten, durchschnitt im throughput?
 
 throughput_1 = []
 throughput_10 = []

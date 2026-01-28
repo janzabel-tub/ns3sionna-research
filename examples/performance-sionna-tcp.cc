@@ -50,7 +50,7 @@ CalculateThroughput()
 {
     Time now = Simulator::Now(); /* Return the simulator's virtual time. */
     double cur = (sink->GetTotalRx() - lastTotalRx) * 8.0 /
-                 1e5; /* Convert Application RX Packets to MBits. */
+                 1e4; /* Convert Application RX Packets to MBits. */
     std::cout << now.GetSeconds() << "s: \t" << cur << " Mbit/s" << std::endl;
     lastTotalRx = sink->GetTotalRx();
 
@@ -290,6 +290,11 @@ RunSimulation(  const std::string environment,
     auto endTime = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsedTime = endTime - startTime;
     double computationTime = elapsedTime.count();
+
+    ofs_compTime << min_coherence_time_ms << "," << computationTime << "," << mobile_speed << "," << seed << "\n";
+
+    ofs_compTime.close();
+
     std::cout << "Finished simulation with " << numStas << " stations in " << computationTime
               << " sec";
 
@@ -307,7 +312,7 @@ main(int argc, char* argv[])
    bool mobile_scenario = false;
    double mobile_speed = 1.0;
    int sim_min_stas = 1;
-   int sim_max_stas = 4;
+   int sim_max_stas = 4; // TODO: Check this again
    int mode = 3;
    int sub_mode = 16;
    int min_coherence_time_ms = 0;
@@ -351,7 +356,6 @@ main(int argc, char* argv[])
    {
        computationTime = RunSimulation(environment, numStas, mobile_scenario, mobile_speed, caching, mode,
             sub_mode, verbose, min_coherence_time_ms, data_Rate_mbps, seed);
-       ofs_compTime << min_coherence_time_ms << "," << computationTime << "," << mobile_speed << "," << seed << "\n";
        numStas = numStas * 2;
    }
 
