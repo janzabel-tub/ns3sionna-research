@@ -3,16 +3,18 @@ import numpy as np
 import sys
 import os
 
+t = 500
+
 # load CSI
-fname = sys.argv[1]
+fname = f"/home/ccs-lab/jan.zabel/ns-allinone-3.40/ns-3.40/example-sionna-sensing-mobile-tcp-{t}.csv"
 csi = np.asarray([complex(line.strip()) for line in open(fname, 'r')])
 
-fname_pl = sys.argv[2]
+fname_pl = f"/home/ccs-lab/jan.zabel/ns-allinone-3.40/ns-3.40/example-sionna-sensing-mobile-pathloss-tcp-{t}.csv"
 pathLossDb = np.asarray([float(line.strip()) for line in open(fname_pl, 'r')])
 
 pathloss_lin = np.power(10.0, (-pathLossDb) / 10.0)
 
-fname_time_pos = sys.argv[3]
+fname_time_pos = f"/home/ccs-lab/jan.zabel/ns-allinone-3.40/ns-3.40/example-sionna-sensing-mobile-time-pos-tcp-{t}.csv"
 time_pos = np.loadtxt(fname_time_pos, delimiter=',').astype(float)
 
 # reshape
@@ -35,6 +37,7 @@ mag_csi_pl = (np.abs(all_csi) ** 2) * pathloss_lin[:, np.newaxis]
 mag_csi_pl_db = 10 * np.log10(mag_csi_pl)
 
 # create 3D plot
+# JZA TODO: Make plot wider, information get's cut off
 fig = plt.figure()
 ax = fig.add_subplot(121, projection='3d')
 
@@ -45,7 +48,7 @@ surf = ax.plot_surface(X, Y, mag_csi, cmap='viridis')
 ax.set_xlabel('OFDM subcarrier [idx]')
 ax.set_ylabel('CSI sample [id]')
 ax.set_zlabel('|h|^2')
-fig.colorbar(surf, ax=ax, shrink=0.5, aspect=10)
+fig.colorbar(surf, ax=ax, shrink=0.5, aspect=15)
 
 ax2 = fig.add_subplot(122, projection='3d')
 
@@ -59,6 +62,8 @@ ax2.set_zlabel('PL * |h|^2 [dB]')
 fig.colorbar(surf2, ax=ax2, shrink=0.5, aspect=10)
 
 plt.tight_layout()
+fig_name = f"channel_{t}.png"
+plt.savefig(fig_name, dpi = 300, bbox_inches='tight', pad_inches=0.4)
 plt.show()
 
 plt.scatter(1.0, 2.0, marker='p', s=25, c='r', alpha=0.5)
@@ -67,6 +72,7 @@ plt.scatter(time_pos[:,1], time_pos[:,2], s=15, c='b', alpha=0.5)
 plt.tight_layout()
 plt.show()
 
+plt.figure(figsize=(16, 6))
 rx_power_dbm = 20 - pathLossDb
 rx_power_dbm = 20 - pathLossDb
 plt.plot(time_pos[:,0], rx_power_dbm)
@@ -74,4 +80,6 @@ plt.ylabel('Mean RX power [dBm]')
 plt.xlabel('Time [s]')
 
 plt.tight_layout()
+fig_name = f"pathloss_{t}.png"
+plt.savefig(fig_name, dpi = 300, bbox_inches='tight', pad_inches=0.4)
 plt.show()
