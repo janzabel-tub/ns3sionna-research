@@ -1,3 +1,6 @@
+#import faulthandler
+#faulthandler.enable()
+#faulthandler.dump_traceback_later(60, repeat=True)
 import sionna.rt # must be the first import as otherwise Python crashes
 import drjit as dr
 # dr.set_flag(dr.JitFlag.Debug, True)
@@ -109,6 +112,8 @@ class SionnaEnv:
         '''
         if self.VERBOSE:
             print_sim_init(sim_init_msg)
+
+        self.stepCounter = 0
 
         # Load the sionna scene
         filepath = os.path.join(self.model_folder, sim_init_msg.scene_fname)
@@ -408,7 +413,7 @@ class SionnaEnv:
             Tc_p2mp_lah.append(Tc_p2mp)
             csi.end_time = csi.start_time + Tc_p2mp - 1 # -1ns to have non-overlapping intervals
 
-        print(f'{self.sim_time / 1e9}s: Computed CSI with Tc: {np.round(np.asarray(Tc_p2mp_lah) / 1e6,2)}ms, #links: {num_computed_lnks}')
+        # print(f'{self.sim_time / 1e9}s: Computed CSI with Tc: {np.round(np.asarray(Tc_p2mp_lah) / 1e6,2)}ms, #links: {num_computed_lnks}')
 
         return num_computed_lnks
 
@@ -517,7 +522,7 @@ class SionnaEnv:
         # take the worst case Tc from all RX nodes
         Tc_p2mp = int(np.min(np.asarray(csi_tc_arr)))
 
-        print(f'{self.sim_time / 1e9}s: Computed CSI with Tc: {round(Tc_p2mp / 1e6,2)}ms, #links: {len(rx_nodes)}')
+        # print(f'{self.sim_time / 1e9}s: Computed CSI with Tc: {round(Tc_p2mp / 1e6,2)}ms, #links: {len(rx_nodes)}')
 
         csi.end_time = self.sim_time + Tc_p2mp
         return len(rx_nodes)
@@ -529,6 +534,7 @@ class SionnaEnv:
         :param node_id: node_id of the node to move
         :param dt: time interval in ns
         """
+        # TODO: Walk ohne Kanalberechnungen, nur bewegen, nur pathsolver, bewegen und pathsolver zusammen
         init_dt = dt
 
         pos = self.node_info[node_id].pos
@@ -586,6 +592,8 @@ class SionnaEnv:
         self.node_info[node_id].update_pos(self.sim_time + init_dt, next_pos, velocity, False)
         # check if new velocity must be set
         self.node_info[node_id].check_set_new_velocity(self.sim_time + init_dt, distance)
+
+        self.stepCounter += 1
 
 
     def _place_tx_rx_node(self, tx_node: int, rx_nodes: list):
@@ -833,6 +841,13 @@ class SionnaEnv:
 
             # Serialize and send the reply message
             socket.send(resp_msg.SerializeToString())
+
+        try:
+            f = open('stepcounter.txt', 'a')
+            f.write(repr(self.stepCounter) + "\n")
+            f.close()
+        except FileExistsError:
+            print("Something went wrong")
 
         socket.close()
         print("Computed no. CSI samples: %d" % total_num_csi_samples)
