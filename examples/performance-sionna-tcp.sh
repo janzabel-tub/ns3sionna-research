@@ -1,6 +1,9 @@
 #!/bin/bash
 
-cd ../../../ || exit 1
+BASE="/home/ccs-lab/jan.zabel/ns-allinone-3.40/ns-3.40"
+SEED_FILE="$BASE/contrib/sionna/examples/last_seed.txt"
+
+# cd ../../../ || exit 1
 
 MODE=2
 NUM_RES=16
@@ -8,7 +11,6 @@ NUM_STAS=1
 COHERENCE_TIME=1
 MOBILE_SPEED=7
 
-SEED_FILE="last_seed.txt"
 CHECK_INTERVAL=30
 
 if [[ -f "$SEED_FILE" ]]; then
