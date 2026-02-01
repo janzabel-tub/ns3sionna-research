@@ -33,6 +33,25 @@ start_experiment() {
   EXP_PID=$!
 }
 
+# Stopping the program early is an issue.
+cleanup() {
+  echo "Stopping program"
+  [[ -n "$SERVER_PID"  ]] && kill $SERVER_PID 2>/dev/null
+  [[ -n "$EXP_PID"  ]] && kill $EXP_PID 2>/dev/null
+  wait
+  exit 0
+}
+
+trap cleanup SIGINT SIGTERM
+
+# Program has problem if server is already running.
+# Stops server before starting
+EXIST_SERVER_PID=$(pgrep -f "ns3sionna_server.py")
+if [[ -n "$EXIST_SERVER_PID"  ]]; then
+  echo "Server running."
+  exit 1
+fi
+
 start_server
 start_experiment
 

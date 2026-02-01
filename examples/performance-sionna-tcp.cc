@@ -40,7 +40,6 @@ uint64_t lastTotalRx = 0;
 
 // std::ofstream ofs_tp("throughput_results.csv"); // This name is also used for pathloss
 std::ofstream ofs_throughput("throughput_results.csv");
-std::ofstream ofs_compTime("computationtime.csv");
 
 /**
  * Calculate the throughput and shamelessly stolen
@@ -290,6 +289,8 @@ RunSimulation(  const std::string environment,
     auto endTime = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsedTime = endTime - startTime;
     double computationTime = elapsedTime.count();
+
+    std::ofstream ofs_compTime("/home/ccs-lab/jan.zabel/ns-allinone-3.40/ns-3.40/contrib/sionna/examples/computationtime.csv", std::ios::app);
 
     ofs_compTime << min_coherence_time_ms << "," << computationTime << "," << mobile_speed << "," << seed << "\n";
 
