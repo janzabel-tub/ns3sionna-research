@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# --- Paths ---
+# TODO: Make this stuff relative. This is not usable
 BASE="/home/ccs-lab/jan.zabel/ns-allinone-3.40/ns-3.40"
 EXAMPLES="$BASE/contrib/sionna/examples"
 SERVER_DIR="$BASE/contrib/sionna/model/ns3sionna"
@@ -9,6 +9,8 @@ SERVER_CMD="python ns3sionna_server.py"
 EXPERIMENT_CMD="./performance-sionna-tcp.sh"
 
 CHECK_INTERVAL=60   # seconds
+
+# check if experiment is killed after everything is over.
 
 cd "$EXAMPLES" || exit 1
 
@@ -66,6 +68,8 @@ while true; do
     if kill -0 $EXP_PID 2>/dev/null; then
       kill $EXP_PID
       wait $EXP_PID 2>/dev/null
+      pkill -f "ns3 run ns3sionna-performance-sionna-tcp"
+      pkill -f "ns3.40-ns3sionna-performance-sionna-tcp-default"
     fi
 
     start_server
@@ -80,6 +84,8 @@ while true; do
     if [[ $STATUS -eq 0 ]]; then
       echo "=== Experiment finished successfully ==="
       kill $SERVER_PID 2>/dev/null
+      pkill -f "ns3 run ns3sionna-performance-sionna-tcp"
+      pkill -f "ns3.40-ns3sionna-performance-sionna-tcp-default"
       exit 0
     else
       echo "=== Experiment crashed. Restarting ==="
