@@ -36,7 +36,8 @@ using namespace ns3;
 NS_LOG_COMPONENT_DEFINE("PerformanceSionnaTCP");
 
 Ptr<PacketSink> sink;
-uint64_t lastTotalRx = 0;
+uint64_t lastTotalRx10 = 0;
+uint64_t lastTotalRx100 = 0;
 
 // std::ofstream ofs_tp("throughput_results.csv"); // This name is also used for pathloss
 std::ofstream ofs_throughput("throughput_results.csv");
@@ -45,17 +46,31 @@ std::ofstream ofs_throughput("throughput_results.csv");
  * Calculate the throughput and shamelessly stolen
  */
 void
-CalculateThroughput()
+CalculateThroughput10()
 {
     Time now = Simulator::Now(); /* Return the simulator's virtual time. */
-    double cur = (sink->GetTotalRx() - lastTotalRx) * 8.0 /
+    double cur = (sink->GetTotalRx() - lastTotalRx10) * 8.0 /
                  1e4; /* Convert Application RX Packets to MBits. */
+    // std::cout << now.GetSeconds() << "s: \t" << cur << " Mbit/s" << std::endl;
+    lastTotalRx10 = sink->GetTotalRx();
+
+    ofs_throughput << Simulator::Now().GetSeconds() << "," << cur << ",10\n"; // std::endl or \n?
+
+    Simulator::Schedule(MilliSeconds(10), &CalculateThroughput10);
+}
+
+void
+CalculateThroughput100()
+{
+    Time now = Simulator::Now(); /* Return the simulator's virtual time. */
+    double cur = (sink->GetTotalRx() - lastTotalRx100) * 8.0 /
+                 1e5; /* Convert Application RX Packets to MBits. */
     std::cout << now.GetSeconds() << "s: \t" << cur << " Mbit/s" << std::endl;
-    lastTotalRx = sink->GetTotalRx();
+    lastTotalRx100 = sink->GetTotalRx();
 
-    ofs_throughput << Simulator::Now().GetSeconds() << "," << cur << "\n"; // std::endl or \n?
+    ofs_throughput << Simulator::Now().GetSeconds() << "," << cur << ",100\n"; // std::endl or \n?
 
-    Simulator::Schedule(MilliSeconds(10), &CalculateThroughput);
+    Simulator::Schedule(MilliSeconds(100), &CalculateThroughput100);
 }
 
 double
@@ -203,6 +218,7 @@ RunSimulation(  const std::string environment,
         mobility.Install(wifiApNode);
     }
 
+
     // random placement of all nodes
     wifiApNode.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(1.0, 2.0, 1.0));
 
@@ -212,6 +228,20 @@ RunSimulation(  const std::string environment,
     randX->SetAttribute("Max", DoubleValue(5.9));
     randY->SetAttribute("Min", DoubleValue(0.1));
     randY->SetAttribute("Max", DoubleValue(3.9));
+
+    //    wifiStaNode.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(45.0, 90.0, 1.5));
+    //    wifiApNode.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(8.5, 21.0, 27.0));
+
+    // For Munich setting:
+    // Yes, the chosen numbers are as of yet arbitrary.
+    if (environment == "munich/munich.xml") {
+        wifiApNode.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(8.5, 21.0, 27.0));
+        randX->SetAttribute("Min", DoubleValue(0.1));
+        randX->SetAttribute("Max", DoubleValue(75.0));
+        randY->SetAttribute("Min", DoubleValue(0.1));
+        randY->SetAttribute("Max", DoubleValue(90.0));
+    }
+
     for (uint32_t i = 0; i < numStas; i++)
     {
         wifiStaNodes.Get(i)->GetObject<MobilityModel>()->SetPosition(
@@ -252,7 +282,8 @@ RunSimulation(  const std::string environment,
 
     serverApps.Start(Seconds(1.0));
     serverApps.Stop(Seconds(10.0));
-    Simulator::Schedule(Seconds(1.01), &CalculateThroughput);
+    Simulator::Schedule(Seconds(1.01), &CalculateThroughput10);
+    Simulator::Schedule(Seconds(1.1), &CalculateThroughput100);
 
     // set center frequency for Sionna
     double fc = get_center_freq(apDevices.Get(0));
@@ -273,7 +304,7 @@ RunSimulation(  const std::string environment,
     auto startTime = std::chrono::system_clock::now();
 
     // Log for throughput:
-    ofs_throughput << "Time,Throughput_Mbps\n";
+    ofs_throughput << "Time,Throughput_Mbps,measuring interval in ms\n";
 
     sionnaHelper.Start();
 
@@ -290,7 +321,7 @@ RunSimulation(  const std::string environment,
     std::chrono::duration<double> elapsedTime = endTime - startTime;
     double computationTime = elapsedTime.count();
 
-    std::ofstream ofs_compTime("/home/ccs-lab/jan.zabel/ns-allinone-3.40/ns-3.40/contrib/sionna/examples/computationtime.csv", std::ios::app);
+    std::ofstream ofs_compTime("computationtime.csv", std::ios::app);
 
     ofs_compTime << min_coherence_time_ms << "," << computationTime << "," << mobile_speed << "," << seed << "\n";
 
@@ -313,7 +344,7 @@ main(int argc, char* argv[])
    bool mobile_scenario = false;
    double mobile_speed = 1.0;
    int sim_min_stas = 1;
-   int sim_max_stas = 4; // TODO: Check this again
+   int sim_max_stas = 4;
    int mode = 3;
    int sub_mode = 16;
    int min_coherence_time_ms = 0;
