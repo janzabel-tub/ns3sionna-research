@@ -1,10 +1,9 @@
 #!/bin/bash
 
 # TODO: This is still not fully relative, but better!
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BASE="$SCRIPT_DIR/../../.."
-EXAMPLES="$SCRIPT_DIR"
-SERVER_DIR="$SCRIPT_DIR/../model/ns3sionna"
+EXAMPLES="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASE="$EXAMPLES/../../.."
+SERVER_DIR="$EXAMPLES/../model/ns3sionna"
 
 SERVER_CMD="python ns3sionna_server.py"
 EXPERIMENT_CMD="./performance-sionna-tcp.sh"
