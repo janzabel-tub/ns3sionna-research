@@ -1,9 +1,8 @@
 #!/bin/bash
 
-echo $SCRIPT_DIR
-
 # TODO: This is still not fully relative, but better!
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASE="$SCRIPT_DIR/../../.."
 EXAMPLES="$SCRIPT_DIR"
 SERVER_DIR="$SCRIPT_DIR/../model/ns3sionna"
 
@@ -18,6 +17,12 @@ cd "$EXAMPLES" || exit 1
 
 start_server() {
   echo "=== Starting Sionna server ==="
+  # The watchdog script is not in the same directory as the server
+  # When executing the watchdog script, the working directory is sionna/examples
+  # When running the server using python ../model/ns3sionna/ns3sionna_server.py this is still true
+  # The server uses relative paths within itself (Line 51: model_folder='./models/'
+  # When executing without changing to the ns3sionna directory, it looks for examples/models, which does not exist
+  # Changing to sionna/model/ns3sionna is necessary
   cd "$SERVER_DIR" || exit 1
 
   # Absolute model folder to avoid cwd issues
@@ -32,8 +37,8 @@ start_server() {
 
 start_experiment() {
   echo "=== Starting experiment ==="
-  cd "$BASE" || exit 1
-  "$EXAMPLES/performance-sionna-tcp.sh" &
+  cd "$EXAMPLES" || exit 1
+  "./performance-sionna-tcp.sh" &
   EXP_PID=$!
 }
 

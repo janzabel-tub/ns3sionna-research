@@ -1,9 +1,8 @@
 #!/bin/bash
 
-BASE="/home/ccs-lab/jan.zabel/ns-allinone-3.40/ns-3.40"
-SEED_FILE="$BASE/contrib/sionna/examples/last_seed.txt"
+cd ../../../
 
-# cd ../../../ || exit 1
+SEED_FILE="contrib/sionna/examples/last_seed.txt"
 
 MODE=2
 NUM_RES=16
@@ -27,7 +26,7 @@ do
   echo "Current Seed: $i"
   # Saving the seed in the file to restart from this position.
   echo "$i" > "$SEED_FILE"
-
+  # TODO: Munich Scenario --environment=munich/munich.xml
   ./ns3 run "ns3sionna-performance-sionna-tcp --sim_max_stas=${NUM_STAS} --mobile_scenario=true --mobile_speed=${MOBILE_SPEED}.0 --caching=true --mode=${MODE} --sub_mode=${NUM_RES} --minCoherenceTimeMs=${COHERENCE_TIME} --dataRate=150 --seed=$i"
 
   # Crash test
@@ -37,7 +36,7 @@ do
   fi
 
   # Rename file here, I was too lazy to do it in the cpp script.
-  mv "throughput_results.csv" "tp_res_${MOBILE_SPEED}/throughput_results_${COHERENCE_TIME}_${i}.csv"
+  # mv "throughput_results.csv" "tp_res_${MOBILE_SPEED}/throughput_results_${COHERENCE_TIME}_${i}.csv"
 
   # I have a theory the server crashes less if there is a small waiting time between simulations
   # I have not tested this theory. Just a feeling. This may waste 3 seconds every time.
