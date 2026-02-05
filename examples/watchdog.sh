@@ -1,9 +1,11 @@
 #!/bin/bash
 
-# TODO: Make this stuff relative. This is not usable
-BASE="/home/ccs-lab/jan.zabel/ns-allinone-3.40/ns-3.40"
-EXAMPLES="$BASE/contrib/sionna/examples"
-SERVER_DIR="$BASE/contrib/sionna/model/ns3sionna"
+echo $SCRIPT_DIR
+
+# TODO: This is still not fully relative, but better!
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+EXAMPLES="$SCRIPT_DIR"
+SERVER_DIR="$SCRIPT_DIR/../model/ns3sionna"
 
 SERVER_CMD="python ns3sionna_server.py"
 EXPERIMENT_CMD="./performance-sionna-tcp.sh"
@@ -25,7 +27,7 @@ start_server() {
   SERVER_PID=$!
 
   # Give server time to fully initialize
-  sleep 15
+  sleep 8
 }
 
 start_experiment() {
