@@ -87,11 +87,14 @@ RunSimulation(  const std::string environment,
                 const int seed)
 {
     // Wifi config
-    int wifi_channel_num = 40; // center at 5200
-    int channel_width = 20;
+    int wifi_channel_num = 42; // center at 5200, set to 40
+    int channel_width = 80; //set to 20
     // Set the seed
     RngSeedManager::SetSeed(seed);
-    // check run number with setrun
+    // RngSeedManager::SetRun(run);
+    // TODO DONE: check run number with setrun
+    // SetSeed and SetRun do a very similar thing, but setrun is supposed to be cleaner and make
+    // documentation easier. SetRun implies multiple repetitions of an experiment.
 
     SionnaHelper sionnaHelper(environment, "tcp://localhost:5555");
 
@@ -162,7 +165,7 @@ RunSimulation(  const std::string environment,
                                  UintegerValue(rtsThreshold));
 
     // TCP Setup
-    DataRate dataRate(std::to_string(data_Rate_mbps) + "Mb/s"); // Hardcoded Data Rate at 100Mbit/s
+    DataRate dataRate(std::to_string(data_Rate_mbps) + "Mb/s");
     //std::string tcpVariant{"ns3::TcpCubic"};
     std::string tcpVariant{"ns3::TcpCubic"};
 
@@ -220,7 +223,7 @@ RunSimulation(  const std::string environment,
 
 
     // random placement of all nodes
-    wifiApNode.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(1.0, 2.0, 1.0));
+    // wifiApNode.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(1.0, 2.0, 1.0));
 
     Ptr<UniformRandomVariable> randX = CreateObject<UniformRandomVariable>();
     Ptr<UniformRandomVariable> randY = CreateObject<UniformRandomVariable>();
@@ -235,17 +238,28 @@ RunSimulation(  const std::string environment,
     // For Munich setting:
     // Yes, the chosen numbers are as of yet arbitrary.
     if (environment == "munich/munich.xml") {
+        std::cout << "Munich executed" << std::endl;
+
         wifiApNode.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(8.5, 21.0, 27.0));
-        randX->SetAttribute("Min", DoubleValue(0.1));
-        randX->SetAttribute("Max", DoubleValue(75.0));
-        randY->SetAttribute("Min", DoubleValue(0.1));
-        randY->SetAttribute("Max", DoubleValue(90.0));
+        // TODO: Somehow, the throughput is not as expected.
+        // Speed has a huge influence on the munich scenario. High speed means almost no signal.
+        /*
+        randX->SetAttribute("Min", DoubleValue(0.0));
+        randX->SetAttribute("Max", DoubleValue(80.0));
+        randY->SetAttribute("Min", DoubleValue(50.0));
+        randY->SetAttribute("Max", DoubleValue(110.0));
+        */
     }
 
     for (uint32_t i = 0; i < numStas; i++)
     {
+        //wifiStaNodes.Get(i)->GetObject<MobilityModel>()->SetPosition(
+        //    Vector(randX->GetValue(), randY->GetValue(), 1.0));
+        // TODO: Maybe make this random. Currently set position.
+        // TODO: This distance is too far. Around 82m, no signal is received.
+        std::cout << "Set Position CORRECTLY!!!" << std::endl;
         wifiStaNodes.Get(i)->GetObject<MobilityModel>()->SetPosition(
-            Vector(randX->GetValue(), randY->GetValue(), 1.0));
+            Vector(10, 40, 1.5));
     }
 
     // configure IP
@@ -339,7 +353,8 @@ main(int argc, char* argv[])
 {
    bool verbose = false;
    bool caching = true;
-   std::string environment = "simple_room/simple_room.xml";
+   // std::string environment = "simple_room/simple_room.xml";
+   std::string environment = "munich/munich.xml";
    int wifi_channel_num = 40;
    bool mobile_scenario = false;
    double mobile_speed = 1.0;
