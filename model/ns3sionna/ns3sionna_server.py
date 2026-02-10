@@ -191,7 +191,6 @@ class SionnaEnv:
                 self.chan_coh_time_mode3 = compute_coherence_time(speed_arr[0], self.fc, model='rappaport2')
             else:
                 self.chan_coh_time_mode3 = MAX_COHERENCE_TIME
-            # TODO: I'm not sure this does anything.
             #if self.min_coherence_time_ms != 0:
             #   self.chan_coh_time_mode3 = self.min_coherence_time_ms
 
@@ -300,9 +299,6 @@ class SionnaEnv:
         rx_nodes.remove(tx_node_id)
 
         self._place_tx_rx_nodes_with_lah(lah_time_vec, tx_node_id, rx_nodes)
-
-        # create pathsolver; todo: check reuse
-        # p_solver  = PathSolver()
 
         # Compute propagation paths
         paths = self.p_solver(scene=self.scene,
@@ -657,9 +653,6 @@ class SionnaEnv:
         rx_nodes = nodes_to_update
         rx_nodes.remove(tx_node)
         self._place_tx_rx_node(tx_node, rx_nodes)
-
-        # create pathsolver; todo: check reuse
-        # p_solver  = PathSolver()
 
         # Compute propagation paths
         paths = self.p_solver(scene=self.scene,
