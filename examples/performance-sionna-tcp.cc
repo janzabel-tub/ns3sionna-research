@@ -54,7 +54,7 @@ CalculateThroughput10()
     // std::cout << now.GetSeconds() << "s: \t" << cur << " Mbit/s" << std::endl;
     lastTotalRx10 = sink->GetTotalRx();
 
-    ofs_throughput << Simulator::Now().GetSeconds() << "," << cur << ",10\n"; // std::endl or \n?
+    ofs_throughput << Simulator::Now().GetSeconds() << "," << cur << ",10\n";
 
     Simulator::Schedule(MilliSeconds(10), &CalculateThroughput10);
 }
@@ -68,7 +68,7 @@ CalculateThroughput100()
     std::cout << now.GetSeconds() << "s: \t" << cur << " Mbit/s" << std::endl;
     lastTotalRx100 = sink->GetTotalRx();
 
-    ofs_throughput << Simulator::Now().GetSeconds() << "," << cur << ",100\n"; // std::endl or \n?
+    ofs_throughput << Simulator::Now().GetSeconds() << "," << cur << ",100\n";
 
     Simulator::Schedule(MilliSeconds(100), &CalculateThroughput100);
 }
@@ -91,8 +91,7 @@ RunSimulation(  const std::string environment,
     int channel_width = 80; //set to 20
     // Set the seed
     RngSeedManager::SetSeed(seed);
-    // RngSeedManager::SetRun(run);
-    // TODO DONE: check run number with setrun
+    RngSeedManager::SetRun(1);
     // SetSeed and SetRun do a very similar thing, but setrun is supposed to be cleaner and make
     // documentation easier. SetRun implies multiple repetitions of an experiment.
 
@@ -237,11 +236,10 @@ RunSimulation(  const std::string environment,
 
     // For Munich setting:
     // Yes, the chosen numbers are as of yet arbitrary.
-    if (environment == "munich/munich.xml") {
-        std::cout << "Munich executed" << std::endl;
+    if (environment == "apartment/apartment.xml") {
+        std::cout << "Apartment executed" << std::endl;
 
-        wifiApNode.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(8.5, 21.0, 27.0));
-        // TODO: Somehow, the throughput is not as expected.
+        wifiApNode.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(-1,0.5,1));
         // Speed has a huge influence on the munich scenario. High speed means almost no signal.
         /*
         randX->SetAttribute("Min", DoubleValue(0.0));
@@ -255,11 +253,9 @@ RunSimulation(  const std::string environment,
     {
         //wifiStaNodes.Get(i)->GetObject<MobilityModel>()->SetPosition(
         //    Vector(randX->GetValue(), randY->GetValue(), 1.0));
-        // TODO: Maybe make this random. Currently set position.
-        // TODO: This distance is too far. Around 82m, no signal is received.
         std::cout << "Set Position CORRECTLY!!!" << std::endl;
         wifiStaNodes.Get(i)->GetObject<MobilityModel>()->SetPosition(
-            Vector(10, 40, 1.5));
+            Vector(-1, 2, 1.1));
     }
 
     // configure IP
@@ -354,7 +350,7 @@ main(int argc, char* argv[])
    bool verbose = false;
    bool caching = true;
    // std::string environment = "simple_room/simple_room.xml";
-   std::string environment = "munich/munich.xml";
+   std::string environment = "apartment/apartment.xml";
    int wifi_channel_num = 40;
    bool mobile_scenario = false;
    double mobile_speed = 1.0;
