@@ -1,44 +1,62 @@
 #!/bin/bash
+# Single-shot simulation runner.
+# All parameters are supplied via environment variables by watchdog.sh.
+# Can also be run standalone by exporting variables manually.
+#
+# Required env vars (all have defaults for standalone use):
+#   MODE, NUM_RES, NUM_STAS, MOBILE_SPEED, COHERENCE_TIME, SEED,
+#   DATA_RATE, OUTPUT_DIR, ENABLE_SNR, ENABLE_POSITIONS
+
+set -euo pipefail
 
 cd ../../../
 
-SEED_FILE="contrib/sionna/examples/last_seed.txt"
+# ── Parameter defaults (overridden by watchdog via env) ──────────────────────
+MODE=${MODE:-2}
+NUM_RES=${NUM_RES:-16}
+NUM_STAS=${NUM_STAS:-1}
+MOBILE_SPEED=${MOBILE_SPEED:-1}
+COHERENCE_TIME=${COHERENCE_TIME:-0}
+SEED=${SEED:-1}
+DATA_RATE=${DATA_RATE:-600}
+OUTPUT_DIR=${OUTPUT_DIR:-"results/tc${COHERENCE_TIME}"}
 
-MODE=2
-NUM_RES=16
-NUM_STAS=1
-COHERENCE_TIME=1
-MOBILE_SPEED=1
+# Optional feature flags (set to "true" to enable)
+ENABLE_SNR=${ENABLE_SNR:-false}
+ENABLE_POSITIONS=${ENABLE_POSITIONS:-false}
 
-if [[ -f "$SEED_FILE" ]]; then
-  START_SEED=$(cat "$SEED_FILE")
-else
-  echo "Seed file not found. Please create a file called last_seed.txt with the value 1 inside."
-  START_SEED=1
-fi
+# ── Prepare output directory ──────────────────────────────────────────────────
+mkdir -p "$OUTPUT_DIR"
 
-echo "Starting simulation"
+echo "[runner] coherence=${COHERENCE_TIME}ms seed=${SEED} → ${OUTPUT_DIR}"
 
-for ((i=START_SEED; i<=10; i++))
-do
-  echo "Current Seed: $i"
-  # Saving the seed in the file to restart from this position.
-  echo "$i" > "$SEED_FILE"
-  # TODO: Munich Scenario --environment=munich/munich.xml
-  # TODO DONE: Figure out positioning for munich.
-  ./ns3 run "ns3sionna-performance-sionna-tcp --sim_max_stas=${NUM_STAS} --mobile_scenario=true --mobile_speed=${MOBILE_SPEED}.0 --caching=true --mode=${MODE} --sub_mode=${NUM_RES} --minCoherenceTimeMs=${COHERENCE_TIME} --dataRate=600 --seed=$i"
+# ── Build optional flags ──────────────────────────────────────────────────────
+EXTRA_FLAGS=""
+[[ "$ENABLE_SNR"       == "true" ]] && EXTRA_FLAGS="$EXTRA_FLAGS --snr=true"
+[[ "$ENABLE_POSITIONS" == "true" ]] && EXTRA_FLAGS="$EXTRA_FLAGS --positions=true"
 
-  # Crash test
-  if [[ $? -ne 0 ]]; then
-    echo "Crashed. Last seed: $i"
-    exit 1
-  fi
+# ── Run simulation ────────────────────────────────────────────────────────────
+./ns3 run "ns3sionna-performance-sionna-tcp \
+  --sim_max_stas=${NUM_STAS} \
+  --mobile_scenario=true \
+  --mobile_speed=${MOBILE_SPEED}.0 \
+  --caching=true \
+  --mode=${MODE} \
+  --sub_mode=${NUM_RES} \
+  --minCoherenceTimeMs=${COHERENCE_TIME} \
+  --dataRate=${DATA_RATE} \
+  --seed=${SEED} \
+  ${EXTRA_FLAGS}"
 
-  # Rename file here, I was too lazy to do it in the cpp script.
-  mv "throughput_results.csv" "tp_res_munich/throughput_results_${COHERENCE_TIME}_${i}.csv"
-  mv "snr_results.csv" "tp_res_munich/snr_results_${COHERENCE_TIME}_${i}.csv"
+# ── Move outputs into the run-specific directory ──────────────────────────────
+TAG="${COHERENCE_TIME}_${SEED}"
 
-  # I have a theory the server crashes less if there is a small waiting time between simulations
-  # I have not tested this theory. Just a feeling. This may waste 3 seconds every time.
-  sleep 3
-done
+mv "throughput_results.csv" "${OUTPUT_DIR}/throughput_results_${TAG}.csv"
+
+[[ "$ENABLE_SNR"       == "true" && -f "snr_results.csv"      ]] && \
+    mv "snr_results.csv"       "${OUTPUT_DIR}/snr_results_${TAG}.csv"
+
+[[ "$ENABLE_POSITIONS" == "true" && -f "position_results.csv" ]] && \
+    mv "position_results.csv"  "${OUTPUT_DIR}/position_results_${TAG}.csv"
+
+echo "[runner] done → outputs saved to ${OUTPUT_DIR}/"
