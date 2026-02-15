@@ -15,6 +15,7 @@
 #include "ns3/sionna-propagation-delay-model.h"
 #include "ns3/sionna-propagation-loss-model.h"
 #include "ns3/sionna-spectrum-propagation-loss-model.h"
+#include "ns3/cfr-tag.h"
 #include "ns3/spectrum-module.h"
 #include "ns3/spectrum-wifi-helper.h"
 
@@ -41,9 +42,116 @@ uint64_t lastTotalRx100 = 0;
 
 // std::ofstream ofs_tp("throughput_results.csv"); // This name is also used for pathloss
 std::ofstream ofs_throughput("throughput_results.csv");
+std::ofstream ofs_snr;      // --snr
+std::ofstream ofs_position; // --positions
+
+// ── SNR constants (match the Munich script; --txPower overrides TX_POWER_DBM) ──
+double TX_POWER_DBM = 20.0;                          // default PHY TX power, dBm
+static constexpr double NOISE_FIGURE_DB  = 7.0;      // typical WiFi noise figure
+// Thermal noise floor for 80 MHz channel with the given noise figure
+static const double NOISE_FLOOR_DBM =
+    -174.0 + 10.0 * std::log10(80e6) + NOISE_FIGURE_DB;
+
+// ── IPv4 → NodeId lookup (required for the L3 RX callback) ──────────────────
+std::map<Ipv4Address, uint32_t> g_ipToNodeIdMap;
+
+void
+BuildIpToNodeIdMap()
+{
+    g_ipToNodeIdMap.clear();
+    for (uint32_t i = 0; i < NodeList::GetNNodes(); ++i)
+    {
+        Ptr<Node> node = NodeList::GetNode(i);
+        Ptr<Ipv4> ipv4 = node->GetObject<Ipv4>();
+        if (ipv4)
+        {
+            for (uint32_t j = 0; j < ipv4->GetNInterfaces(); ++j)
+            {
+                for (uint32_t k = 0; k < ipv4->GetNAddresses(j); ++k)
+                {
+                    Ipv4Address addr = ipv4->GetAddress(j, k).GetLocal();
+                    if (!addr.IsLocalhost())
+                        g_ipToNodeIdMap[addr] = node->GetId();
+                }
+            }
+        }
+    }
+}
+
+uint32_t
+GetNodeIdFromIpv4Address(Ipv4Address targetAddr)
+{
+    auto it = g_ipToNodeIdMap.find(targetAddr);
+    if (it != g_ipToNodeIdMap.end())
+        return it->second;
+    NS_LOG_WARN("No node found for IPv4 address " << targetAddr);
+    return 0xFFFFFFFF;
+}
 
 /**
- * Calculate the throughput and shamelessly stolen
+ * L3 RX callback — hooks Ipv4L3Protocol/Rx to capture CFRTag before TCP
+ * reassembly can strip packet tags.
+ *
+ * When --snr is set:  derives SNR from pathloss and TX power and logs
+ *   time, STA node ID, STA position, pathloss (dB), RX power (dBm), SNR (dB)
+ *   to snr_results.csv.
+ *
+ * When --positions is set:  logs time, STA node ID and XYZ coordinates to
+ *   position_results.csv for every Sionna-tagged packet, enabling trajectory
+ *   maps of mobile STAs (matches the format used in the sensing-mobile script).
+ *
+ * Connected only when at least one of --snr or --positions is active.
+ */
+void
+RxTraceWithAddresses(std::string context,
+                     Ptr<const Packet> packet,
+                     Ptr<Ipv4> ipv4,
+                     uint32_t interface)
+{
+    Ipv4Header ipHeader;
+    packet->PeekHeader(ipHeader);
+    Ipv4Address srcAddr = ipHeader.GetSource();
+
+    uint32_t srcNodeId = GetNodeIdFromIpv4Address(srcAddr);
+    if (srcNodeId == 0xFFFFFFFF)
+        return;
+
+    Ptr<Node> srcNode = NodeList::GetNode(srcNodeId);
+    Ptr<MobilityModel> mob = srcNode->GetObject<MobilityModel>();
+    Vector pos = mob ? mob->GetPosition() : Vector(0, 0, 0);
+
+    CFRTag tag;
+    if (packet->PeekPacketTag(tag))
+    {
+        double pathLossDb = tag.GetPathloss();
+        double rxPowerDbm = TX_POWER_DBM - pathLossDb;
+        double snrDb      = rxPowerDbm - NOISE_FLOOR_DBM;
+
+        if (ofs_snr.is_open())
+        {
+            ofs_snr << Simulator::Now().GetSeconds()
+                    << "," << srcNodeId
+                    << "," << pos.x << "," << pos.y << "," << pos.z
+                    << "," << pathLossDb
+                    << "," << rxPowerDbm
+                    << "," << snrDb
+                    << "\n";
+        }
+
+        // Position log: mirrors the ofs_tp output in example-sionna-sensing-mobile-tcp.cc
+        // (time, node_id, x, y, z). node_id is added here to support multi-STA runs.
+        if (ofs_position.is_open())
+        {
+            ofs_position << Simulator::Now().GetSeconds()
+                         << "," << srcNodeId
+                         << "," << pos.x << "," << pos.y << "," << pos.z
+                         << "\n";
+        }
+    }
+}
+
+/**
+ * Calculate the throughput
  */
 void
 CalculateThroughput10()
@@ -84,7 +192,9 @@ RunSimulation(  const std::string environment,
                 const bool verbose,
                 const int min_coherence_time_ms,
                 const int data_Rate_mbps,
-                const int seed)
+                const int seed,
+                const bool enable_snr,
+                const bool enable_positions)
 {
     // Wifi config
     int wifi_channel_num = 42; // center at 5200, set to 40
@@ -113,43 +223,35 @@ RunSimulation(  const std::string environment,
     propagationCache->SetSionnaHelper(sionnaHelper);
     propagationCache->SetCaching(caching);
 
-    // new Channel thingy
     Ptr<MultiModelSpectrumChannel> spectrumChannel =
         CreateObject<MultiModelSpectrumChannel>();
 
     Ptr<SionnaPropagationLossModel> lossModel =
         CreateObject<SionnaPropagationLossModel>();
     lossModel->SetPropagationCache(propagationCache);
-
     spectrumChannel->AddPropagationLossModel(lossModel);
 
     // SISO only
     Ptr<SionnaSpectrumPropagationLossModel> spectrumLossModel =
         CreateObject<SionnaSpectrumPropagationLossModel>();
     spectrumLossModel->SetPropagationCache(propagationCache);
-
     spectrumChannel->AddSpectrumPropagationLossModel(spectrumLossModel);
 
     Ptr<SionnaPropagationDelayModel> delayModel =
         CreateObject<SionnaPropagationDelayModel>();
     delayModel->SetPropagationCache(propagationCache);
-
     spectrumChannel->SetPropagationDelayModel(delayModel);
 
-    // Yet more new Stuff with Spectrum Phy
     SpectrumWifiPhyHelper spectrumPhy;
     spectrumPhy.SetChannel(spectrumChannel);
-    spectrumPhy.SetErrorRateModel("ns3::NistErrorRateModel");
-    spectrumPhy.Set("TxPowerStart", DoubleValue(20));
-    spectrumPhy.Set("TxPowerEnd", DoubleValue(20));
+    spectrumPhy.SetErrorRateModel("ns3::NistErrorRateModel");    spectrumPhy.Set("TxPowerStart", DoubleValue(TX_POWER_DBM));
+    spectrumPhy.Set("TxPowerEnd",   DoubleValue(TX_POWER_DBM));
 
     // Wifi and MAC
     WifiMacHelper mac;
     Ssid ssid = Ssid("ns-3-ssid");
 
     WifiHelper wifi;
-
-    // WifiStandard wifi_standard = WIFI_STANDARD_80211g;
     WifiStandard wifi_standard = WIFI_STANDARD_80211ax;
     wifi.SetStandard(wifi_standard);
 
@@ -165,7 +267,6 @@ RunSimulation(  const std::string environment,
 
     // TCP Setup
     DataRate dataRate(std::to_string(data_Rate_mbps) + "Mb/s");
-    //std::string tcpVariant{"ns3::TcpCubic"};
     std::string tcpVariant{"ns3::TcpCubic"};
 
     Config::SetDefault("ns3::TcpL4Protocol::SocketType",
@@ -174,23 +275,17 @@ RunSimulation(  const std::string environment,
 
     NetDeviceContainer staDevices;
     mac.SetType("ns3::StaWifiMac",
-                "Ssid",
-                SsidValue(ssid),
-                "ActiveProbing",
-                BooleanValue(false));
+                "Ssid",        SsidValue(ssid),
+                "ActiveProbing", BooleanValue(false));
     spectrumPhy.Set("ChannelSettings", StringValue(channelStr));
     staDevices = wifi.Install(spectrumPhy, mac, wifiStaNodes);
 
     NetDeviceContainer apDevices;
     mac.SetType("ns3::ApWifiMac",
-                "Ssid",
-                SsidValue(ssid),
-                "BeaconGeneration",
-                BooleanValue(true),
-                "BeaconInterval",
-                TimeValue(Seconds(5.120)),
-                "EnableBeaconJitter",
-                BooleanValue(false));
+                "Ssid",              SsidValue(ssid),
+                "BeaconGeneration",  BooleanValue(true),
+                "BeaconInterval",    TimeValue(Seconds(5.120)),
+                "EnableBeaconJitter", BooleanValue(false));
     spectrumPhy.Set("ChannelSettings", StringValue(channelStr));
     apDevices = wifi.Install(spectrumPhy, mac, wifiApNode);
 
@@ -220,10 +315,6 @@ RunSimulation(  const std::string environment,
         mobility.Install(wifiApNode);
     }
 
-
-    // random placement of all nodes
-    // wifiApNode.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(1.0, 2.0, 1.0));
-
     Ptr<UniformRandomVariable> randX = CreateObject<UniformRandomVariable>();
     Ptr<UniformRandomVariable> randY = CreateObject<UniformRandomVariable>();
     randX->SetAttribute("Min", DoubleValue(0.1));
@@ -231,31 +322,24 @@ RunSimulation(  const std::string environment,
     randY->SetAttribute("Min", DoubleValue(0.1));
     randY->SetAttribute("Max", DoubleValue(3.9));
 
-    //    wifiStaNode.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(45.0, 90.0, 1.5));
-    //    wifiApNode.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(8.5, 21.0, 27.0));
-
-    // For Munich setting:
-    // Yes, the chosen numbers are as of yet arbitrary.
-    if (environment == "apartment/apartment.xml") {
+    // For Apartment Setting
+    if (environment == "apartment/apartment.xml")
+    {
         std::cout << "Apartment executed" << std::endl;
 
         wifiApNode.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(-1,0.5,1));
-        // Speed has a huge influence on the munich scenario. High speed means almost no signal.
-        /*
-        randX->SetAttribute("Min", DoubleValue(0.0));
-        randX->SetAttribute("Max", DoubleValue(80.0));
-        randY->SetAttribute("Min", DoubleValue(50.0));
-        randY->SetAttribute("Max", DoubleValue(110.0));
-        */
+
+        // Start in the room with the access point.
+        randX->SetAttribute("Min", DoubleValue(-2.9));
+        randX->SetAttribute("Max", DoubleValue(-0.7));
+        randY->SetAttribute("Min", DoubleValue(0.5));
+        randY->SetAttribute("Max", DoubleValue(3.0));
     }
 
     for (uint32_t i = 0; i < numStas; i++)
     {
-        //wifiStaNodes.Get(i)->GetObject<MobilityModel>()->SetPosition(
-        //    Vector(randX->GetValue(), randY->GetValue(), 1.0));
-        std::cout << "Set Position CORRECTLY!!!" << std::endl;
         wifiStaNodes.Get(i)->GetObject<MobilityModel>()->SetPosition(
-            Vector(-1, 2, 1.1));
+            Vector(randX->GetValue(), randY->GetValue(), 1.0));
     }
 
     // configure IP
@@ -264,10 +348,9 @@ RunSimulation(  const std::string environment,
     stack.Install(wifiStaNodes);
 
     Ipv4AddressHelper address;
-
     address.SetBase("10.1.1.0", "255.255.255.0");
     Ipv4InterfaceContainer wifiStaInterfaces = address.Assign(staDevices);
-    Ipv4InterfaceContainer wifiApInterfaces = address.Assign(apDevices);
+    Ipv4InterfaceContainer wifiApInterfaces  = address.Assign(apDevices);
 
     Ipv4GlobalRoutingHelper::PopulateRoutingTables();
 
@@ -297,27 +380,39 @@ RunSimulation(  const std::string environment,
 
     // set center frequency for Sionna
     double fc = get_center_freq(apDevices.Get(0));
-
-    // set center frequency & bandwidth for Sionna
-    // int min_coherence_time_ms = tc;
     sionnaHelper.Configure(fc,
                            channel_width,
                            getFFTSize(wifi_standard, channel_width),
                            getSubcarrierSpacing(wifi_standard),
                            min_coherence_time_ms);
-
     sionnaHelper.SetMode(mode);
     sionnaHelper.SetSubMode(sub_mode);
 
     Simulator::Stop(Seconds(10.0));
 
-    auto startTime = std::chrono::system_clock::now();
+    // SNR and position (Position implemented because apartment has some issues)
+    // The same L3 Rx callback serves both features; connect it when either is
+    // active. BuildIpToNodeIdMap() must run after IP assignment.
+    if (enable_snr || enable_positions)
+    {
+        BuildIpToNodeIdMap();
+
+        if (enable_snr)
+            ofs_snr << "Time_s,STA_NodeId,pos_x,pos_y,pos_z,PathLoss_dB,RxPower_dBm,SNR_dB\n";
+
+        if (enable_positions)
+            ofs_position << "Time_s,STA_NodeId,pos_x,pos_y,pos_z\n";
+
+        Config::Connect("/NodeList/*/$ns3::Ipv4L3Protocol/Rx",
+                        MakeCallback(&RxTraceWithAddresses));
+    }
 
     // Log for throughput:
     ofs_throughput << "Time,Throughput_Mbps,measuring interval in ms\n";
 
-    sionnaHelper.Start();
+    auto startTime = std::chrono::system_clock::now();
 
+    sionnaHelper.Start();
     Simulator::Run();
     Simulator::Destroy();
 
@@ -326,6 +421,10 @@ RunSimulation(  const std::string environment,
     sionnaHelper.Destroy();
 
     ofs_throughput.close();
+    if (enable_snr)
+        ofs_snr.close();
+    if (enable_positions)
+        ofs_position.close();
 
     auto endTime = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsedTime = endTime - startTime;
@@ -334,13 +433,11 @@ RunSimulation(  const std::string environment,
     std::ofstream ofs_compTime("computationtime.csv", std::ios::app);
 
     ofs_compTime << min_coherence_time_ms << "," << computationTime << "," << mobile_speed << "," << seed << "\n";
-
     ofs_compTime.close();
 
-    std::cout << "Finished simulation with " << numStas << " stations in " << computationTime
-              << " sec";
+    std::cout << "Finished simulation with " << numStas << " stations in "
+              << computationTime << " sec" << std::endl << std::endl;
 
-    std::cout << std::endl << std::endl;
     return computationTime;
 }
 
@@ -361,6 +458,8 @@ main(int argc, char* argv[])
    int min_coherence_time_ms = 0;
    int data_Rate_mbps = 150;
    int seed = 1;
+   bool enable_snr = false;
+   bool enable_positions = false;
 
    CommandLine cmd(__FILE__);
    cmd.AddValue("channel", "The WiFi channel number", wifi_channel_num);
@@ -376,8 +475,21 @@ main(int argc, char* argv[])
    cmd.AddValue("minCoherenceTimeMs", "The minimal coherence time in msec", min_coherence_time_ms);
    cmd.AddValue("dataRate", "Data Rate in Mb/s", data_Rate_mbps);
    cmd.AddValue("seed", "Set the seed for the run", seed);
+   cmd.AddValue("snr", "Enable per-packet SNR logging to snr_results.csv", enable_snr);
+   cmd.AddValue("positions", "Enable per-packet position logging to position_results.csv", enable_positions);
+   cmd.AddValue("txPower", "Transmit power in dBm (used by PHY and SNR math)", TX_POWER_DBM);
 
    cmd.Parse(argc, argv);
+
+   if (enable_snr)
+       ofs_snr.open("snr_results.csv");
+
+   if (enable_positions)
+   {
+       ofs_position.open("position_results.csv");
+       std::cout << "Position logging enabled → position_results.csv" << std::endl;
+       std::cout << "  (compatible with plot3d_mobile_csi.py as the position argument)" << std::endl;
+   }
 
    if (verbose)
    {
@@ -392,13 +504,18 @@ main(int argc, char* argv[])
    std::cout << " speed " << mobile_speed;
    std::cout << " caching " << caching << " env " << environment;
    std::cout << " mode " << mode << " submode " << sub_mode << std::endl;
+   std::cout << " txPower " << TX_POWER_DBM << " dBm";
+   std::cout << " snr " << enable_snr << " positions " << enable_positions << std::endl;
 
    uint32_t numStas = sim_min_stas;
    double computationTime = 0.0;
-   while (computationTime < 2 * 60 * 60 && numStas <= (uint32_t)sim_max_stas) // as long as a single run is below 2h
+   while (computationTime < 2 * 60 * 60 && numStas <= (uint32_t)sim_max_stas)
    {
-       computationTime = RunSimulation(environment, numStas, mobile_scenario, mobile_speed, caching, mode,
-            sub_mode, verbose, min_coherence_time_ms, data_Rate_mbps, seed);
+       computationTime = RunSimulation(environment, numStas, mobile_scenario,
+                                       mobile_speed, caching, mode, sub_mode,
+                                       verbose, min_coherence_time_ms,
+                                       data_Rate_mbps, seed, enable_snr,
+                                       enable_positions);
        numStas = numStas * 2;
    }
 
