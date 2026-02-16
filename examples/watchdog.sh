@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# TODO: This is still not fully relative, but better!
+set -uo pipefail
+
 EXAMPLES="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BASE="$EXAMPLES/../../.."
 SERVER_DIR="$EXAMPLES/../model/ns3sionna"
 
 SERVER_CMD="python ns3sionna_server.py"
@@ -46,6 +46,8 @@ cleanup() {
   echo "Stopping program"
   [[ -n "$SERVER_PID"  ]] && kill $SERVER_PID 2>/dev/null
   [[ -n "$EXP_PID"  ]] && kill $EXP_PID 2>/dev/null
+  pkill -f "ns3 run ns3sionna-performance-sionna-tcp"
+  pkill -f "ns3.40-ns3sionna-performance-sionna-tcp-default"
   wait
   exit 0
 }

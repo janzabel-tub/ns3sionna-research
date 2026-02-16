@@ -34,7 +34,7 @@
 
 using namespace ns3;
 
-NS_LOG_COMPONENT_DEFINE("PerformanceSionnaTCP");
+NS_LOG_COMPONENT_DEFINE("PerformanceSionnaMunichTCP");
 
 Ptr<PacketSink> sink;
 uint64_t lastTotalRx10 = 0;
@@ -319,28 +319,30 @@ RunSimulation(  const std::string environment,
     //    wifiApNode.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(8.5, 21.0, 27.0));
 
     // For Munich setting:
-    // Yes, the chosen numbers are as of yet arbitrary.
+    // Currently not used, station starting location is static
+    /*
     if (environment == "munich/munich.xml") {
         std::cout << "Munich executed" << std::endl;
 
-        wifiApNode.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(8.5, 21.0, 27.0));
-        // TODO: Somehow, the throughput is not as expected.
         // Speed has a huge influence on the munich scenario. High speed means almost no signal.
-        /*
+
         randX->SetAttribute("Min", DoubleValue(0.0));
         randX->SetAttribute("Max", DoubleValue(80.0));
         randY->SetAttribute("Min", DoubleValue(50.0));
         randY->SetAttribute("Max", DoubleValue(110.0));
-        */
-    }
 
+    }
+    */
+
+    // Access point location
+    wifiApNode.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(8.5, 21.0, 27.0));
+
+    // Station locations
     for (uint32_t i = 0; i < numStas; i++)
     {
         //wifiStaNodes.Get(i)->GetObject<MobilityModel>()->SetPosition(
         //    Vector(randX->GetValue(), randY->GetValue(), 1.0));
-        // TODO: Maybe make this random. Currently set position.
-        // TODO: This distance is too far. Around 82m, no signal is received.
-        std::cout << "Set Position CORRECTLY!!!" << std::endl;
+
         wifiStaNodes.Get(i)->GetObject<MobilityModel>()->SetPosition(
             Vector(45.0, 90.0, 1.5));
     }
