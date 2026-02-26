@@ -53,6 +53,9 @@ TAG="${COHERENCE_TIME}_${SEED}"
 
 mv "throughput_results.csv" "${OUTPUT_DIR}/throughput_results_${TAG}.csv"
 
+[[ -f "computationtime.csv" ]] && \
+    mv "computationtime.csv" "${OUTPUT_DIR}/computationtime_${TAG}.csv"
+
 [[ "$ENABLE_SNR"       == "true" && -f "snr_results.csv"      ]] && \
     mv "snr_results.csv"       "${OUTPUT_DIR}/snr_results_${TAG}.csv"
 
