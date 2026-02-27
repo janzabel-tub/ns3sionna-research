@@ -50,9 +50,8 @@ double TX_POWER_DBM = 20.0;                          // default PHY TX power, dB
 static constexpr double NOISE_FIGURE_DB  = 7.0;      // typical WiFi noise figure
 // Thermal noise floor for 80 MHz channel with the given noise figure
 static const double NOISE_FLOOR_DBM =
-    -174.0 + 10.0 * std::log10(80e6) + NOISE_FIGURE_DB;
+    -174.0 + 10.0 * std::log10(80e6) + NOISE_FIGURE_DB; // Around -95dB
 
-// ── IPv4 → NodeId lookup (required for the L3 RX callback) ──────────────────
 std::map<Ipv4Address, uint32_t> g_ipToNodeIdMap;
 
 void
@@ -201,9 +200,6 @@ RunSimulation(  const std::string environment,
     int channel_width = 80; //set to 20
     // Set the seed
     RngSeedManager::SetSeed(seed);
-    RngSeedManager::SetRun(1);
-    // SetSeed and SetRun do a very similar thing, but setrun is supposed to be cleaner and make
-    // documentation easier. SetRun implies multiple repetitions of an experiment.
 
     SionnaHelper sionnaHelper(environment, "tcp://localhost:5555");
 
@@ -276,7 +272,7 @@ RunSimulation(  const std::string environment,
     NetDeviceContainer staDevices;
     mac.SetType("ns3::StaWifiMac",
                 "Ssid",        SsidValue(ssid),
-                "ActiveProbing", BooleanValue(false));
+                "ActiveProbing", BooleanValue(true));
     spectrumPhy.Set("ChannelSettings", StringValue(channelStr));
     staDevices = wifi.Install(spectrumPhy, mac, wifiStaNodes);
 
@@ -284,7 +280,7 @@ RunSimulation(  const std::string environment,
     mac.SetType("ns3::ApWifiMac",
                 "Ssid",              SsidValue(ssid),
                 "BeaconGeneration",  BooleanValue(true),
-                "BeaconInterval",    TimeValue(Seconds(5.120)),
+                "BeaconInterval",    TimeValue(MicroSeconds(102400)),
                 "EnableBeaconJitter", BooleanValue(false));
     spectrumPhy.Set("ChannelSettings", StringValue(channelStr));
     apDevices = wifi.Install(spectrumPhy, mac, wifiApNode);
@@ -327,19 +323,51 @@ RunSimulation(  const std::string environment,
     {
         std::cout << "Apartment executed" << std::endl;
 
-        wifiApNode.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(-1,0.5,1));
+        wifiApNode.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(-1,0.5,1.5));
 
-        // Start in the room with the access point.
-        randX->SetAttribute("Min", DoubleValue(-2.9));
-        randX->SetAttribute("Max", DoubleValue(-0.7));
-        randY->SetAttribute("Min", DoubleValue(0.5));
-        randY->SetAttribute("Max", DoubleValue(3.0));
+        // Create a random variable to choose the zone and generate coordinates
+        Ptr<UniformRandomVariable> randVar = CreateObject<UniformRandomVariable>();
+
+        for (uint32_t i = 0; i < numStas; i++)
+        {
+            // Randomly choose a zone: 0, 1, or 2
+            int zone = static_cast<int>(randVar->GetValue(0, 3));
+            double posX, posY, posZ;
+
+            if (zone == 0)
+            {
+                // Same room as AP
+                posX = randVar->GetValue(-2.9, -0.7);
+                posY = randVar->GetValue(0.5, 3.0);
+                posZ = 1.6;
+            }
+            else if (zone == 1)
+            {
+                // Room with door to AP
+                posX = randVar->GetValue(-5.0, -4.0);
+                posY = 3.0;
+                posZ = 1.6;
+            }
+            else
+            {
+                // Room next to AP, no direct door
+                posX = -4.5;
+                posY = randVar->GetValue(0.6, 2.0);
+                posZ = 1.6;
+            }
+
+            wifiStaNodes.Get(i)->GetObject<MobilityModel>()->SetPosition(
+                Vector(posX, posY, posZ));
+        }
     }
-
-    for (uint32_t i = 0; i < numStas; i++)
+    else
     {
-        wifiStaNodes.Get(i)->GetObject<MobilityModel>()->SetPosition(
-            Vector(randX->GetValue(), randY->GetValue(), 1.0));
+        wifiApNode.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(1.0, 2.0, 1.0));
+        for (uint32_t i = 0; i < numStas; i++)
+        {
+            wifiStaNodes.Get(i)->GetObject<MobilityModel>()->SetPosition(
+                Vector(randX->GetValue(), randY->GetValue(), 1.0));
+        }
     }
 
     // configure IP
@@ -446,8 +474,8 @@ main(int argc, char* argv[])
 {
    bool verbose = false;
    bool caching = true;
-   // std::string environment = "simple_room/simple_room.xml";
-   std::string environment = "apartment/apartment.xml";
+   std::string environment = "simple_room/simple_room.xml";
+   //std::string environment = "apartment/apartment.xml";
    int wifi_channel_num = 40;
    bool mobile_scenario = false;
    double mobile_speed = 1.0;
