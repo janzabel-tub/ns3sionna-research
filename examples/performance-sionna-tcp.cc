@@ -147,33 +147,6 @@ PhyRxErrorTrace(std::string context,
     LogPhySnr(packet, snr, /*decoded=*/false);
 }
 
-/*
- * Log the position of the stations
- *
- */
-void
-LogAllPositions(std::ofstream &ofs_position, const ns3::NodeContainer &nodes, uint32_t intervalMs)
-{
-    double now = ns3::Simulator::Now().GetSeconds();
-    for (uint32_t i = 0; i < nodes.GetN(); ++i)
-    {
-        ns3::Ptr<ns3::Node> node = nodes.Get(i);
-        ns3::Ptr<ns3::MobilityModel> mob = node->GetObject<ns3::MobilityModel>();
-        ns3::Vector pos = mob ? mob->GetPosition() : ns3::Vector(0.0, 0.0, 0.0);
-        if (ofs_position.is_open())
-        {
-            // Format: Time_s, NodeId, pos_x, pos_y, pos_z
-            ofs_position << now << "," << node->GetId() << "," << pos.x << "," << pos.y << "," << pos.z << "\n";
-        }
-    }
-    // schedule next call
-    ns3::Simulator::Schedule(ns3::MilliSeconds(intervalMs),
-                             ns3::MakeBoundCallback(&LogAllPositions,
-                                                    std::ref(ofs_position),
-                                                    nodes,
-                                                    intervalMs));
-}
-
 /**
  * Calculate the throughput
  */
@@ -335,9 +308,6 @@ RunSimulation(  const std::string environment,
         mobility.Install(wifiStaNodes);
         mobility.Install(wifiApNode);
     }
-    // Make the mobility independent of the rng seed manager and set a unique rng generator seed
-    // The seed can be chosen arbitratily, but should be high
-    mobilityHelper.AssignStreams(wifiStaNodes, 10000000);
 
     Ptr<UniformRandomVariable> randX = CreateObject<UniformRandomVariable>();
     Ptr<UniformRandomVariable> randY = CreateObject<UniformRandomVariable>();
@@ -460,25 +430,7 @@ RunSimulation(  const std::string environment,
                                                            // not from CFRTag math
 
         if (enable_positions)
-        {
-            // Open file (example path, change as required)
-            std::ofstream ofs_positions;
-            std::string positionFile = "position_results.csv";
-            ofs_positions.open(positionFile.c_str());
-            if (ofs_positions.is_open())
-            {
-                // write header
-                ofs_positions << "Time_s,STA_NodeId,pos_x,pos_y,pos_z\n";
-                // schedule initial call at t=0
-                uint32_t logIntervalMs = 100; // choose your logging rate (e.g. 10 ms)
-                ns3::Simulator::Schedule(ns3::MilliSeconds(0),
-                                         ns3::MakeBoundCallback(&LogAllPositions,
-                                                                std::ref(ofs_positions),
-                                                                wifiStaNodes, // TODO: This can be made to include the AP
-                                                                logIntervalMs));
-            }
-        }
-        // ofs_position << "Time_s,STA_NodeId,pos_x,pos_y,pos_z\n";
+            ofs_position << "Time_s,STA_NodeId,pos_x,pos_y,pos_z\n";
 
         // Connect to PHY state machine on every WiFi device
         Config::Connect(
@@ -506,7 +458,7 @@ RunSimulation(  const std::string environment,
     ofs_throughput.close();
     if (enable_snr)
         ofs_snr.close();
-    if (enable_positions || ofs_positions.is_open()) // Minor improvement maybe
+    if (enable_positions)
         ofs_position.close();
 
     auto endTime = std::chrono::system_clock::now();
