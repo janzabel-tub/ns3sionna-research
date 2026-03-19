@@ -198,8 +198,10 @@ RunSimulation(  const std::string environment,
     // Wifi config
     int wifi_channel_num = 42; // center at 5200, set to 40
     int channel_width = 80; //set to 20
-    // Set the seed
-    RngSeedManager::SetSeed(seed);
+    // Set the seed and the run
+    // TODO: The setRun part is experimental.
+    RngSeedManager::SetSeed(10000);
+    RngSeedManager::SetRun(seed);
 
     SionnaHelper sionnaHelper(environment, "tcp://localhost:5555");
 
@@ -311,8 +313,21 @@ RunSimulation(  const std::string environment,
         mobility.Install(wifiApNode);
     }
 
+    // Independent random stream for mobility
+    int64_t stream = 1000000;
+
+    // Assign streams
+    int64_t used = 0;
+    used = mobility.AssignStreams(wifiApNode, stream);
+    stream += used;
+
+    used = mobility.AssignStreams(wifiStaNodes, stream);
+    stream += used;
+
     Ptr<UniformRandomVariable> randX = CreateObject<UniformRandomVariable>();
     Ptr<UniformRandomVariable> randY = CreateObject<UniformRandomVariable>();
+    randX->SetStream(stream++);
+    randY->SetStream(stream++);
     randX->SetAttribute("Min", DoubleValue(0.1));
     randX->SetAttribute("Max", DoubleValue(5.9));
     randY->SetAttribute("Min", DoubleValue(0.1));
@@ -327,6 +342,7 @@ RunSimulation(  const std::string environment,
 
         // Create a random variable to choose the zone and generate coordinates
         Ptr<UniformRandomVariable> randVar = CreateObject<UniformRandomVariable>();
+        randVar->SetStream(stream++);
 
         for (uint32_t i = 0; i < numStas; i++)
         {
