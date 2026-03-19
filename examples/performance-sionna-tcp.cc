@@ -46,105 +46,107 @@ std::ofstream ofs_snr;      // --snr
 std::ofstream ofs_position; // --positions
 
 // ── SNR constants (match the Munich script; --txPower overrides TX_POWER_DBM) ──
-double TX_POWER_DBM = 10.0;                          // default PHY TX power, dBm
+double TX_POWER_DBM = 20.0;                          // default PHY TX power, dBm
 static constexpr double NOISE_FIGURE_DB  = 7.0;      // typical WiFi noise figure
 // Thermal noise floor for 80 MHz channel with the given noise figure
 static const double NOISE_FLOOR_DBM =
     -174.0 + 10.0 * std::log10(80e6) + NOISE_FIGURE_DB; // Around -95dB
 
-// ── MAC-address → Node-ID map (replaces IP map for PHY-level tracing) ──────
-std::map<Mac48Address, uint32_t> g_macToNodeIdMap;
+std::map<Ipv4Address, uint32_t> g_ipToNodeIdMap;
 
 void
-BuildMacToNodeIdMap()
+BuildIpToNodeIdMap()
 {
-    g_macToNodeIdMap.clear();
+    g_ipToNodeIdMap.clear();
     for (uint32_t i = 0; i < NodeList::GetNNodes(); ++i)
     {
         Ptr<Node> node = NodeList::GetNode(i);
-        for (uint32_t j = 0; j < node->GetNDevices(); ++j)
+        Ptr<Ipv4> ipv4 = node->GetObject<Ipv4>();
+        if (ipv4)
         {
-            Ptr<WifiNetDevice> wifiDev = DynamicCast<WifiNetDevice>(node->GetDevice(j));
-            if (wifiDev)
+            for (uint32_t j = 0; j < ipv4->GetNInterfaces(); ++j)
             {
-                Mac48Address mac = Mac48Address::ConvertFrom(wifiDev->GetAddress());
-                g_macToNodeIdMap[mac] = i;
+                for (uint32_t k = 0; k < ipv4->GetNAddresses(j); ++k)
+                {
+                    Ipv4Address addr = ipv4->GetAddress(j, k).GetLocal();
+                    if (!addr.IsLocalhost())
+                        g_ipToNodeIdMap[addr] = node->GetId();
+                }
             }
         }
     }
 }
 
+uint32_t
+GetNodeIdFromIpv4Address(Ipv4Address targetAddr)
+{
+    auto it = g_ipToNodeIdMap.find(targetAddr);
+    if (it != g_ipToNodeIdMap.end())
+        return it->second;
+    NS_LOG_WARN("No node found for IPv4 address " << targetAddr);
+    return 0xFFFFFFFF;
+}
+
 /**
- * Shared logging helper called by both RxOk and RxError PHY callbacks.
+ * L3 RX callback — hooks Ipv4L3Protocol/Rx to capture CFRTag before TCP
+ * reassembly can strip packet tags.
  *
- * @param packet     The received (or attempted) MPDU/PSDU
- * @param snrLinear  SNR as a linear power ratio (as provided by ns3 PHY state)
- * @param decoded    true = FCS passed, false = FCS failed / undecodable
+ * When --snr is set:  derives SNR from pathloss and TX power and logs
+ *   time, STA node ID, STA position, pathloss (dB), RX power (dBm), SNR (dB)
+ *   to snr_results.csv.
+ *
+ * When --positions is set:  logs time, STA node ID and XYZ coordinates to
+ *   position_results.csv for every Sionna-tagged packet, enabling trajectory
+ *   maps of mobile STAs (matches the format used in the sensing-mobile script).
+ *
+ * Connected only when at least one of --snr or --positions is active.
  */
 void
-LogPhySnr(Ptr<const Packet> packet, double snrLinear, bool decoded)
+RxTraceWithAddresses(std::string context,
+                     Ptr<const Packet> packet,
+                     Ptr<Ipv4> ipv4,
+                     uint32_t interface)
 {
-    // Peek the 802.11 MAC header — Addr2 is always the transmitter address
-    WifiMacHeader hdr;
-    if (!packet->PeekHeader(hdr))
+    Ipv4Header ipHeader;
+    packet->PeekHeader(ipHeader);
+    Ipv4Address srcAddr = ipHeader.GetSource();
+
+    uint32_t srcNodeId = GetNodeIdFromIpv4Address(srcAddr);
+    if (srcNodeId == 0xFFFFFFFF)
         return;
 
-    Mac48Address srcMac = hdr.GetAddr2();
-    auto it = g_macToNodeIdMap.find(srcMac);
-    if (it == g_macToNodeIdMap.end())
-        return;
-
-    uint32_t srcNodeId = it->second;
-    Ptr<Node> srcNode  = NodeList::GetNode(srcNodeId);
+    Ptr<Node> srcNode = NodeList::GetNode(srcNodeId);
     Ptr<MobilityModel> mob = srcNode->GetObject<MobilityModel>();
     Vector pos = mob ? mob->GetPosition() : Vector(0, 0, 0);
 
-    double snrDb = 10.0 * std::log10(snrLinear);
-
-    if (ofs_snr.is_open())
+    CFRTag tag;
+    if (packet->PeekPacketTag(tag))
     {
-        ofs_snr << Simulator::Now().GetSeconds()
-                << "," << srcNodeId
-                << "," << pos.x << "," << pos.y << "," << pos.z
-                << "," << snrDb
-                << "," << (decoded ? 1 : 0)   // new column: 1=decoded, 0=dropped
-                << "\n";
+        double pathLossDb = tag.GetPathloss();
+        double rxPowerDbm = TX_POWER_DBM - pathLossDb;
+        double snrDb      = rxPowerDbm - NOISE_FLOOR_DBM;
+
+        if (ofs_snr.is_open())
+        {
+            ofs_snr << Simulator::Now().GetSeconds()
+                    << "," << srcNodeId
+                    << "," << pos.x << "," << pos.y << "," << pos.z
+                    << "," << pathLossDb
+                    << "," << rxPowerDbm
+                    << "," << snrDb
+                    << "\n";
+        }
+
+        // Position log: mirrors the ofs_tp output in example-sionna-sensing-mobile-tcp.cc
+        // (time, node_id, x, y, z). node_id is added here to support multi-STA runs.
+        if (ofs_position.is_open())
+        {
+            ofs_position << Simulator::Now().GetSeconds()
+                         << "," << srcNodeId
+                         << "," << pos.x << "," << pos.y << "," << pos.z
+                         << "\n";
+        }
     }
-
-    if (ofs_position.is_open())
-    {
-        ofs_position << Simulator::Now().GetSeconds()
-                     << "," << srcNodeId
-                     << "," << pos.x << "," << pos.y << "," << pos.z
-                     << "\n";
-    }
-}
-
-/**
- * PHY callback for successfully decoded frames.
- * Signature mandated by WifiPhyStateHelper::m_rxOkTrace.
- */
-void
-PhyRxOkTrace(std::string context,
-             Ptr<const Packet> packet,
-             double snr,
-             WifiMode mode,
-             WifiPreamble preamble)
-{
-    LogPhySnr(packet, snr, /*decoded=*/true);
-}
-
-/**
- * PHY callback for frames where reception was attempted but FCS failed.
- * Signature mandated by WifiPhyStateHelper::m_rxErrorTrace.
- * This is the NEW path that catches what the old L3 callback missed.
- */
-void
-PhyRxErrorTrace(std::string context,
-                Ptr<const Packet> packet,
-                double snr)
-{
-    LogPhySnr(packet, snr, /*decoded=*/false);
 }
 
 /**
@@ -421,25 +423,16 @@ RunSimulation(  const std::string environment,
     // active. BuildIpToNodeIdMap() must run after IP assignment.
     if (enable_snr || enable_positions)
     {
-        BuildMacToNodeIdMap();   // <-- MAC map, not IP map
+        BuildIpToNodeIdMap();
 
         if (enable_snr)
-            ofs_snr << "Time_s,STA_NodeId,pos_x,pos_y,pos_z,SNR_dB,Decoded\n";
-                                                           // SNR_dB now comes
-                                                           // directly from PHY,
-                                                           // not from CFRTag math
+            ofs_snr << "Time_s,STA_NodeId,pos_x,pos_y,pos_z,PathLoss_dB,RxPower_dBm,SNR_dB\n";
 
         if (enable_positions)
             ofs_position << "Time_s,STA_NodeId,pos_x,pos_y,pos_z\n";
 
-        // Connect to PHY state machine on every WiFi device
-        Config::Connect(
-            "/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Phy/State/RxOk",
-            MakeCallback(&PhyRxOkTrace));
-
-        Config::Connect(
-            "/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Phy/State/RxError",
-            MakeCallback(&PhyRxErrorTrace));
+        Config::Connect("/NodeList/*/$ns3::Ipv4L3Protocol/Rx",
+                        MakeCallback(&RxTraceWithAddresses));
     }
 
     // Log for throughput:

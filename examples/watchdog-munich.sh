@@ -1,14 +1,8 @@
 #!/bin/bash
 # watchdog-munich.sh — manages the Sionna server and sweeps over
-# coherence times × seeds for the Munich outdoor scenario.
+# coherence times X seeds for the Munich outdoor scenario.
 #
-# Mirrors watchdog2.sh exactly, with three changes:
-#   1. Calls performance-sionna-munich-tcp.sh instead of the indoor runner.
-#   2. Uses a separate state file (watchdog_munich_state.txt) so both
-#      watchdogs can coexist without clobbering each other's progress.
-#   3. Results land in results-munich/ instead of results/.
-#
-# State is persisted so the sweep can resume exactly where it left off after
+# State is persisted so the simulation can resume exactly where it left off after
 # any crash or manual restart.
 #
 # Usage: ./watchdog-munich.sh [--reset]
@@ -19,14 +13,12 @@ set -uo pipefail
 EXAMPLES="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVER_DIR="$EXAMPLES/../model/ns3sionna"
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# SWEEP CONFIGURATION — edit these to change what gets simulated
-# ═══════════════════════════════════════════════════════════════════════════════
+# Setting for the run, min coherence time, seeds
 
 COHERENCE_TIMES=(1 10 100 1000)
 
 START_SEED=1
-END_SEED=25
+END_SEED=100
 
 export MODE=2
 export NUM_RES=16
@@ -43,14 +35,10 @@ CHECK_INTERVAL=60
 # Max consecutive crashes before a seed is abandoned and the sweep continues
 MAX_RETRIES=3
 
-# ═══════════════════════════════════════════════════════════════════════════════
-
 # Separate state file from the indoor watchdog
 STATE_FILE="$EXAMPLES/watchdog_munich_state.txt"
 SERVER_PID=""
 EXP_PID=""
-
-# ── State persistence ─────────────────────────────────────────────────────────
 
 save_state() {
     echo "$1 $2" > "$STATE_FILE"

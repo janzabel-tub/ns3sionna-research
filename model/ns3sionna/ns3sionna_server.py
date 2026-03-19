@@ -3,6 +3,7 @@
 #faulthandler.dump_traceback_later(60, repeat=True)
 import sionna.rt # must be the first import as otherwise Python crashes
 import drjit as dr
+import traceback
 #dr.set_flag(dr.JitFlag.Debug, True)
 
 import os
@@ -121,7 +122,10 @@ class SionnaEnv:
             self.scene = load_scene(filepath)
             self.p_solver  = PathSolver()
         except Exception as e:
-            return False, "Failed to load scene file in: " + filepath + ", error: " + str(e)
+            # Print full traceback to console so the cause is visible
+            print("Exception while loading scene:", filepath)
+            traceback.print_exc()
+            return False, "Failed to load scene file in: " + filepath + ", error: " + str(e) + " (see server console for traceback)"
 
         self.bbox = self.scene.mi_scene.bbox()
 
@@ -823,6 +827,9 @@ class SionnaEnv:
                     print("Sionna server init sucessful ...")
                 else:
                     print("Sionna server init failed ...")
+                    # Print detailed error message returned by init_simulation_env
+                    if error_msg:
+                        print("Error message:\n", error_msg)
                     do_terminate = True
 
             elif ns3_msg.HasField("channel_state_request"):

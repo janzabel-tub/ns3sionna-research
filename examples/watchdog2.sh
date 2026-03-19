@@ -22,7 +22,8 @@ COHERENCE_TIMES=(1 10 100 1000)
 
 # Seed range (inclusive)
 START_SEED=1
-END_SEED=10
+END_SEED=100
+
 
 # Simulation parameters exported to the runner script
 export MODE=2

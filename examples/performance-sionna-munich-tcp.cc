@@ -261,7 +261,7 @@ RunSimulation(  const std::string environment,
                 "Ssid",
                 SsidValue(ssid),
                 "ActiveProbing",
-                BooleanValue(false));
+                BooleanValue(true));
     spectrumPhy.Set("ChannelSettings", StringValue(channelStr));
     staDevices = wifi.Install(spectrumPhy, mac, wifiStaNodes);
 
@@ -272,7 +272,7 @@ RunSimulation(  const std::string environment,
                 "BeaconGeneration",
                 BooleanValue(true),
                 "BeaconInterval",
-                TimeValue(Seconds(5.120)),
+                TimeValue(MicroSeconds(102400)),
                 "EnableBeaconJitter",
                 BooleanValue(false));
     spectrumPhy.Set("ChannelSettings", StringValue(channelStr));
@@ -304,45 +304,12 @@ RunSimulation(  const std::string environment,
         mobility.Install(wifiApNode);
     }
 
-
-    // random placement of all nodes
-    // wifiApNode.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(1.0, 2.0, 1.0));
-
-    Ptr<UniformRandomVariable> randX = CreateObject<UniformRandomVariable>();
-    Ptr<UniformRandomVariable> randY = CreateObject<UniformRandomVariable>();
-    randX->SetAttribute("Min", DoubleValue(0.1));
-    randX->SetAttribute("Max", DoubleValue(5.9));
-    randY->SetAttribute("Min", DoubleValue(0.1));
-    randY->SetAttribute("Max", DoubleValue(3.9));
-
-    //    wifiStaNode.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(45.0, 90.0, 1.5));
-    //    wifiApNode.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(8.5, 21.0, 27.0));
-
-    // For Munich setting:
-    // Currently not used, station starting location is static
-    /*
-    if (environment == "munich/munich.xml") {
-        std::cout << "Munich executed" << std::endl;
-
-        // Speed has a huge influence on the munich scenario. High speed means almost no signal.
-
-        randX->SetAttribute("Min", DoubleValue(0.0));
-        randX->SetAttribute("Max", DoubleValue(80.0));
-        randY->SetAttribute("Min", DoubleValue(50.0));
-        randY->SetAttribute("Max", DoubleValue(110.0));
-
-    }
-    */
-
     // Access point location
     wifiApNode.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(8.5, 21.0, 27.0));
 
     // Station locations
     for (uint32_t i = 0; i < numStas; i++)
     {
-        //wifiStaNodes.Get(i)->GetObject<MobilityModel>()->SetPosition(
-        //    Vector(randX->GetValue(), randY->GetValue(), 1.0));
-
         wifiStaNodes.Get(i)->GetObject<MobilityModel>()->SetPosition(
             Vector(45.0, 90.0, 1.5));
     }
