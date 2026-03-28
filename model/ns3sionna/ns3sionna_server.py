@@ -1,10 +1,7 @@
-#import faulthandler
-#faulthandler.enable()
-#faulthandler.dump_traceback_later(60, repeat=True)
 import sionna.rt # must be the first import as otherwise Python crashes
 import drjit as dr
-import traceback
-#dr.set_flag(dr.JitFlag.Debug, True)
+# import traceback
+# dr.set_flag(dr.JitFlag.Debug, True)
 
 import os
 import argparse
@@ -58,12 +55,12 @@ class SionnaEnv:
             self.rt_samples_per_src = 10 ** 6
             self.rt_los = True  # compute and include the direct Line-of-Sight path when it exists
             self.rt_specular_reflection = True  # Can rays bounce off surfaces?
-            self.rt_diffuse_reflection = False
+            self.rt_diffuse_reflection = True
             self.rt_refraction = True  # Can rays pass through materials?
             self.rt_synthetic_array = False  # Set True for fast simulation using one ray trace for whole array; per-element effects computed analytically
-            self.rt_diffraction = False  # costly
-            self.rt_edge_diffraction = False  # rays that bend around edges
-            self.rt_diffraction_lit_region = False  # higher physical accuracy; for mmWave or THz channels
+            self.rt_diffraction = True  # costly
+            self.rt_edge_diffraction = True  # rays that bend around edges
+            self.rt_diffraction_lit_region = True  # higher physical accuracy; for mmWave or THz channels
         else: # realistic but slow
             self.rt_max_depth = 5  # sufficient even for rich multipath
             self.rt_samples_per_src = 10 ** 6  # 10 ** 6
@@ -94,9 +91,11 @@ class SionnaEnv:
         self.gpus = tf.config.list_physical_devices("GPU")
 
         if len(self.gpus) > 0:
-            print("GPU support detected; no GPUs:", self.gpus)
+            print("TensorFlow GPU devices:", self.gpus)
         else:
-            print("Using CPU backend")
+            print("No TensorFlow GPU devices visible")
+
+        print("Mitsuba backend:", mi.variant())
 
         self.disp_r = 10
         # storing information about every node under simulation
