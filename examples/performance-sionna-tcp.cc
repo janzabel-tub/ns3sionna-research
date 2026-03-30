@@ -7,6 +7,9 @@
 */
 
 #include <ostream>
+#include <set>
+#include <string>
+#include <vector>
 
 #include "ns3/sionna-helper.h"
 #include "ns3/sionna-mobility-model.h"
@@ -36,7 +39,7 @@ using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("PerformanceSionnaTCP");
 
-Ptr<PacketSink> sink;
+std::vector<Ptr<PacketSink>> g_sinks;
 uint64_t lastTotalRx10 = 0;
 uint64_t lastTotalRx100 = 0;
 
@@ -52,52 +55,71 @@ static constexpr double NOISE_FIGURE_DB  = 7.0;      // typical WiFi noise figur
 static const double NOISE_FLOOR_DBM =
     -174.0 + 10.0 * std::log10(80e6) + NOISE_FIGURE_DB; // Around -95dB
 
-std::map<Ipv4Address, uint32_t> g_ipToNodeIdMap;
+std::set<uint32_t> g_staNodeIds;
+static constexpr uint32_t INVALID_NODE_ID = 0xFFFFFFFF;
 
 void
-BuildIpToNodeIdMap()
+RegisterStaNodes(const NodeContainer& wifiStaNodes)
 {
-    g_ipToNodeIdMap.clear();
-    for (uint32_t i = 0; i < NodeList::GetNNodes(); ++i)
+    g_staNodeIds.clear();
+
+    for (uint32_t i = 0; i < wifiStaNodes.GetN(); ++i)
     {
-        Ptr<Node> node = NodeList::GetNode(i);
-        Ptr<Ipv4> ipv4 = node->GetObject<Ipv4>();
-        if (ipv4)
-        {
-            for (uint32_t j = 0; j < ipv4->GetNInterfaces(); ++j)
-            {
-                for (uint32_t k = 0; k < ipv4->GetNAddresses(j); ++k)
-                {
-                    Ipv4Address addr = ipv4->GetAddress(j, k).GetLocal();
-                    if (!addr.IsLocalhost())
-                        g_ipToNodeIdMap[addr] = node->GetId();
-                }
-            }
-        }
+        g_staNodeIds.insert(wifiStaNodes.Get(i)->GetId());
     }
 }
 
-uint32_t
-GetNodeIdFromIpv4Address(Ipv4Address targetAddr)
+uint64_t
+GetTotalRxBytes()
 {
-    auto it = g_ipToNodeIdMap.find(targetAddr);
-    if (it != g_ipToNodeIdMap.end())
-        return it->second;
-    NS_LOG_WARN("No node found for IPv4 address " << targetAddr);
-    return 0xFFFFFFFF;
+    uint64_t totalRx = 0;
+    for (const auto& sink : g_sinks)
+    {
+        if (sink)
+        {
+            totalRx += sink->GetTotalRx();
+        }
+    }
+    return totalRx;
+}
+
+uint32_t
+ExtractNodeIdFromContext(const std::string& context)
+{
+    static const std::string needle = "/NodeList/";
+    const size_t start = context.find(needle);
+    if (start == std::string::npos)
+    {
+        return INVALID_NODE_ID;
+    }
+
+    const size_t idBegin = start + needle.size();
+    const size_t idEnd = context.find('/', idBegin);
+    if (idEnd == std::string::npos || idEnd == idBegin)
+    {
+        return INVALID_NODE_ID;
+    }
+
+    try
+    {
+        return static_cast<uint32_t>(std::stoul(context.substr(idBegin, idEnd - idBegin)));
+    }
+    catch (const std::exception&)
+    {
+        return INVALID_NODE_ID;
+    }
 }
 
 /**
  * L3 RX callback — hooks Ipv4L3Protocol/Rx to capture CFRTag before TCP
  * reassembly can strip packet tags.
  *
- * When --snr is set:  derives SNR from pathloss and TX power and logs
- *   time, STA node ID, STA position, pathloss (dB), RX power (dBm), SNR (dB)
- *   to snr_results.csv.
+ * When --snr is set: derives SNR from pathloss and TX power and logs it only
+ *   for packets received by STA nodes. This keeps the CSV focused on the
+ *   mobile-station side of the link instead of mixing in AP-side samples.
  *
- * When --positions is set:  logs time, STA node ID and XYZ coordinates to
- *   position_results.csv for every Sionna-tagged packet, enabling trajectory
- *   maps of mobile STAs (matches the format used in the sensing-mobile script).
+ * When --positions is set: logs time, STA node ID and XYZ coordinates to
+ *   position_results.csv for every Sionna-tagged packet received by a STA.
  *
  * Connected only when at least one of --snr or --positions is active.
  */
@@ -107,16 +129,23 @@ RxTraceWithAddresses(std::string context,
                      Ptr<Ipv4> ipv4,
                      uint32_t interface)
 {
-    Ipv4Header ipHeader;
-    packet->PeekHeader(ipHeader);
-    Ipv4Address srcAddr = ipHeader.GetSource();
+    (void) ipv4;
+    (void) interface;
 
-    uint32_t srcNodeId = GetNodeIdFromIpv4Address(srcAddr);
-    if (srcNodeId == 0xFFFFFFFF)
+    const uint32_t rxNodeId = ExtractNodeIdFromContext(context);
+    if (rxNodeId == INVALID_NODE_ID)
+    {
+        NS_LOG_WARN("Could not extract receiver node ID from context " << context);
         return;
+    }
 
-    Ptr<Node> srcNode = NodeList::GetNode(srcNodeId);
-    Ptr<MobilityModel> mob = srcNode->GetObject<MobilityModel>();
+    if (g_staNodeIds.find(rxNodeId) == g_staNodeIds.end())
+    {
+        return;
+    }
+
+    Ptr<Node> rxNode = NodeList::GetNode(rxNodeId);
+    Ptr<MobilityModel> mob = rxNode->GetObject<MobilityModel>();
     Vector pos = mob ? mob->GetPosition() : Vector(0, 0, 0);
 
     CFRTag tag;
@@ -129,7 +158,7 @@ RxTraceWithAddresses(std::string context,
         if (ofs_snr.is_open())
         {
             ofs_snr << Simulator::Now().GetSeconds()
-                    << "," << srcNodeId
+                    << "," << rxNodeId
                     << "," << pos.x << "," << pos.y << "," << pos.z
                     << "," << pathLossDb
                     << "," << rxPowerDbm
@@ -142,7 +171,7 @@ RxTraceWithAddresses(std::string context,
         if (ofs_position.is_open())
         {
             ofs_position << Simulator::Now().GetSeconds()
-                         << "," << srcNodeId
+                         << "," << rxNodeId
                          << "," << pos.x << "," << pos.y << "," << pos.z
                          << "\n";
         }
@@ -156,12 +185,13 @@ void
 CalculateThroughput10()
 {
     Time now = Simulator::Now(); /* Return the simulator's virtual time. */
-    double cur = (sink->GetTotalRx() - lastTotalRx10) * 8.0 /
+    const uint64_t totalRx = GetTotalRxBytes();
+    double cur = (totalRx - lastTotalRx10) * 8.0 /
                  1e4; /* Convert Application RX Packets to MBits. */
     // std::cout << now.GetSeconds() << "s: \t" << cur << " Mbit/s" << std::endl;
-    lastTotalRx10 = sink->GetTotalRx();
+    lastTotalRx10 = totalRx;
 
-    ofs_throughput << Simulator::Now().GetSeconds() << "," << cur << ",10\n";
+    ofs_throughput << now.GetSeconds() << "," << cur << ",10\n";
 
     Simulator::Schedule(MilliSeconds(10), &CalculateThroughput10);
 }
@@ -170,12 +200,13 @@ void
 CalculateThroughput100()
 {
     Time now = Simulator::Now(); /* Return the simulator's virtual time. */
-    double cur = (sink->GetTotalRx() - lastTotalRx100) * 8.0 /
+    const uint64_t totalRx = GetTotalRxBytes();
+    double cur = (totalRx - lastTotalRx100) * 8.0 /
                  1e5; /* Convert Application RX Packets to MBits. */
     std::cout << now.GetSeconds() << "s: \t" << cur << " Mbit/s" << std::endl;
-    lastTotalRx100 = sink->GetTotalRx();
+    lastTotalRx100 = totalRx;
 
-    ofs_throughput << Simulator::Now().GetSeconds() << "," << cur << ",100\n";
+    ofs_throughput << now.GetSeconds() << "," << cur << ",100\n";
 
     Simulator::Schedule(MilliSeconds(100), &CalculateThroughput100);
 }
@@ -195,6 +226,10 @@ RunSimulation(  const std::string environment,
                 const bool enable_snr,
                 const bool enable_positions)
 {
+    g_sinks.clear();
+    lastTotalRx10 = 0;
+    lastTotalRx100 = 0;
+
     // Wifi config
     int wifi_channel_num = 42; // center at 5200, set to 40
     int channel_width = 80; //set to 20
@@ -394,24 +429,33 @@ RunSimulation(  const std::string environment,
     Ipv4AddressHelper address;
     address.SetBase("10.1.1.0", "255.255.255.0");
     Ipv4InterfaceContainer wifiStaInterfaces = address.Assign(staDevices);
-    Ipv4InterfaceContainer wifiApInterfaces  = address.Assign(apDevices);
+    address.Assign(apDevices);
 
     Ipv4GlobalRoutingHelper::PopulateRoutingTables();
 
-    /* Install TCP Receiver on the access point*/
+    /* Install TCP receivers on all STAs */
     PacketSinkHelper sinkHelper("ns3::TcpSocketFactory",
         InetSocketAddress(Ipv4Address::GetAny(), 9));
-    ApplicationContainer clientApps = sinkHelper.Install(wifiApNode);
-    sink = StaticCast<PacketSink>(clientApps.Get(0));
+    ApplicationContainer clientApps;
+    for (uint32_t i = 0; i < numStas; ++i)
+    {
+        ApplicationContainer staSinkApps = sinkHelper.Install(wifiStaNodes.Get(i));
+        clientApps.Add(staSinkApps);
+        g_sinks.push_back(StaticCast<PacketSink>(staSinkApps.Get(0)));
+    }
 
-    /* Install TCP/UDP Transmitter on the station */
-    OnOffHelper server("ns3::TcpSocketFactory", (InetSocketAddress(wifiApInterfaces.GetAddress(0), 9)));
-    server.SetAttribute("PacketSize", UintegerValue(1472));
-    server.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
-    server.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
-    server.SetAttribute("DataRate", DataRateValue(DataRate(dataRate)));
-
-    ApplicationContainer serverApps = server.Install(wifiStaNodes);
+    /* Install one downstream TCP transmitter on the AP per STA */
+    ApplicationContainer serverApps;
+    for (uint32_t i = 0; i < numStas; ++i)
+    {
+        OnOffHelper server("ns3::TcpSocketFactory",
+                           InetSocketAddress(wifiStaInterfaces.GetAddress(i), 9));
+        server.SetAttribute("PacketSize", UintegerValue(1472));
+        server.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
+        server.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
+        server.SetAttribute("DataRate", DataRateValue(DataRate(dataRate)));
+        serverApps.Add(server.Install(wifiApNode.Get(0)));
+    }
 
     // Start applications.
     clientApps.Start(Seconds(0.9));
@@ -436,10 +480,10 @@ RunSimulation(  const std::string environment,
 
     // SNR and position (Position implemented because apartment has some issues)
     // The same L3 Rx callback serves both features; connect it when either is
-    // active. BuildIpToNodeIdMap() must run after IP assignment.
+    // active. Node roles must be registered after the node containers exist.
     if (enable_snr || enable_positions)
     {
-        BuildIpToNodeIdMap();
+        RegisterStaNodes(wifiStaNodes);
 
         if (enable_snr)
             ofs_snr << "Time_s,STA_NodeId,pos_x,pos_y,pos_z,PathLoss_dB,RxPower_dBm,SNR_dB\n";
