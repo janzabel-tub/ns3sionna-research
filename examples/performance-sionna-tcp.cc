@@ -7,6 +7,8 @@
 */
 
 #include <ostream>
+#include <chrono>
+#include <filesystem>
 #include <set>
 #include <string>
 #include <vector>
@@ -46,7 +48,6 @@ uint64_t lastTotalRx100 = 0;
 // std::ofstream ofs_tp("throughput_results.csv"); // This name is also used for pathloss
 std::ofstream ofs_throughput("throughput_results.csv");
 std::ofstream ofs_snr;      // --snr
-std::ofstream ofs_position; // --positions
 
 // ── SNR constants (match the Munich script; --txPower overrides TX_POWER_DBM) ──
 double TX_POWER_DBM = 20.0;                          // default PHY TX power, dBm
@@ -115,13 +116,8 @@ ExtractNodeIdFromContext(const std::string& context)
  * reassembly can strip packet tags.
  *
  * When --snr is set: derives SNR from pathloss and TX power and logs it only
- *   for packets received by STA nodes. This keeps the CSV focused on the
- *   mobile-station side of the link instead of mixing in AP-side samples.
- *
- * When --positions is set: logs time, STA node ID and XYZ coordinates to
- *   position_results.csv for every Sionna-tagged packet received by a STA.
- *
- * Connected only when at least one of --snr or --positions is active.
+ * for packets received by STA nodes. Mobility traces are exported directly by
+ * the Python server so they are not coupled to packet arrival times.
  */
 void
 RxTraceWithAddresses(std::string context,
@@ -164,16 +160,6 @@ RxTraceWithAddresses(std::string context,
                     << "," << rxPowerDbm
                     << "," << snrDb
                     << "\n";
-        }
-
-        // Position log: mirrors the ofs_tp output in example-sionna-sensing-mobile-tcp.cc
-        // (time, node_id, x, y, z). node_id is added here to support multi-STA runs.
-        if (ofs_position.is_open())
-        {
-            ofs_position << Simulator::Now().GetSeconds()
-                         << "," << rxNodeId
-                         << "," << pos.x << "," << pos.y << "," << pos.z
-                         << "\n";
         }
     }
 }
@@ -226,6 +212,9 @@ RunSimulation(  const std::string environment,
                 const bool enable_snr,
                 const bool enable_positions)
 {
+    static const Time kSimulationStopTime = Seconds(10.0);
+    static const uint64_t kMobilityTraceIntervalNs = MilliSeconds(1).GetNanoSeconds();
+
     g_sinks.clear();
     lastTotalRx10 = 0;
     lastTotalRx100 = 0;
@@ -459,10 +448,10 @@ RunSimulation(  const std::string environment,
 
     // Start applications.
     clientApps.Start(Seconds(0.9));
-    clientApps.Stop(Seconds(10.0));
+    clientApps.Stop(kSimulationStopTime);
 
     serverApps.Start(Seconds(1.0));
-    serverApps.Stop(Seconds(10.0));
+    serverApps.Stop(kSimulationStopTime);
     Simulator::Schedule(Seconds(1.01), &CalculateThroughput10);
     Simulator::Schedule(Seconds(1.1), &CalculateThroughput100);
 
@@ -473,23 +462,26 @@ RunSimulation(  const std::string environment,
                            getFFTSize(wifi_standard, channel_width),
                            getSubcarrierSpacing(wifi_standard),
                            min_coherence_time_ms);
+    if (enable_positions)
+    {
+        const std::string mobilityTraceCsv = std::filesystem::absolute("position_results.csv").string();
+        sionnaHelper.ConfigureMobilityTrace(mobilityTraceCsv,
+                                            kMobilityTraceIntervalNs,
+                                            kSimulationStopTime.GetNanoSeconds());
+    }
     sionnaHelper.SetMode(mode);
     sionnaHelper.SetSubMode(sub_mode);
 
-    Simulator::Stop(Seconds(10.0));
+    Simulator::Stop(kSimulationStopTime);
 
-    // SNR and position (Position implemented because apartment has some issues)
-    // The same L3 Rx callback serves both features; connect it when either is
-    // active. Node roles must be registered after the node containers exist.
-    if (enable_snr || enable_positions)
+    // SNR logging is packet-triggered. Mobility traces are exported on the
+    // server at a fixed interval so they stay independent of cache refreshes.
+    if (enable_snr)
     {
         RegisterStaNodes(wifiStaNodes);
 
         if (enable_snr)
             ofs_snr << "Time_s,STA_NodeId,pos_x,pos_y,pos_z,PathLoss_dB,RxPower_dBm,SNR_dB\n";
-
-        if (enable_positions)
-            ofs_position << "Time_s,STA_NodeId,pos_x,pos_y,pos_z\n";
 
         Config::Connect("/NodeList/*/$ns3::Ipv4L3Protocol/Rx",
                         MakeCallback(&RxTraceWithAddresses));
@@ -511,8 +503,6 @@ RunSimulation(  const std::string environment,
     ofs_throughput.close();
     if (enable_snr)
         ofs_snr.close();
-    if (enable_positions)
-        ofs_position.close();
 
     auto endTime = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsedTime = endTime - startTime;
@@ -564,7 +554,7 @@ main(int argc, char* argv[])
    cmd.AddValue("dataRate", "Data Rate in Mb/s", data_Rate_mbps);
    cmd.AddValue("seed", "Set the seed for the run", seed);
    cmd.AddValue("snr", "Enable per-packet SNR logging to snr_results.csv", enable_snr);
-   cmd.AddValue("positions", "Enable per-packet position logging to position_results.csv", enable_positions);
+   cmd.AddValue("positions", "Enable server-side ground-truth mobility logging to position_results.csv", enable_positions);
    cmd.AddValue("txPower", "Transmit power in dBm (used by PHY and SNR math)", TX_POWER_DBM);
 
    cmd.Parse(argc, argv);
@@ -574,9 +564,8 @@ main(int argc, char* argv[])
 
    if (enable_positions)
    {
-       ofs_position.open("position_results.csv");
-       std::cout << "Position logging enabled → position_results.csv" << std::endl;
-       std::cout << "  (compatible with plot3d_mobile_csi.py as the position argument)" << std::endl;
+       std::cout << "Ground-truth mobility logging enabled → position_results.csv" << std::endl;
+       std::cout << "  (exported by the Python server at a fixed 1 ms interval)" << std::endl;
    }
 
    if (verbose)

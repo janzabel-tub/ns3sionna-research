@@ -77,6 +77,9 @@ message SimInitMessage {
     }
 
     repeated NodeInfo nodes = 11;
+    string mobility_trace_csv = 12; // optional absolute path for writing a ground-truth mobility trace
+    uint64 mobility_trace_interval_ns = 13; // optional sampling interval for the mobility trace
+    uint64 sim_end_time_ns = 14; // optional simulation stop time used for trace export
 }
 
 // sent my Sioanna to confirm reception of SimInitMessage or CloseRequest

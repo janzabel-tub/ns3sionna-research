@@ -23,6 +23,7 @@
 #include "../model/message.pb.h"
 #include "sionna-utils.h"
 #include <zmq.hpp>
+#include <cstdint>
 
 namespace ns3
 {
@@ -63,6 +64,14 @@ public:
      * @param ofdm_subcarrier_spacing the OFDM subcarrier spacing [Hz]
      */
     void Configure(int frequency, int channel_bw, int fft_size, int ofdm_subcarrier_spacing);
+
+    /**
+     * Configures optional ground-truth mobility trace export on the Python server.
+     * @param csvPath absolute path of the CSV file to write
+     * @param intervalNs fixed sampling interval in ns
+     * @param endTimeNs simulation end time in ns
+     */
+    void ConfigureMobilityTrace(const std::string& csvPath, uint64_t intervalNs, uint64_t endTimeNs);
 
     /**
      * Connect ns3 to Sionna.
@@ -108,6 +117,9 @@ private:
     int m_subcarrier_spacing; // in Hz
     double m_noiseDbm;
     std::string m_time_evo_model; // position or doppler based
+    std::string m_mobilityTraceCsv;
+    uint64_t m_mobilityTraceIntervalNs;
+    uint64_t m_simEndTimeNs;
 
 public:
     zmq::socket_t m_zmq_socket; // ZMQ socket used for connecting ns3 with Sionna
