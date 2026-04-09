@@ -5,7 +5,7 @@
 #
 # Required env vars (all have defaults for standalone use):
 #   MODE, NUM_RES, NUM_STAS, MOBILE_SPEED, COHERENCE_TIME, SEED,
-#   DATA_RATE, OUTPUT_DIR, ENABLE_SNR, ENABLE_POSITIONS
+#   DATA_RATE, OUTPUT_DIR, ENABLE_SNR, ENABLE_POSITIONS, SNR_INTERVAL_MS
 
 set -euo pipefail
 
@@ -20,6 +20,7 @@ COHERENCE_TIME=${COHERENCE_TIME:-0}
 SEED=${SEED:-1}
 DATA_RATE=${DATA_RATE:-600}
 OUTPUT_DIR=${OUTPUT_DIR:-"results/tc${COHERENCE_TIME}"}
+SNR_INTERVAL_MS=${SNR_INTERVAL_MS:-1}
 
 # Optional feature flags (set to "true" to enable)
 ENABLE_SNR=${ENABLE_SNR:-false}
@@ -34,6 +35,7 @@ echo "[runner] coherence=${COHERENCE_TIME}ms seed=${SEED} → ${OUTPUT_DIR}"
 EXTRA_FLAGS=""
 [[ "$ENABLE_SNR"       == "true" ]] && EXTRA_FLAGS="$EXTRA_FLAGS --snr=true"
 [[ "$ENABLE_POSITIONS" == "true" ]] && EXTRA_FLAGS="$EXTRA_FLAGS --positions=true"
+[[ "$ENABLE_SNR"       == "true" ]] && EXTRA_FLAGS="$EXTRA_FLAGS --snrIntervalMs=${SNR_INTERVAL_MS}"
 
 # ── Run simulation ────────────────────────────────────────────────────────────
 ./ns3 run "ns3sionna-performance-sionna-tcp \
