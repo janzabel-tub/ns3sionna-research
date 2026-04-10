@@ -254,38 +254,6 @@ class TestServer(unittest.TestCase):
             plt.tight_layout()
             plt.show()
 
-    def test_mobility_is_independent_of_query_schedule(self):
-        sim_init_msg = self._create_sim_init_wall_mob(mode=SionnaEnv.MODE_P2P).sim_init_msg
-
-        env_sparse = SionnaEnv(model_folder='./models/', rt_fast=False, rt_max_parallel_links=8, VERBOSE=False)
-        env_dense = SionnaEnv(model_folder='./models/', rt_fast=False, rt_max_parallel_links=8, VERBOSE=False)
-
-        try:
-            ok_sparse, err_sparse = env_sparse.init_simulation_env(sim_init_msg)
-            self.assertTrue(ok_sparse, err_sparse)
-            ok_dense, err_dense = env_dense.init_simulation_env(sim_init_msg)
-            self.assertTrue(ok_dense, err_dense)
-
-            target_time = 200 * MILLISECOND
-            env_sparse._advance_nodes_to(target_time, [1])
-
-            for req_time in [50 * MILLISECOND, 100 * MILLISECOND, 150 * MILLISECOND, target_time]:
-                env_dense._advance_nodes_to(req_time, [1])
-
-            np.testing.assert_allclose(
-                env_sparse.node_info[1].get_pos_at(target_time),
-                env_dense.node_info[1].get_pos_at(target_time),
-                atol=1e-6,
-            )
-            np.testing.assert_allclose(
-                env_sparse.node_info[1].get_velo_at(target_time),
-                env_dense.node_info[1].get_velo_at(target_time),
-                atol=1e-6,
-            )
-        finally:
-            env_sparse.release()
-            env_dense.release()
-
     #@unittest.skip("Not yet")
     def test_multi_user(self):
 

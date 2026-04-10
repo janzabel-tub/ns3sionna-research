@@ -12,24 +12,6 @@
 #include "ns3/network-module.h"
 #include "../model/sionna-mobility-model.h"
 #include "sionna-utils.h"
-#include <cstdint>
-
-namespace
-{
-
-int32_t
-MixSeedAndRun(uint32_t seed, uint64_t run)
-{
-    uint64_t value = (static_cast<uint64_t>(seed) << 32) ^ run ^ 0x9e3779b97f4a7c15ULL;
-    value ^= value >> 33;
-    value *= 0xff51afd7ed558ccdULL;
-    value ^= value >> 33;
-    value *= 0xc4ceb9fe1a85ec53ULL;
-    value ^= value >> 33;
-    return static_cast<int32_t>(value & 0x7fffffff);
-}
-
-} // namespace
 
 namespace ns3
 {
@@ -50,8 +32,6 @@ SionnaHelper::SionnaHelper(std::string environment, std::string zmq_url): m_zmq_
     m_subcarrier_spacing = 78125;
     m_min_coherence_time_ms = 100000; // min coherence time is 100s
     m_time_evo_model = "position";
-    m_mobilityTraceIntervalNs = 0;
-    m_simEndTimeNs = 0;
 
     std::cout << "Env: " << m_environment << std::endl;
 }
@@ -139,14 +119,6 @@ SionnaHelper::Configure(int frequency, int channel_bw, int fft_size, int ofdm_su
         << ", MinTc=" << m_min_coherence_time_ms << "ms" << std::endl;
 }
 
-void
-SionnaHelper::ConfigureMobilityTrace(const std::string& csvPath, uint64_t intervalNs, uint64_t endTimeNs)
-{
-    m_mobilityTraceCsv = csvPath;
-    m_mobilityTraceIntervalNs = intervalNs;
-    m_simEndTimeNs = endTimeNs;
-}
-
 double
 SionnaHelper::GetNoiseFloor()
 {
@@ -197,7 +169,7 @@ SionnaHelper::Start()
     // Fill the information message
     ns3sionna::SimInitMessage* simulation_info = wrapper.mutable_sim_init_msg();
     simulation_info->set_scene_fname(m_environment);
-    simulation_info->set_seed(MixSeedAndRun(RngSeedManager::GetSeed(), RngSeedManager::GetRun()));
+    simulation_info->set_seed(RngSeedManager::GetSeed());
     simulation_info->set_frequency(m_frequency);
     simulation_info->set_channel_bw(m_channel_bw);
     simulation_info->set_fft_size(m_fft_size);
@@ -206,9 +178,6 @@ SionnaHelper::Start()
     simulation_info->set_subcarrier_spacing(m_subcarrier_spacing);
     simulation_info->set_mode(m_mode);
     simulation_info->set_sub_mode(m_sub_mode);
-    simulation_info->set_mobility_trace_csv(m_mobilityTraceCsv);
-    simulation_info->set_mobility_trace_interval_ns(m_mobilityTraceIntervalNs);
-    simulation_info->set_sim_end_time_ns(m_simEndTimeNs);
 
     NodeContainer c = NodeContainer::GetGlobal();
     for (auto iter = c.Begin(); iter != c.End(); ++iter)

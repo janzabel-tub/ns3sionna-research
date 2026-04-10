@@ -161,9 +161,6 @@ class SionnaEnv:
         else:
             self.min_coherence_time_ms = 0
         self.subcarrier_spacing = sim_init_msg.subcarrier_spacing # in Hz
-        self.mobility_trace_csv = sim_init_msg.mobility_trace_csv
-        self.mobility_trace_interval_ns = sim_init_msg.mobility_trace_interval_ns
-        self.sim_end_time_ns = sim_init_msg.sim_end_time_ns
 
         print(f'Operating in mode: {self.mode}, sub_mode: {self.sub_mode}, time_evo_model: {self.time_evo_model}'
               f', fc: {sim_init_msg.frequency} MHz, B: {sim_init_msg.channel_bw} MHz, FFT size: {self.fft_size}')
@@ -214,103 +211,6 @@ class SionnaEnv:
         self.sim_time = 0
 
         return True, "OK"
-
-    def _make_mobility_rng(self, node_id):
-        seed_sequence = np.random.SeedSequence([int(self.my_seed), int(node_id), 0x51A0])
-        return np.random.default_rng(seed_sequence)
-
-    def _advance_nodes_to(self, target_time, node_ids=None):
-        if node_ids is None:
-            node_ids = list(self.node_info.keys())
-
-        for node_id in node_ids:
-            self._advance_node_to(node_id, float(target_time))
-
-    def _advance_node_to(self, node_id, target_time):
-        node = self.node_info[node_id]
-        if target_time <= node.last_update + 1e-9:
-            return
-
-        if isinstance(node, ConstantMobility):
-            node.update_pos(target_time, node.pos.copy(), node.velocity.copy(), False)
-            return
-
-        while node.last_update + 1e-9 < target_time:
-            segment_start_time = node.last_update
-            next_velocity_change = node.time_to_next_velocity_change()
-            velocity_change_time = segment_start_time + next_velocity_change if np.isfinite(next_velocity_change) else np.inf
-            segment_end_time = min(target_time, velocity_change_time)
-
-            self._walk_segment(node_id, segment_end_time)
-            node = self.node_info[node_id]
-
-            if np.isfinite(velocity_change_time) and abs(segment_end_time - velocity_change_time) <= 1e-6:
-                node.resample_velocity(segment_end_time)
-
-    def _get_first_wall_hit(self, pos, direction, max_distance):
-        ray = mi.Ray3f(mi.Point3f(pos), mi.Vector3f(direction))
-        ray.maxt = mi.Float(max_distance)
-
-        si = self.scene.mi_scene.ray_intersect(ray, mi.RayFlags.Minimal, False, True)
-        if not si.is_valid():
-            return None, None
-
-        hit_distance = float(np.squeeze(si.t.numpy()))
-        surface_normal = np.squeeze(si.n.numpy())
-        planar_normal = np.array([surface_normal[1], -surface_normal[0], 0.0], dtype=float)
-        norm = np.linalg.norm(planar_normal)
-        if norm == 0.0:
-            return None, None
-
-        return hit_distance, planar_normal / norm
-
-    @staticmethod
-    def _reflect_direction(direction, normal, mobility_theta):
-        reflected = -(direction - 2 * (np.dot(direction, normal) + mobility_theta) * normal)
-        reflected_norm = np.linalg.norm(reflected)
-        if reflected_norm == 0.0:
-            return -direction
-        return reflected / reflected_norm
-
-    def _walk_segment(self, node_id, target_time):
-        node = self.node_info[node_id]
-        if target_time <= node.last_update + 1e-9:
-            return
-
-        while node.last_update + 1e-9 < target_time:
-            pos = node.pos.copy()
-            velocity = node.velocity.copy()
-            speed = np.linalg.norm(velocity)
-            if speed == 0.0:
-                node.update_pos(target_time, pos, velocity, False)
-                return
-
-            direction = velocity / speed
-            remaining_time = target_time - node.last_update
-            remaining_distance = speed * remaining_time / 1e9
-
-            hit_distance, normal = self._get_first_wall_hit(pos, direction, remaining_distance)
-            if hit_distance is None or hit_distance >= remaining_distance:
-                node.register_travel(remaining_distance)
-                next_pos = pos + velocity * remaining_time / 1e9
-                node.update_pos(target_time, next_pos, velocity, False)
-                return
-
-            if hit_distance <= 1e-9:
-                node.update_pos(target_time, pos, velocity, False)
-                return
-
-            clearance = min(0.01, hit_distance * 0.5)
-            travel_distance = max(hit_distance - clearance, 0.0)
-            travel_time = (travel_distance / speed) * 1e9
-            collision_time = node.last_update + travel_time
-
-            node.register_travel(travel_distance)
-            collision_pos = pos + direction * travel_distance
-
-            next_direction = self._reflect_direction(direction, normal, node.get_next_direction_angle())
-            next_velocity = next_direction * speed
-            node.update_pos(collision_time, collision_pos, next_velocity, True)
 
 
     def compute_cfr(self, csi_req, reply_wrapper):
@@ -367,9 +267,13 @@ class SionnaEnv:
         # sim future node positions
         lah_time_vec = []
         for lah_i in range(look_ahead):
-            self._advance_nodes_to(req_sim_time, nodes_to_update)
+            # move in time
+            dt = req_sim_time - self.sim_time
+
             csi_tc_arr = []
             for node_id in nodes_to_update:
+                # perform walk
+                self._walk(node_id, dt)
                 if node_id != tx_node_id:
                     tc = coherence_from_velocities(self.node_info[node_id].velocity,
                                                     self.node_info[tx_node_id].velocity, self.fc,
@@ -633,9 +537,75 @@ class SionnaEnv:
         :param node_id: node_id of the node to move
         :param dt: time interval in ns
         """
+
+        # Reduce server crashing hopefully.
         dr.eval()
         dr.sync_thread()
-        self._advance_node_to(node_id, self.node_info[node_id].last_update + dt)
+
+        # TODO: Walk ohne Kanalberechnungen, nur bewegen, nur pathsolver, bewegen und pathsolver zusammen
+        init_dt = dt
+
+        pos = self.node_info[node_id].pos
+        velocity = self.node_info[node_id].velocity
+
+        speed = np.linalg.norm(velocity)
+        if speed == 0:
+            return
+
+        # Check if the next position is inside the borders
+        # Calculate direction vector and travel distance
+        direction = velocity / speed
+        distance = np.linalg.norm(velocity * dt / 1e9) # convert dt into sec
+
+        while True:
+            # TODO: This deactivates the ray tracing thing.
+            # TODO: Deactivating the ray thing does make the server NOT crash anymore. Success!
+            # Create a ray
+            ray = mi.Ray3f(mi.Point3f(pos), mi.Vector3f(direction))
+            ray.maxt = mi.Float(distance)
+
+            # Calculate the intersection of the ray with the scene
+            si = self.scene.mi_scene.ray_intersect(ray, mi.RayFlags.Minimal, False, True)
+
+            if si.is_valid():
+                # If the ray hits an object, calculate the reflection
+
+                # The intersection point (position) is set back by one centimeter to prevent cases
+                # where the intersection point is found behind a wall
+                t_np = si.t.numpy()
+                t = float(t_np[0]) - 0.01
+                pos = pos + t * direction
+
+                # The reflected direction is calculated in the z plane
+                n = np.squeeze(si.n.numpy())
+                n = [n[1], -n[0], 0.0]
+                n = n / np.linalg.norm(n)
+
+                mob_theta = self.node_info[node_id].get_next_direction_angle()
+                direction = - (direction - 2 * (np.dot(direction, n) + mob_theta) * n)
+
+                velocity = direction * speed
+
+                # make sure we do not change speed
+                velocity = (velocity / np.linalg.norm(velocity)) * speed
+
+                distance -= t
+                dt -= (t / speed) * 1e9
+
+            else:
+                # If the ray does not hit an object, calculate the next position
+                break
+
+        next_pos = pos + (velocity * dt / 1e9)
+
+        # update node pos & velocity
+        # Commenting out the update function, the program still crashes, although later than expected. It's
+        # almost certainly the rays that cause the crashing.
+        self.node_info[node_id].update_pos(self.sim_time + init_dt, next_pos, velocity, False)
+        # check if new velocity must be set
+        self.node_info[node_id].check_set_new_velocity(self.sim_time + init_dt, distance)
+
+        # self.stepCounter += 1
 
 
     def _place_tx_rx_node(self, tx_node: int, rx_nodes: list):
@@ -676,6 +646,8 @@ class SionnaEnv:
         '''
 
         # execute mobility
+        dt = req_sim_time - self.sim_time
+
         # estimate the node we need to update their position
         if req_mode == SionnaEnv.MODE_P2P:
             nodes_to_update = [tx_node, rx_node] # only TX and RX
@@ -683,7 +655,8 @@ class SionnaEnv:
             # both P2MP and P2MP_LAH
             nodes_to_update = list(self.node_info.keys())
 
-        self._advance_nodes_to(req_sim_time, nodes_to_update)
+        for node_id in nodes_to_update:
+            self._walk(node_id, dt)
 
         # update time
         self.sim_time = req_sim_time
@@ -757,38 +730,9 @@ class SionnaEnv:
 
         return rx_nodes, lnk_delay_arr, lnk_loss_arr, h_normalized_arr
 
-    def _export_mobility_trace(self):
-        if not self.mobility_trace_csv or self.mobility_trace_interval_ns == 0 or self.sim_end_time_ns == 0:
-            return
-
-        self._advance_nodes_to(self.sim_end_time_ns)
-
-        trace_dir = os.path.dirname(self.mobility_trace_csv)
-        if trace_dir:
-            os.makedirs(trace_dir, exist_ok=True)
-
-        node_ids = sorted(
-            node_id for node_id, node in self.node_info.items() if isinstance(node, RandomWalkMobility)
-        )
-        if not node_ids:
-            node_ids = sorted(self.node_info.keys())
-        sample_times = list(np.arange(0, self.sim_end_time_ns + self.mobility_trace_interval_ns, self.mobility_trace_interval_ns))
-        if not sample_times or sample_times[-1] != self.sim_end_time_ns:
-            sample_times.append(self.sim_end_time_ns)
-
-        with open(self.mobility_trace_csv, "w", encoding="ascii") as trace_file:
-            trace_file.write("Time_s,STA_NodeId,pos_x,pos_y,pos_z\n")
-            for sample_time in sample_times:
-                for node_id in node_ids:
-                    pos = self.node_info[node_id].get_pos_at(sample_time)
-                    trace_file.write(
-                        f"{sample_time / 1e9:.9f},{node_id},{pos[0]},{pos[1]},{pos[2]}\n"
-                    )
-
-        print(f"Mobility trace written to {self.mobility_trace_csv}")
 
     def _get_mobility_history(self, node_id):
-        ts = list(self.node_info[node_id].history_times)
+        ts = sorted(self.node_info[node_id].pos_history.keys())
         pos = [self.node_info[node_id].pos_history[t] for t in ts]
         return ts, pos
 
@@ -842,8 +786,7 @@ class SionnaEnv:
 
                 self.node_info[node_info.id] = RandomWalkMobility(node_info.id, [pos.x, pos.y, pos.z],
                                                                   mode, mode_params, speed, speed_params,
-                                                                  direction, direction_params,
-                                                                  rng=self._make_mobility_rng(node_info.id))
+                                                                  direction, direction_params)
 
 
     def run(self):
@@ -908,7 +851,6 @@ class SionnaEnv:
                         GPUtil.showUtilization()
 
             elif ns3_msg.HasField("sim_close_request"):
-                self._export_mobility_trace()
                 do_terminate = True
                 resp_msg.sim_ack.SetInParent()
 
@@ -959,3 +901,4 @@ if __name__ == '__main__':
 
         if args.single_run:
             break
+
