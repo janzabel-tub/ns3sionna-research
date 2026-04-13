@@ -1,0 +1,2 @@
+Time_s,STA_NodeId,pos_x,pos_y,pos_z,PathLoss_dB,RxPower_dBm,SNR_dB,RxStatus,PacketUid,PacketSize_Bytes,FailureReason
+1.00401,0,-7.97203,2.8639,1.6,91.0589,-71.0589,23.8585,OK,40,66,
