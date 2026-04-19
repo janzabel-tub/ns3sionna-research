@@ -38,11 +38,12 @@ OUTPUT_BASE="$EXAMPLES/results"
 # Optional features passed through to the C++ binary
 export ENABLE_SNR=true
 export ENABLE_POSITIONS=true
+export EQUIDISTANT_WALK_STEPS=${EQUIDISTANT_WALK_STEPS:-0}
 
 # How many seconds between health-check polls
 CHECK_INTERVAL=60
 
-# Max consecutive crashes before a seed is abandoned and the sweep continues
+# Max consecutive failures before a seed is abandoned and the sweep continues
 MAX_RETRIES=3
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -83,7 +84,7 @@ start_server() {
     echo "[watchdog] Starting Sionna server..."
     cd "$SERVER_DIR" || { echo "Cannot cd to $SERVER_DIR"; exit 1; }
     export NS3SIONNA_MODEL_FOLDER="$SERVER_DIR/models"
-    python ns3sionna_server.py > "$SERVER_DIR/server.log" 2>&1 &
+    python ns3sionna_server.py --equidistant_walk_steps "$EQUIDISTANT_WALK_STEPS" > "$SERVER_DIR/server.log" 2>&1 &
     SERVER_PID=$!
     echo "[watchdog] Server PID=${SERVER_PID}, waiting for init..."
     sleep 8
@@ -142,8 +143,8 @@ trap cleanup SIGINT SIGTERM
 
 # ── run_until_success ─────────────────────────────────────────────────────────
 # Runs one (tc, seed) pair. Handles server crashes by restarting the server
-# and re-launching the run. Gives up after MAX_RETRIES consecutive failures
-# that are NOT caused by a server crash.
+# and re-launching the run. Gives up after MAX_RETRIES consecutive failures,
+# including repeated server crashes for the same run.
 #
 # Returns 0 when the run succeeds, 1 if MAX_RETRIES was hit.
 
@@ -158,12 +159,19 @@ run_until_success() {
 
         # ── Server health check ───────────────────────────────────────────────
         if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+            ((retries++)) || true
             echo "[watchdog] Server crashed — restarting server and re-running seed=${seed} tc=${tc}ms"
+            if [[ $retries -ge $MAX_RETRIES ]]; then
+                echo "[watchdog] Max retries reached after repeated server crashes for tc=${tc}ms seed=${seed} — skipping"
+                stop_run
+                sleep 2
+                start_server
+                return 1
+            fi
             stop_run
             sleep 2
             start_server
             start_run "$tc" "$seed"
-            # A server crash doesn't count against the retry budget
             continue
         fi
 
@@ -213,6 +221,7 @@ echo "[watchdog] Coherence times: ${COHERENCE_TIMES[*]} ms"
 echo "[watchdog] Seeds:           ${START_SEED}..${END_SEED}"
 echo "[watchdog] SNR logging:     ${ENABLE_SNR}"
 echo "[watchdog] Position logging: ${ENABLE_POSITIONS}"
+echo "[watchdog] Equidistant walk step: ${EQUIDISTANT_WALK_STEPS} ns"
 echo "[watchdog] Output base:     ${OUTPUT_BASE}"
 echo "[watchdog] ════════════════════════════════════════════"
 

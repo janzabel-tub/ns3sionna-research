@@ -47,7 +47,7 @@ class SionnaEnv:
     author: Pilz, Zubow
     """
     def __init__(self, model_folder='./models/', rt_fast=False, default_mode=MODE_P2P, rt_max_parallel_links=256, est_csi=True, VERBOSE=True,
-                 CHECKS_ENABLED=True):
+                 CHECKS_ENABLED=True, equidistant_walk_steps=0):
         self.model_folder = model_folder
         self.rt_fast = rt_fast
         if rt_fast:
@@ -102,6 +102,11 @@ class SionnaEnv:
         self.node_info = {}
         # all node which are currently placed on the scene
         self.placed_radio_node_names = []
+        self.equidistant_walk_steps = max(0, int(equidistant_walk_steps))
+        self.absolute_time_mobility = self.equidistant_walk_steps > 0
+
+        if self.absolute_time_mobility:
+            print(f'Absolute-time mobility enabled with internal walk step={self.equidistant_walk_steps}ns')
 
 
     def init_simulation_env(self, sim_init_msg):
@@ -154,7 +159,7 @@ class SionnaEnv:
         self.fc = sim_init_msg.frequency * 1e6
         self.fft_size = sim_init_msg.fft_size  # max FFT size
         if sim_init_msg.min_coherence_time_ms != 0:
-            self.min_coherence_time_ms = sim_init_msg.min_coherence_time_ms * 100000 # min Tc, multiplied for 0.1ms
+            self.min_coherence_time_ms = sim_init_msg.min_coherence_time_ms * 100000 # min Tc, multiplied for 0.1ms for fine grained control
         else:
             self.min_coherence_time_ms = 0
         self.subcarrier_spacing = sim_init_msg.subcarrier_spacing # in Hz
@@ -208,6 +213,43 @@ class SionnaEnv:
         self.sim_time = 0
 
         return True, "OK"
+
+
+    def _make_mobility_rng(self, node_id):
+        seed_sequence = np.random.SeedSequence([int(self.my_seed), int(node_id), 0x51A0])
+        return np.random.default_rng(seed_sequence)
+
+
+    def _advance_nodes_to(self, target_time, node_ids=None):
+        if node_ids is None:
+            node_ids = list(self.node_info.keys())
+
+        for node_id in node_ids:
+            self._advance_node_to(node_id, target_time)
+
+
+    def _advance_node_to(self, node_id, target_time):
+        node = self.node_info[node_id]
+        if target_time <= node.last_update:
+            return
+
+        while node.last_update < target_time:
+            step_dt = min(self.equidistant_walk_steps, target_time - node.last_update)
+            if step_dt <= 0:
+                break
+            self._walk(node_id, step_dt, start_time=node.last_update, sync_backend=False)
+            node = self.node_info[node_id]
+
+
+    def _update_nodes_to_time(self, target_time, nodes_to_update):
+        if self.absolute_time_mobility:
+            dr.eval()
+            dr.sync_thread()
+            self._advance_nodes_to(target_time, nodes_to_update)
+        else:
+            dt = target_time - self.sim_time
+            for node_id in nodes_to_update:
+                self._walk(node_id, dt)
 
 
     def compute_cfr(self, csi_req, reply_wrapper):
@@ -264,13 +306,9 @@ class SionnaEnv:
         # sim future node positions
         lah_time_vec = []
         for lah_i in range(look_ahead):
-            # move in time
-            dt = req_sim_time - self.sim_time
-
+            self._update_nodes_to_time(req_sim_time, nodes_to_update)
             csi_tc_arr = []
             for node_id in nodes_to_update:
-                # perform walk
-                self._walk(node_id, dt)
                 if node_id != tx_node_id:
                     tc = coherence_from_velocities(self.node_info[node_id].velocity,
                                                     self.node_info[tx_node_id].velocity, self.fc,
@@ -516,24 +554,33 @@ class SionnaEnv:
         return len(rx_nodes)
 
 
-    def _walk(self, node_id, dt):
+    def _walk(self, node_id, dt, start_time=None, sync_backend=True):
         """
         Move the given node to the given time interval.
         :param node_id: node_id of the node to move
         :param dt: time interval in ns
         """
 
-        # Reduce server crashing hopefully.
-        dr.eval()
-        dr.sync_thread()
+        if dt <= 0:
+            return
+
+        if sync_backend:
+            # Reduce server crashing hopefully.
+            dr.eval()
+            dr.sync_thread()
 
         init_dt = dt
+        if start_time is None:
+            start_time = self.sim_time
+        target_time = start_time + init_dt
 
         pos = self.node_info[node_id].pos
         velocity = self.node_info[node_id].velocity
 
         speed = np.linalg.norm(velocity)
         if speed == 0:
+            self.node_info[node_id].update_pos(target_time, pos.copy(), velocity.copy(), False)
+            self.node_info[node_id].check_set_new_velocity(target_time, 0)
             return
 
         # Check if the next position is inside the borders
@@ -581,11 +628,9 @@ class SionnaEnv:
         next_pos = pos + (velocity * dt / 1e9)
 
         # update node pos & velocity
-        # Commenting out the update function, the program still crashes, although later than expected. It's
-        # almost certainly the rays that cause the crashing.
-        self.node_info[node_id].update_pos(self.sim_time + init_dt, next_pos, velocity, False)
+        self.node_info[node_id].update_pos(target_time, next_pos, velocity, False)
         # check if new velocity must be set
-        self.node_info[node_id].check_set_new_velocity(self.sim_time + init_dt, distance)
+        self.node_info[node_id].check_set_new_velocity(target_time, distance)
 
 
     def _place_tx_rx_node(self, tx_node: int, rx_nodes: list):
@@ -625,9 +670,6 @@ class SionnaEnv:
         :return: (list(rx_node), list(link propagation delay), list(wideband loss), list(normalized CFR))
         '''
 
-        # execute mobility
-        dt = req_sim_time - self.sim_time
-
         # estimate the node we need to update their position
         if req_mode == SionnaEnv.MODE_P2P:
             nodes_to_update = [tx_node, rx_node] # only TX and RX
@@ -635,8 +677,8 @@ class SionnaEnv:
             # both P2MP and P2MP_LAH
             nodes_to_update = list(self.node_info.keys())
 
-        for node_id in nodes_to_update:
-            self._walk(node_id, dt)
+        # execute mobility
+        self._update_nodes_to_time(req_sim_time, nodes_to_update)
 
         # update time
         self.sim_time = req_sim_time
@@ -764,9 +806,13 @@ class SionnaEnv:
                     direction_params = (random_walk_model.direction.normal.mean,
                                         random_walk_model.direction.normal.variance)
 
+                rng = None
+                if self.absolute_time_mobility:
+                    rng = self._make_mobility_rng(node_info.id)
+
                 self.node_info[node_info.id] = RandomWalkMobility(node_info.id, [pos.x, pos.y, pos.z],
                                                                   mode, mode_params, speed, speed_params,
-                                                                  direction, direction_params)
+                                                                  direction, direction_params, rng=rng)
 
 
     def run(self):
@@ -852,6 +898,7 @@ class SionnaEnv:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    default_equidistant_walk_steps = int(os.environ.get("NS3SIONNA_EQUIDISTANT_WALK_STEPS", "0"))
     parser.add_argument("--model_folder", type=str, default='models/', help="The folder containing the XML files of the scenes")
     parser.add_argument("--single_run", help="Whether not to terminate after single run", action='store_true')
     parser.add_argument("--default_mode", type=int, default=SionnaEnv.MODE_P2MP, help="Which mode to use if not set by ns3")
@@ -859,17 +906,19 @@ if __name__ == '__main__':
     parser.add_argument("--rt_max_parallel_links", type=int, default=256, help="Max no. of link simulated at once; depends on GPU memory")
     parser.add_argument("--est_csi", help="Whether to estimate complex CSI per OFDM subcarrier", type=bool, default=True)
     parser.add_argument("--verbose", help="Whether to run in verbose mode", action='store_true')
+    parser.add_argument("--equidistant_walk_steps", type=int, default=default_equidistant_walk_steps,
+                        help="Fixed internal mobility step in ns for absolute-time walking; 0 keeps the legacy request-based mode")
     args = parser.parse_args()
 
     print("ns3sionna v1.0")
     while True:
-        print("Using config: model_folder=%s, single_run=%s, mode=%d, rt_fast=%s, rt_max_parallel_links=%d, est_csi=%r"
-              % (args.model_folder, args.single_run, args.default_mode, args.rt_fast, args.rt_max_parallel_links, args.est_csi))
+        print("Using config: model_folder=%s, single_run=%s, mode=%d, rt_fast=%s, rt_max_parallel_links=%d, est_csi=%r, equidistant_walk_steps=%d"
+              % (args.model_folder, args.single_run, args.default_mode, args.rt_fast, args.rt_max_parallel_links, args.est_csi,
+                 args.equidistant_walk_steps))
         print("Waiting for new job ...")
         env = SionnaEnv(args.model_folder, args.rt_fast, args.default_mode, args.rt_max_parallel_links,
-                        args.est_csi, VERBOSE=args.verbose)
+                        args.est_csi, VERBOSE=args.verbose, equidistant_walk_steps=args.equidistant_walk_steps)
         env.run()
 
         if args.single_run:
             break
-

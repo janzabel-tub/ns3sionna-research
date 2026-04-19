@@ -233,10 +233,8 @@ RunSimulation(  const std::string environment,
     // Wifi config
     int wifi_channel_num = 42; // center at 5200, set to 40
     int channel_width = 80; //set to 20
-    // Set the seed and the run
-    // TODO: The setRun part is experimental.
-    RngSeedManager::SetSeed(10000);
-    RngSeedManager::SetRun(seed);
+    // Use a single seed value so ns-3 and the Python server share the same run seed.
+    RngSeedManager::SetSeed(seed);
 
     SionnaHelper sionnaHelper(environment, "tcp://localhost:5555");
 
@@ -581,7 +579,6 @@ main(int argc, char* argv[])
 
    if (verbose)
    {
-       LogComponentEnable("SionnaPropagationEnforcedCache", LOG_LEVEL_DEBUG);
        LogComponentEnable("SionnaHelper", LOG_LEVEL_DEBUG);
        LogComponentEnable("SionnaPropagationDelayModel", LOG_INFO);
        LogComponentEnable("SionnaPropagationDelayModel", LOG_PREFIX_TIME);
