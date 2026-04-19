@@ -1,6 +1,6 @@
 import sionna.rt # must be the first import as otherwise Python crashes
 import drjit as dr
-# import traceback
+import traceback
 # dr.set_flag(dr.JitFlag.Debug, True)
 
 import os
@@ -73,7 +73,6 @@ class SionnaEnv:
             self.rt_edge_diffraction = True  # rays that bend around edges
             self.rt_diffraction_lit_region = True  # higher physical accuracy; for mmWave or THz channels
 
-        #todo: diffuse reflection next, activate refraction again
         # default mode
         self.default_mode = default_mode
 
@@ -113,8 +112,6 @@ class SionnaEnv:
         '''
         if self.VERBOSE:
             print_sim_init(sim_init_msg)
-
-        # self.stepCounter = 0
 
         # Load the sionna scene
         filepath = os.path.join(self.model_folder, sim_init_msg.scene_fname)
@@ -282,10 +279,7 @@ class SionnaEnv:
                     # JZA: Set min Tc
                     if self.min_coherence_time_ms != 0:
                         tc = self.min_coherence_time_ms
-                    '''
-                    if tc < self.min_coherence_time_ms:
-                        tc = self.min_coherence_time_ms
-                    '''
+
                     csi_tc_arr.append(tc)
 
             # take the worst case Tc from all RX nodes
@@ -403,10 +397,6 @@ class SionnaEnv:
 
                 if self.min_coherence_time_ms != 0:
                     tc = self.min_coherence_time_ms
-                '''
-                if tc < self.min_coherence_time_ms:
-                    tc = self.min_coherence_time_ms
-                '''
 
                 rx_node_info.end_time2 = csi.start_time + tc
                 csi_tc_arr.append(tc)
@@ -513,12 +503,7 @@ class SionnaEnv:
             # JZA: This is used most often
             if self.min_coherence_time_ms != 0:
                 tc = self.min_coherence_time_ms
-                # print("TC SET")
-            '''
-            if tc < self.min_coherence_time_ms:
-                tc = self.min_coherence_time_ms
-            '''
-            # print("Current TC: ", tc)
+
             rx_node_info.end_time2 = tc
             csi_tc_arr.append(tc)
 
@@ -542,7 +527,6 @@ class SionnaEnv:
         dr.eval()
         dr.sync_thread()
 
-        # TODO: Walk ohne Kanalberechnungen, nur bewegen, nur pathsolver, bewegen und pathsolver zusammen
         init_dt = dt
 
         pos = self.node_info[node_id].pos
@@ -558,8 +542,6 @@ class SionnaEnv:
         distance = np.linalg.norm(velocity * dt / 1e9) # convert dt into sec
 
         while True:
-            # TODO: This deactivates the ray tracing thing.
-            # TODO: Deactivating the ray thing does make the server NOT crash anymore. Success!
             # Create a ray
             ray = mi.Ray3f(mi.Point3f(pos), mi.Vector3f(direction))
             ray.maxt = mi.Float(distance)
@@ -604,8 +586,6 @@ class SionnaEnv:
         self.node_info[node_id].update_pos(self.sim_time + init_dt, next_pos, velocity, False)
         # check if new velocity must be set
         self.node_info[node_id].check_set_new_velocity(self.sim_time + init_dt, distance)
-
-        # self.stepCounter += 1
 
 
     def _place_tx_rx_node(self, tx_node: int, rx_nodes: list):
@@ -856,15 +836,6 @@ class SionnaEnv:
 
             # Serialize and send the reply message
             socket.send(resp_msg.SerializeToString())
-
-        """ No step counter needed anymore
-        try:
-            f = open('stepcounter.txt', 'a')
-            f.write(repr(self.stepCounter) + "\n")
-            f.close()
-        except FileExistsError:
-            print("Something went wrong")
-        """
 
         socket.close()
         print("Computed no. CSI samples: %d" % total_num_csi_samples)
