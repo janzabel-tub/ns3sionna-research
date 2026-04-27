@@ -6,9 +6,13 @@
 * Author: Yannik Pilz <y.pilz@campus.tu-berlin.de>
 */
 
+#include <cmath>
+#include <limits>
+#include <map>
 #include <ostream>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "ns3/sionna-helper.h"
@@ -31,7 +35,9 @@
 #include "ns3/network-module.h"
 #include "ns3/ssid.h"
 
+#include "ns3/wifi-mac-header.h"
 #include "ns3/wifi-net-device.h"
+#include "ns3/wifi-phy.h"
 #include "ns3/tcp-westwood-plus.h"
 #include "ns3/minstrel-wifi-manager.h"
 
@@ -57,6 +63,139 @@ static const double NOISE_FLOOR_DBM =
 
 std::set<uint32_t> g_staNodeIds;
 static constexpr uint32_t INVALID_NODE_ID = 0xFFFFFFFF;
+
+struct PhyRxBeginSample
+{
+    double timeSeconds;
+    Vector pos;
+    bool isDataFrame;
+    uint32_t packetSize;
+    bool hasCfrTag;
+    double pathLossDb;
+    double rxPowerDbm;
+};
+
+std::map<std::pair<uint32_t, uint64_t>, PhyRxBeginSample> g_phyRxBeginSamples;
+std::set<std::pair<uint32_t, uint64_t>> g_phyRxFinalized;
+
+std::pair<uint32_t, uint64_t>
+MakePhyRxSampleKey(uint32_t nodeId, uint64_t packetUid)
+{
+    return {nodeId, packetUid};
+}
+
+bool
+IsStaNode(uint32_t nodeId)
+{
+    return g_staNodeIds.find(nodeId) != g_staNodeIds.end();
+}
+
+Vector
+GetNodePosition(uint32_t nodeId)
+{
+    Ptr<Node> node = NodeList::GetNode(nodeId);
+    Ptr<MobilityModel> mob = node ? node->GetObject<MobilityModel>() : nullptr;
+    return mob ? mob->GetPosition() : Vector(0, 0, 0);
+}
+
+bool
+IsWifiDataFrame(Ptr<const Packet> packet)
+{
+    WifiMacHeader hdr;
+    return packet && packet->PeekHeader(hdr) > 0 && hdr.IsData();
+}
+
+double
+LinearSnrToDb(double snrLinear)
+{
+    return snrLinear > 0.0 ? 10.0 * std::log10(snrLinear)
+                           : std::numeric_limits<double>::quiet_NaN();
+}
+
+double
+FallbackSnrFromPathLoss(const PhyRxBeginSample& sample)
+{
+    return sample.hasCfrTag && std::isfinite(sample.rxPowerDbm)
+               ? sample.rxPowerDbm - NOISE_FLOOR_DBM
+               : std::numeric_limits<double>::quiet_NaN();
+}
+
+void
+WriteStaPhyLogs(uint32_t rxNodeId,
+                uint64_t packetUid,
+                const PhyRxBeginSample* beginSample,
+                Ptr<const Packet> packet,
+                const std::string& rxStatus,
+                double phySnrDb,
+                const std::string& failureReason = "")
+{
+    if (!packet)
+    {
+        return;
+    }
+
+    PhyRxBeginSample fallback{};
+    if (beginSample == nullptr)
+    {
+        fallback.timeSeconds = Simulator::Now().GetSeconds();
+        fallback.pos = GetNodePosition(rxNodeId);
+        fallback.isDataFrame = IsWifiDataFrame(packet);
+        fallback.packetSize = packet->GetSize();
+
+        CFRTag tag;
+        fallback.hasCfrTag = packet->PeekPacketTag(tag);
+        if (fallback.hasCfrTag)
+        {
+            fallback.pathLossDb = tag.GetPathloss();
+            fallback.rxPowerDbm = TX_POWER_DBM - fallback.pathLossDb;
+        }
+        else
+        {
+            fallback.pathLossDb = std::numeric_limits<double>::quiet_NaN();
+            fallback.rxPowerDbm = std::numeric_limits<double>::quiet_NaN();
+        }
+
+        beginSample = &fallback;
+    }
+
+    if (!beginSample->isDataFrame)
+    {
+        return;
+    }
+
+    // RxOk/RxError can provide a PHY SNR. RxDrop cannot, so for dropped frames
+    // use the same pathloss-based estimate as the L3 logger whenever CFRTag is
+    // still present. This avoids losing the "bad" reception samples as NaN.
+    double snrDb = std::isfinite(phySnrDb) ? phySnrDb : FallbackSnrFromPathLoss(*beginSample);
+
+    if (ofs_snr.is_open())
+    {
+        ofs_snr << beginSample->timeSeconds
+                << "," << rxNodeId
+                << "," << beginSample->pos.x << "," << beginSample->pos.y << "," << beginSample->pos.z
+                << "," << beginSample->pathLossDb
+                << "," << beginSample->rxPowerDbm
+                << "," << snrDb
+                << "," << rxStatus
+                << "," << packetUid
+                << "," << beginSample->packetSize
+                << "," << failureReason
+                << "\n";
+    }
+
+    if (ofs_position.is_open())
+    {
+        ofs_position << beginSample->timeSeconds
+                     << "," << rxNodeId
+                     << "," << beginSample->pos.x << "," << beginSample->pos.y << "," << beginSample->pos.z
+                     << "," << rxStatus
+                     << "," << packetUid
+                     << "," << beginSample->packetSize
+                     << "," << failureReason
+                     << "\n";
+    }
+}
+
 
 void
 RegisterStaNodes(const NodeContainer& wifiStaNodes)
@@ -111,70 +250,146 @@ ExtractNodeIdFromContext(const std::string& context)
 }
 
 /**
- * L3 RX callback — hooks Ipv4L3Protocol/Rx to capture CFRTag before TCP
- * reassembly can strip packet tags.
+ * PHY-level reception logging.
  *
- * When --snr is set: derives SNR from pathloss and TX power and logs it only
- *   for packets received by STA nodes. This keeps the CSV focused on the
- *   mobile-station side of the link instead of mixing in AP-side samples.
- *
- * When --positions is set: logs time, STA node ID and XYZ coordinates to
- *   position_results.csv for every Sionna-tagged packet received by a STA.
- *
- * Connected only when at least one of --snr or --positions is active.
+ * We latch the receiver position at PhyRxBegin (start of reception) and write
+ * the final CSV row only once the reception outcome is known. This keeps the
+ * CSV structure close to the original while also capturing failed receptions
+ * that never make it to IPv4/TCP.
  */
 void
-RxTraceWithAddresses(std::string context,
-                     Ptr<const Packet> packet,
-                     Ptr<Ipv4> ipv4,
-                     uint32_t interface)
+PhyRxBeginTrace(std::string context,
+                Ptr<const Packet> packet,
+                std::map<WifiSpectrumBandInfo, double> rxPowerWPerBand)
 {
-    (void) ipv4;
-    (void) interface;
+    (void) rxPowerWPerBand;
 
     const uint32_t rxNodeId = ExtractNodeIdFromContext(context);
-    if (rxNodeId == INVALID_NODE_ID)
-    {
-        NS_LOG_WARN("Could not extract receiver node ID from context " << context);
-        return;
-    }
-
-    if (g_staNodeIds.find(rxNodeId) == g_staNodeIds.end())
+    if (rxNodeId == INVALID_NODE_ID || !IsStaNode(rxNodeId) || !packet)
     {
         return;
     }
 
-    Ptr<Node> rxNode = NodeList::GetNode(rxNodeId);
-    Ptr<MobilityModel> mob = rxNode->GetObject<MobilityModel>();
-    Vector pos = mob ? mob->GetPosition() : Vector(0, 0, 0);
+    PhyRxBeginSample sample{};
+    sample.timeSeconds = Simulator::Now().GetSeconds();
+    sample.pos = GetNodePosition(rxNodeId);
+    sample.isDataFrame = IsWifiDataFrame(packet);
+    sample.packetSize = packet->GetSize();
 
     CFRTag tag;
-    if (packet->PeekPacketTag(tag))
+    sample.hasCfrTag = packet->PeekPacketTag(tag);
+    if (sample.hasCfrTag)
     {
-        double pathLossDb = tag.GetPathloss();
-        double rxPowerDbm = TX_POWER_DBM - pathLossDb;
-        double snrDb      = rxPowerDbm - NOISE_FLOOR_DBM;
+        sample.pathLossDb = tag.GetPathloss();
+        sample.rxPowerDbm = TX_POWER_DBM - sample.pathLossDb;
+    }
+    else
+    {
+        sample.pathLossDb = std::numeric_limits<double>::quiet_NaN();
+        sample.rxPowerDbm = std::numeric_limits<double>::quiet_NaN();
+    }
 
-        if (ofs_snr.is_open())
-        {
-            ofs_snr << Simulator::Now().GetSeconds()
-                    << "," << rxNodeId
-                    << "," << pos.x << "," << pos.y << "," << pos.z
-                    << "," << pathLossDb
-                    << "," << rxPowerDbm
-                    << "," << snrDb
-                    << "\n";
-        }
+    g_phyRxBeginSamples[MakePhyRxSampleKey(rxNodeId, packet->GetUid())] = sample;
+}
 
-        // Position log: mirrors the ofs_tp output in example-sionna-sensing-mobile-tcp.cc
-        // (time, node_id, x, y, z). node_id is added here to support multi-STA runs.
-        if (ofs_position.is_open())
-        {
-            ofs_position << Simulator::Now().GetSeconds()
-                         << "," << rxNodeId
-                         << "," << pos.x << "," << pos.y << "," << pos.z
-                         << "\n";
-        }
+void
+PhyRxOkTrace(std::string context,
+             Ptr<const Packet> packet,
+             double snrLinear,
+             WifiMode mode,
+             WifiPreamble preamble)
+{
+    (void) mode;
+    (void) preamble;
+
+    const uint32_t rxNodeId = ExtractNodeIdFromContext(context);
+    if (rxNodeId == INVALID_NODE_ID || !IsStaNode(rxNodeId) || !packet)
+    {
+        return;
+    }
+
+    const auto key = MakePhyRxSampleKey(rxNodeId, packet->GetUid());
+    if (g_phyRxFinalized.find(key) != g_phyRxFinalized.end())
+    {
+        return;
+    }
+    auto it = g_phyRxBeginSamples.find(key);
+
+    WriteStaPhyLogs(rxNodeId,
+                    packet->GetUid(),
+                    it != g_phyRxBeginSamples.end() ? &it->second : nullptr,
+                    packet,
+                    "OK",
+                    LinearSnrToDb(snrLinear));
+
+    g_phyRxFinalized.insert(key);
+
+    if (it != g_phyRxBeginSamples.end())
+    {
+        g_phyRxBeginSamples.erase(it);
+    }
+}
+
+void
+PhyRxErrorTrace(std::string context, Ptr<const Packet> packet, double snrLinear)
+{
+    const uint32_t rxNodeId = ExtractNodeIdFromContext(context);
+    if (rxNodeId == INVALID_NODE_ID || !IsStaNode(rxNodeId) || !packet)
+    {
+        return;
+    }
+
+    const auto key = MakePhyRxSampleKey(rxNodeId, packet->GetUid());
+    if (g_phyRxFinalized.find(key) != g_phyRxFinalized.end())
+    {
+        return;
+    }
+    auto it = g_phyRxBeginSamples.find(key);
+
+    WriteStaPhyLogs(rxNodeId,
+                    packet->GetUid(),
+                    it != g_phyRxBeginSamples.end() ? &it->second : nullptr,
+                    packet,
+                    "ERROR",
+                    LinearSnrToDb(snrLinear));
+
+    g_phyRxFinalized.insert(key);
+
+    if (it != g_phyRxBeginSamples.end())
+    {
+        g_phyRxBeginSamples.erase(it);
+    }
+}
+
+void
+PhyRxDropTrace(std::string context, Ptr<const Packet> packet, WifiPhyRxfailureReason reason)
+{
+    const uint32_t rxNodeId = ExtractNodeIdFromContext(context);
+    if (rxNodeId == INVALID_NODE_ID || !IsStaNode(rxNodeId) || !packet)
+    {
+        return;
+    }
+
+    const auto key = MakePhyRxSampleKey(rxNodeId, packet->GetUid());
+    if (g_phyRxFinalized.find(key) != g_phyRxFinalized.end())
+    {
+        return;
+    }
+    auto it = g_phyRxBeginSamples.find(key);
+
+    WriteStaPhyLogs(rxNodeId,
+                    packet->GetUid(),
+                    it != g_phyRxBeginSamples.end() ? &it->second : nullptr,
+                    packet,
+                    "DROP",
+                    std::numeric_limits<double>::quiet_NaN(),
+                    std::to_string(static_cast<int>(reason)));
+
+    g_phyRxFinalized.insert(key);
+
+    if (it != g_phyRxBeginSamples.end())
+    {
+        g_phyRxBeginSamples.erase(it);
     }
 }
 
@@ -227,6 +442,8 @@ RunSimulation(  const std::string environment,
                 const bool enable_positions)
 {
     g_sinks.clear();
+    g_phyRxBeginSamples.clear();
+    g_phyRxFinalized.clear();
     lastTotalRx10 = 0;
     lastTotalRx100 = 0;
 
@@ -275,7 +492,8 @@ RunSimulation(  const std::string environment,
 
     SpectrumWifiPhyHelper spectrumPhy;
     spectrumPhy.SetChannel(spectrumChannel);
-    spectrumPhy.SetErrorRateModel("ns3::NistErrorRateModel");    spectrumPhy.Set("TxPowerStart", DoubleValue(TX_POWER_DBM));
+    spectrumPhy.SetErrorRateModel("ns3::NistErrorRateModel");
+    spectrumPhy.Set("TxPowerStart", DoubleValue(TX_POWER_DBM));
     spectrumPhy.Set("TxPowerEnd",   DoubleValue(TX_POWER_DBM));
 
     // Wifi and MAC
@@ -383,6 +601,10 @@ RunSimulation(  const std::string environment,
             int zone = static_cast<int>(randVar->GetValue(0, 3));
             double posX, posY, posZ;
 
+            // Keep the newer L3 script behavior: restrict apartment STAs to
+            // the AP room unless this line is removed for all-zone placement.
+            zone = 0;
+
             if (zone == 0)
             {
                 // Same room as AP
@@ -476,21 +698,28 @@ RunSimulation(  const std::string environment,
 
     Simulator::Stop(Seconds(10.0));
 
-    // SNR and position (Position implemented because apartment has some issues)
-    // The same L3 Rx callback serves both features; connect it when either is
-    // active. Node roles must be registered after the node containers exist.
+    // PHY-level SNR and position logging.
+    // We sample position at PhyRxBegin and emit the CSV row on RxOk/RxError/RxDrop,
+    // so failed decodes are logged too and the sampled position no longer depends
+    // on whether the packet made it up to IPv4/TCP.
     if (enable_snr || enable_positions)
     {
         RegisterStaNodes(wifiStaNodes);
 
         if (enable_snr)
-            ofs_snr << "Time_s,STA_NodeId,pos_x,pos_y,pos_z,PathLoss_dB,RxPower_dBm,SNR_dB\n";
+            ofs_snr << "Time_s,STA_NodeId,pos_x,pos_y,pos_z,PathLoss_dB,RxPower_dBm,SNR_dB,RxStatus,PacketUid,PacketSize_Bytes,FailureReason\n";
 
         if (enable_positions)
-            ofs_position << "Time_s,STA_NodeId,pos_x,pos_y,pos_z\n";
+            ofs_position << "Time_s,STA_NodeId,pos_x,pos_y,pos_z,RxStatus,PacketUid,PacketSize_Bytes,FailureReason\n";
 
-        Config::Connect("/NodeList/*/$ns3::Ipv4L3Protocol/Rx",
-                        MakeCallback(&RxTraceWithAddresses));
+        Config::Connect("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Phy/$ns3::WifiPhy/PhyRxBegin",
+                        MakeCallback(&PhyRxBeginTrace));
+        Config::Connect("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Phy/$ns3::WifiPhy/PhyRxDrop",
+                        MakeCallback(&PhyRxDropTrace));
+        Config::Connect("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Phy/$ns3::WifiPhy/State/RxError",
+                        MakeCallback(&PhyRxErrorTrace));
+        Config::Connect("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Phy/$ns3::WifiPhy/State/RxOk",
+                        MakeCallback(&PhyRxOkTrace));
     }
 
     // Log for throughput:
@@ -531,9 +760,9 @@ int
 main(int argc, char* argv[])
 {
    bool verbose = false;
-   bool caching = true;
-   //std::string environment = "simple_room/simple_room.xml";
-   std::string environment = "apartment/apartment.xml";
+   bool caching = false;
+   std::string environment = "simple_room/simple_room.xml";
+   //std::string environment = "apartment/apartment.xml";
    int wifi_channel_num = 40;
    bool mobile_scenario = false;
    double mobile_speed = 1.0;
@@ -554,15 +783,15 @@ main(int argc, char* argv[])
    cmd.AddValue("sim_min_stas", "Min number of STAs to be simulated", sim_min_stas);
    cmd.AddValue("sim_max_stas", "Max number of STAs to be simulated", sim_max_stas);
    cmd.AddValue("environment", "Xml file of Sionna environment", environment);
-   cmd.AddValue("caching", "Enable caching of propagation delay and loss", caching);
+   cmd.AddValue("caching", "Enable caching of propagation delay and loss; disabled by default", caching);
    cmd.AddValue("mode", "The Sionna mode", mode);
    cmd.AddValue("sub_mode", "The Sionna submode", sub_mode);
    cmd.AddValue("verbose", "Enable logging", verbose);
    cmd.AddValue("minCoherenceTimeMs", "The minimal coherence time in msec", min_coherence_time_ms);
    cmd.AddValue("dataRate", "Data Rate in Mb/s", data_Rate_mbps);
    cmd.AddValue("seed", "Set the seed for the run", seed);
-   cmd.AddValue("snr", "Enable per-packet SNR logging to snr_results.csv", enable_snr);
-   cmd.AddValue("positions", "Enable per-packet position logging to position_results.csv", enable_positions);
+   cmd.AddValue("snr", "Enable PHY-level per-reception SNR logging (including failed decodes) to snr_results.csv", enable_snr);
+   cmd.AddValue("positions", "Enable PHY-level per-reception position logging to position_results.csv", enable_positions);
    cmd.AddValue("txPower", "Transmit power in dBm (used by PHY and SNR math)", TX_POWER_DBM);
 
    cmd.Parse(argc, argv);
@@ -574,7 +803,7 @@ main(int argc, char* argv[])
    {
        ofs_position.open("position_results.csv");
        std::cout << "Position logging enabled → position_results.csv" << std::endl;
-       std::cout << "  (compatible with plot3d_mobile_csi.py as the position argument)" << std::endl;
+       std::cout << "  (now sampled at PHY reception start, with OK/ERROR/DROP status columns)" << std::endl;
    }
 
    if (verbose)
