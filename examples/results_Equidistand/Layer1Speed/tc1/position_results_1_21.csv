@@ -1,0 +1,5 @@
+Time_s,STA_NodeId,pos_x,pos_y,pos_z,RxStatus,PacketUid,PacketSize_Bytes,FailureReason
+1.00901,0,-8.55147,2.94205,1.6,OK,41,66,
+2.00001,0,-15.4813,2.62626,1.6,OK,64,66,
+3.00001,0,-22.474,2.3076,1.6,DROP,83,66,9
+4.00001,0,-29.4668,1.98893,1.6,DROP,105,66,9
