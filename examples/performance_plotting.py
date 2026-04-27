@@ -100,11 +100,18 @@ def default_apartment_server_datasets(base_dir: PathLike = "results_Apartment") 
     return {label: path for label, path in candidates.items() if path.exists()}
 
 
+def use_legacy_plot_style() -> None:
+    """Use the bright Matplotlib/Seaborn defaults used by the older notebook."""
+    plt.style.use("default")
+    sns.set_theme(context="notebook", style="white", palette="deep")
+
+
 def load_performance_data(
     datasets: Union[Mapping[str, PathLike], Sequence[DatasetSpec], DatasetSpec, PathLike],
     coherence_times: Optional[Iterable[float]] = None,
     seeds: Optional[Iterable[int]] = None,
     recursive: bool = True,
+    coherence_time_scale: float = 1.0,
 ) -> PerformanceData:
     specs = normalize_datasets(datasets)
     wanted_tc = _float_set(coherence_times)
@@ -127,7 +134,8 @@ def load_performance_data(
             if meta is None:
                 continue
 
-            kind, coherence_ms, seed = meta
+            kind, logged_coherence_value, seed = meta
+            coherence_ms = logged_coherence_value * coherence_time_scale
             if wanted_tc is not None and not _contains_float(wanted_tc, coherence_ms):
                 continue
             if wanted_seeds is not None and seed not in wanted_seeds:
@@ -268,6 +276,8 @@ def plot_metric_boxplot(
     drop_zero_throughput: bool = True,
     by_run: bool = True,
     agg: str = "mean",
+    legacy_style: bool = True,
+    title: Optional[str] = None,
     save: bool = False,
     output_dir: PathLike = "plots",
     filename: Optional[str] = None,
@@ -305,6 +315,9 @@ def plot_metric_boxplot(
     if plot_df.empty:
         raise ValueError(f"No data available for metric '{metric}'.")
 
+    if legacy_style:
+        use_legacy_plot_style()
+
     order = [format_coherence(v) for v in sorted(plot_df["coherence_ms"].dropna().unique())]
     plot_df["coherence_label"] = pd.Categorical(plot_df["coherence_label"], categories=order, ordered=True)
 
@@ -313,18 +326,35 @@ def plot_metric_boxplot(
     else:
         fig = ax.figure
 
+    single_dataset = plot_df["dataset"].nunique() == 1
+    hue = "coherence_label" if single_dataset and legacy_style else ("dataset" if not single_dataset else None)
     sns.boxplot(
         data=plot_df,
         x="coherence_label",
         y="value",
-        hue="dataset" if plot_df["dataset"].nunique() > 1 else None,
+        hue=hue,
+        palette="deep" if hue else None,
+        width=0.5,
         ax=ax,
     )
-    ax.set_xlabel("Coherence time")
-    ax.set_ylabel(metric_label(metric, interval_ms))
-    ax.set_title(f"{metric_title(metric)} boxplot")
-    ax.grid(True, axis="y", alpha=0.3)
-    if plot_df["dataset"].nunique() > 1:
+    if hue == "coherence_label" and ax.get_legend() is not None:
+        ax.get_legend().remove()
+
+    medians = plot_df.groupby("coherence_label", observed=True)["value"].median()
+    y_span = max(ax.get_ylim()[1] - ax.get_ylim()[0], 1e-9)
+    for xtick, label in enumerate(order):
+        if label in medians.index and pd.notna(medians.loc[label]):
+            ax.text(xtick, medians.loc[label] + 0.01 * y_span, f"{medians.loc[label]:.2f}",
+                    ha="center", size="x-small", color="black", weight="semibold")
+
+    ax.set_xlabel("Coherence Time in ms" if legacy_style else "Coherence time")
+    ax.set_ylabel("Mbps" if legacy_style and metric == "throughput" else metric_label(metric, interval_ms))
+    ax.set_title(title or f"{metric_title(metric)} boxplot")
+    if legacy_style:
+        ax.grid(False)
+    else:
+        ax.grid(True, axis="y", alpha=0.3)
+    if not single_dataset:
         ax.legend(title="Dataset")
     fig.tight_layout()
     save_figure(fig, filename or f"{metric}_boxplot.png", save=save, output_dir=output_dir)
