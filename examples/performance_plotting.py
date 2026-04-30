@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import math
 import re
+import struct
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
 
 import matplotlib.pyplot as plt
+from matplotlib.collections import LineCollection, PatchCollection
+from matplotlib.patches import Polygon
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -73,6 +77,13 @@ class PerformanceData:
                 }
             )
         return pd.DataFrame(frames)
+
+
+@dataclass(frozen=True)
+class SceneFloorPlan:
+    floor_polygons: Tuple[np.ndarray, ...]
+    wall_segments: Tuple[Tuple[Tuple[float, float], Tuple[float, float]], ...]
+    bounds: Tuple[float, float, float, float]
 
 
 def normalize_datasets(datasets: Union[Mapping[str, PathLike], Sequence[DatasetSpec], DatasetSpec, PathLike]) -> List[DatasetSpec]:
@@ -473,6 +484,103 @@ def plot_time_series(
     return fig, ax, samples
 
 
+def load_scene_floor_plan(scene_path: PathLike, floor_z_tolerance: float = 0.05) -> SceneFloorPlan:
+    """Load a Mitsuba/Sionna scene as a 2D floor-plan projection."""
+    scene_path = Path(scene_path)
+    mesh_paths = _scene_mesh_paths(scene_path)
+    if not mesh_paths:
+        raise ValueError(f"No PLY meshes found in scene: {scene_path}")
+
+    meshes = [_read_ply_mesh(path) for path in mesh_paths]
+    min_z = min(float(vertices[:, 2].min()) for vertices, _ in meshes if len(vertices))
+    floor_polygons: List[np.ndarray] = []
+    wall_segments: List[Tuple[Tuple[float, float], Tuple[float, float]]] = []
+    all_xy: List[np.ndarray] = []
+
+    for vertices, faces in meshes:
+        for face in faces:
+            if len(face) < 2:
+                continue
+            points = vertices[np.array(face, dtype=int)]
+            xy = points[:, :2]
+            all_xy.append(xy)
+
+            z_values = points[:, 2]
+            z_span = float(z_values.max() - z_values.min())
+            mean_z = float(z_values.mean())
+
+            if z_span <= 1e-3 and abs(mean_z - min_z) <= floor_z_tolerance:
+                polygon = _dedupe_consecutive_xy(xy)
+                if len(polygon) >= 3 and abs(_polygon_area(polygon)) > 1e-8:
+                    floor_polygons.append(polygon)
+            elif z_span > 1e-3:
+                segment_points = _dedupe_xy_points(xy)
+                if len(segment_points) == 2:
+                    wall_segments.append(_segment_tuple(segment_points[0], segment_points[1]))
+                else:
+                    for start, end in zip(xy, np.roll(xy, -1, axis=0)):
+                        if np.linalg.norm(start - end) > 1e-6:
+                            wall_segments.append(_segment_tuple(start, end))
+
+    if not all_xy:
+        raise ValueError(f"No mesh geometry found in scene: {scene_path}")
+
+    stacked = np.vstack(all_xy)
+    bounds = (
+        float(stacked[:, 0].min()),
+        float(stacked[:, 0].max()),
+        float(stacked[:, 1].min()),
+        float(stacked[:, 1].max()),
+    )
+    return SceneFloorPlan(
+        floor_polygons=tuple(floor_polygons),
+        wall_segments=tuple(_dedupe_segments(wall_segments)),
+        bounds=bounds,
+    )
+
+
+def draw_scene_floor_plan(
+    ax: plt.Axes,
+    floor_plan: Union[SceneFloorPlan, PathLike],
+    floor_color: str = "#ece8dd",
+    wall_color: str = "#2f3437",
+    floor_alpha: float = 0.55,
+    wall_alpha: float = 0.9,
+    wall_linewidth: float = 1.6,
+) -> SceneFloorPlan:
+    """Draw a loaded scene floor plan on an existing Matplotlib axis."""
+    if not isinstance(floor_plan, SceneFloorPlan):
+        floor_plan = load_scene_floor_plan(floor_plan)
+
+    if floor_plan.floor_polygons:
+        patches = [Polygon(polygon, closed=True) for polygon in floor_plan.floor_polygons]
+        ax.add_collection(
+            PatchCollection(
+                patches,
+                facecolor=floor_color,
+                edgecolor="none",
+                alpha=floor_alpha,
+                zorder=0,
+            )
+        )
+
+    if floor_plan.wall_segments:
+        ax.add_collection(
+            LineCollection(
+                floor_plan.wall_segments,
+                colors=wall_color,
+                linewidths=wall_linewidth,
+                alpha=wall_alpha,
+                zorder=1,
+            )
+        )
+
+    x_min, x_max, y_min, y_max = floor_plan.bounds
+    ax.update_datalim(np.array([[x_min, y_min], [x_max, y_max]]))
+    ax.autoscale_view()
+    return floor_plan
+
+
 def plot_positions(
     data: PerformanceData,
     dataset: Optional[str] = None,
@@ -480,6 +588,8 @@ def plot_positions(
     seed: Optional[int] = None,
     sta_node_ids: Optional[Iterable[int]] = None,
     ap_position: Optional[Tuple[float, float]] = (-1.0, 0.5),
+    scene_path: Optional[PathLike] = None,
+    room_labels: Optional[Mapping[str, Tuple[float, float]]] = None,
     use_snr_if_missing: bool = True,
     save: bool = False,
     output_dir: PathLike = "plots",
@@ -500,6 +610,7 @@ def plot_positions(
     ncols = min(2, max(1, len(coherence_values)))
     nrows = int(math.ceil(len(coherence_values) / ncols))
     fig, axes = plt.subplots(nrows, ncols, figsize=(6 * ncols, 5 * nrows), squeeze=False, sharex=True, sharey=True)
+    floor_plan = load_scene_floor_plan(scene_path) if scene_path is not None else None
 
     for ax in axes.ravel():
         ax.set_visible(False)
@@ -507,14 +618,34 @@ def plot_positions(
     for ax, coherence in zip(axes.ravel(), coherence_values):
         ax.set_visible(True)
         group = frame[frame["coherence_ms"] == coherence]
+        if floor_plan is not None:
+            draw_scene_floor_plan(ax, floor_plan)
+        if room_labels:
+            _draw_room_labels(ax, room_labels)
         if ap_position is not None:
             ax.scatter([ap_position[0]], [ap_position[1]], marker="^", s=110, color="tab:red", label="AP", zorder=5)
 
+        first_sta_id = group["sta_node_id"].min()
         for sta_id, sta_group in group.groupby("sta_node_id", sort=True):
             sta_group = sta_group.sort_values("time_s")
             ax.plot(sta_group["pos_x"], sta_group["pos_y"], linewidth=1.4, alpha=0.75, label=f"STA {int(sta_id)}")
-            ax.scatter(sta_group["pos_x"].iloc[0], sta_group["pos_y"].iloc[0], color="tab:green", s=45, zorder=4)
-            ax.scatter(sta_group["pos_x"].iloc[-1], sta_group["pos_y"].iloc[-1], color="tab:blue", marker="x", s=60, zorder=4)
+            ax.scatter(
+                sta_group["pos_x"].iloc[0],
+                sta_group["pos_y"].iloc[0],
+                color="tab:green",
+                s=45,
+                zorder=4,
+                label="STA start" if sta_id == first_sta_id else None,
+            )
+            ax.scatter(
+                sta_group["pos_x"].iloc[-1],
+                sta_group["pos_y"].iloc[-1],
+                color="tab:blue",
+                marker="x",
+                s=60,
+                zorder=4,
+                label="STA end" if sta_id == first_sta_id else None,
+            )
 
         ax.set_title(f"{format_coherence(coherence)} ({len(group)} samples)")
         ax.set_xlabel("X position [m]")
@@ -664,6 +795,193 @@ def metric_title(metric: MetricName) -> str:
     if metric == "computation_time":
         return "Computation time"
     return metric.replace("_", " ").title()
+
+
+def _scene_mesh_paths(scene_path: Path) -> List[Path]:
+    root = ET.parse(scene_path).getroot()
+    mesh_paths: List[Path] = []
+    for shape in root.iter("shape"):
+        if shape.attrib.get("type") != "ply":
+            continue
+        for child in shape:
+            if child.tag == "string" and child.attrib.get("name") == "filename":
+                mesh_paths.append(scene_path.parent / child.attrib["value"])
+                break
+    return mesh_paths
+
+
+_PLY_SCALAR_FORMATS = {
+    "char": "b",
+    "int8": "b",
+    "uchar": "B",
+    "uint8": "B",
+    "short": "h",
+    "int16": "h",
+    "ushort": "H",
+    "uint16": "H",
+    "int": "i",
+    "int32": "i",
+    "uint": "I",
+    "uint32": "I",
+    "float": "f",
+    "float32": "f",
+    "double": "d",
+    "float64": "d",
+}
+
+
+def _read_ply_mesh(path: Path) -> Tuple[np.ndarray, List[Tuple[int, ...]]]:
+    with path.open("rb") as handle:
+        header = _read_ply_header(handle)
+
+        if header["format"] != "binary_little_endian":
+            raise ValueError(f"Only binary_little_endian PLY files are supported: {path}")
+
+        vertex_props = header["vertex_props"]
+        vertex_format = "<" + "".join(_PLY_SCALAR_FORMATS[prop_type] for prop_type, _ in vertex_props)
+        vertex_struct = struct.Struct(vertex_format)
+        prop_names = [name for _, name in vertex_props]
+        try:
+            x_index = prop_names.index("x")
+            y_index = prop_names.index("y")
+            z_index = prop_names.index("z")
+        except ValueError as exc:
+            raise ValueError(f"PLY mesh is missing x/y/z vertex properties: {path}") from exc
+
+        vertices = np.empty((header["vertex_count"], 3), dtype=float)
+        for index in range(header["vertex_count"]):
+            values = vertex_struct.unpack(handle.read(vertex_struct.size))
+            vertices[index] = (values[x_index], values[y_index], values[z_index])
+
+        count_type, index_type = header["face_list_types"]
+        faces: List[Tuple[int, ...]] = []
+        for _ in range(header["face_count"]):
+            count = int(_read_ply_scalar(handle, count_type))
+            faces.append(tuple(int(_read_ply_scalar(handle, index_type)) for _ in range(count)))
+
+    return vertices, faces
+
+
+def _read_ply_header(handle) -> Dict[str, object]:
+    first_line = handle.readline().decode("ascii").strip()
+    if first_line != "ply":
+        raise ValueError("Not a PLY file")
+
+    ply_format = ""
+    vertex_count = 0
+    face_count = 0
+    vertex_props: List[Tuple[str, str]] = []
+    face_list_types: Optional[Tuple[str, str]] = None
+    section = ""
+
+    while True:
+        line = handle.readline().decode("ascii").strip()
+        if line == "end_header":
+            break
+        parts = line.split()
+        if not parts:
+            continue
+        if parts[0] == "format":
+            ply_format = parts[1]
+        elif parts[0] == "element":
+            section = parts[1]
+            if section == "vertex":
+                vertex_count = int(parts[2])
+            elif section == "face":
+                face_count = int(parts[2])
+        elif parts[0] == "property" and section == "vertex":
+            vertex_props.append((parts[1], parts[2]))
+        elif parts[0] == "property" and section == "face" and parts[1] == "list":
+            face_list_types = (parts[2], parts[3])
+
+    if not vertex_props:
+        raise ValueError("PLY file has no vertex properties")
+    if face_count and face_list_types is None:
+        raise ValueError("PLY file has faces but no face index list")
+    return {
+        "format": ply_format,
+        "vertex_count": vertex_count,
+        "face_count": face_count,
+        "vertex_props": vertex_props,
+        "face_list_types": face_list_types or ("uchar", "int"),
+    }
+
+
+def _read_ply_scalar(handle, scalar_type: str):
+    try:
+        fmt = _PLY_SCALAR_FORMATS[scalar_type]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported PLY scalar type: {scalar_type}") from exc
+    scalar_struct = struct.Struct("<" + fmt)
+    return scalar_struct.unpack(handle.read(scalar_struct.size))[0]
+
+
+def _dedupe_consecutive_xy(points: np.ndarray, decimals: int = 6) -> np.ndarray:
+    deduped: List[np.ndarray] = []
+    previous_key = None
+    for point in points:
+        key = tuple(np.round(point, decimals))
+        if key != previous_key:
+            deduped.append(point)
+            previous_key = key
+    if len(deduped) > 1 and tuple(np.round(deduped[0], decimals)) == tuple(np.round(deduped[-1], decimals)):
+        deduped.pop()
+    return np.array(deduped, dtype=float)
+
+
+def _dedupe_xy_points(points: np.ndarray, decimals: int = 6) -> np.ndarray:
+    deduped: List[np.ndarray] = []
+    seen = set()
+    for point in points:
+        key = tuple(np.round(point, decimals))
+        if key not in seen:
+            seen.add(key)
+            deduped.append(point)
+    return np.array(deduped, dtype=float)
+
+
+def _segment_tuple(start: np.ndarray, end: np.ndarray) -> Tuple[Tuple[float, float], Tuple[float, float]]:
+    return ((float(start[0]), float(start[1])), (float(end[0]), float(end[1])))
+
+
+def _dedupe_segments(
+    segments: Sequence[Tuple[Tuple[float, float], Tuple[float, float]]],
+    decimals: int = 5,
+) -> List[Tuple[Tuple[float, float], Tuple[float, float]]]:
+    deduped = []
+    seen = set()
+    for start, end in segments:
+        if math.isclose(start[0], end[0], abs_tol=1e-9) and math.isclose(start[1], end[1], abs_tol=1e-9):
+            continue
+        start_key = (round(start[0], decimals), round(start[1], decimals))
+        end_key = (round(end[0], decimals), round(end[1], decimals))
+        key = tuple(sorted([start_key, end_key]))
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append((start, end))
+    return deduped
+
+
+def _polygon_area(points: np.ndarray) -> float:
+    x_values = points[:, 0]
+    y_values = points[:, 1]
+    return 0.5 * float(np.dot(x_values, np.roll(y_values, -1)) - np.dot(y_values, np.roll(x_values, -1)))
+
+
+def _draw_room_labels(ax: plt.Axes, labels: Mapping[str, Tuple[float, float]]) -> None:
+    for label, (x_pos, y_pos) in labels.items():
+        ax.text(
+            x_pos,
+            y_pos,
+            label,
+            ha="center",
+            va="center",
+            fontsize="small",
+            color="#2f3437",
+            bbox={"boxstyle": "round,pad=0.2", "facecolor": "white", "edgecolor": "none", "alpha": 0.72},
+            zorder=2,
+        )
 
 
 def _read_throughput(path: Path, common: Dict[str, object]) -> pd.DataFrame:
