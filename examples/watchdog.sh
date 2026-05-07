@@ -25,6 +25,7 @@ START_SEED=1
 END_SEED=100
 
 # Simulation parameters exported to the runner script
+export RUN_LABEL=${RUN_LABEL:-$(date +%Y%m%d_%H%M%S)}
 export MODE=2
 export NUM_RES=16
 export NUM_STAS=1
@@ -32,7 +33,7 @@ export MOBILE_SPEED=1
 export DATA_RATE=600
 
 # Output: each coherence time gets its own subdirectory under OUTPUT_BASE
-OUTPUT_BASE="$EXAMPLES/results_BBOX/"
+OUTPUT_BASE="$EXAMPLES/results_BBOX/SpeedTest_${RUN_LABEL}"
 
 # Optional features passed through to the C++ binary
 export ENABLE_SNR=true
@@ -218,6 +219,7 @@ fi
 echo "[watchdog] ════════════════════════════════════════════"
 echo "[watchdog] Coherence times: ${COHERENCE_TIMES[*]} ms"
 echo "[watchdog] Seeds:           ${START_SEED}..${END_SEED}"
+echo "[watchdog] Run label:       ${RUN_LABEL}"
 echo "[watchdog] SNR logging:     ${ENABLE_SNR}"
 echo "[watchdog] Position logging: ${ENABLE_POSITIONS}"
 echo "[watchdog] Equidistant walk step: ${EQUIDISTANT_WALK_STEPS} ns"

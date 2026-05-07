@@ -20,6 +20,8 @@ COHERENCE_TIME=${COHERENCE_TIME:-0}
 SEED=${SEED:-1}
 DATA_RATE=${DATA_RATE:-600}
 OUTPUT_DIR=${OUTPUT_DIR:-"results/tc${COHERENCE_TIME}"}
+RUN_LABEL=${RUN_LABEL:-manual}
+RUN_ID=${RUN_ID:-$(date +%Y%m%d_%H%M%S)_$$}
 
 # Optional feature flags (set to "true" to enable)
 ENABLE_SNR=${ENABLE_SNR:-false}
@@ -27,6 +29,7 @@ ENABLE_POSITIONS=${ENABLE_POSITIONS:-false}
 
 # ── Prepare output directory ──────────────────────────────────────────────────
 mkdir -p "$OUTPUT_DIR"
+echo "[runner] label=${RUN_LABEL} run=${RUN_ID}"
 
 echo "[runner] coherence=${COHERENCE_TIME}ms seed=${SEED} → ${OUTPUT_DIR}"
 
@@ -49,7 +52,7 @@ EXTRA_FLAGS=""
   ${EXTRA_FLAGS}"
 
 # ── Move outputs into the run-specific directory ──────────────────────────────
-TAG="${COHERENCE_TIME}_${SEED}"
+TAG="${COHERENCE_TIME}_${SEED}_${RUN_LABEL}_${RUN_ID}"
 
 mv "throughput_results.csv" "${OUTPUT_DIR}/throughput_results_${TAG}.csv"
 
