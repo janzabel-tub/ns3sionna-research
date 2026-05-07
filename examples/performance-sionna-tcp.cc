@@ -761,8 +761,8 @@ main(int argc, char* argv[])
 {
    bool verbose = false;
    bool caching = false;
-   std::string environment = "simple_room/simple_room.xml";
-   //std::string environment = "apartment/apartment.xml";
+   //std::string environment = "simple_room/simple_room.xml";
+   std::string environment = "apartment/apartment.xml";
    int wifi_channel_num = 40;
    bool mobile_scenario = false;
    double mobile_speed = 1.0;
