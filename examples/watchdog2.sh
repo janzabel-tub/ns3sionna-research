@@ -24,7 +24,6 @@ COHERENCE_TIMES=(1 10 100 1000)
 START_SEED=1
 END_SEED=100
 
-
 # Simulation parameters exported to the runner script
 export MODE=2
 export NUM_RES=16
@@ -33,12 +32,12 @@ export MOBILE_SPEED=1
 export DATA_RATE=600
 
 # Output: each coherence time gets its own subdirectory under OUTPUT_BASE
-OUTPUT_BASE="$EXAMPLES/results"
+OUTPUT_BASE="$EXAMPLES/results_BBOX/"
 
 # Optional features passed through to the C++ binary
 export ENABLE_SNR=true
 export ENABLE_POSITIONS=true
-export EQUIDISTANT_WALK_STEPS=${EQUIDISTANT_WALK_STEPS:-0}
+export EQUIDISTANT_WALK_STEPS=${EQUIDISTANT_WALK_STEPS:-100000}
 
 # How many seconds between health-check polls
 CHECK_INTERVAL=60
