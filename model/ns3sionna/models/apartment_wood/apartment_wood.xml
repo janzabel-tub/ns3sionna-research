@@ -77,7 +77,7 @@
 	<shape type="ply" id="mesh-Plane_004" name="mesh-Plane_004">
 		<string name="filename" value="meshes/Plane_004.ply"/>
 		<boolean name="face_normals" value="true"/>
-		<ref id="mat-itu_concrete" name="bsdf"/>
+		<ref id="mat-itu_wood" name="bsdf"/>
 	</shape>
 	<shape type="ply" id="mesh-Plane_003" name="mesh-Plane_003">
 		<string name="filename" value="meshes/Plane_003.ply"/>
@@ -87,7 +87,7 @@
 	<shape type="ply" id="mesh-Plane_002" name="mesh-Plane_002">
 		<string name="filename" value="meshes/Plane_002.ply"/>
 		<boolean name="face_normals" value="true"/>
-		<ref id="mat-itu_concrete" name="bsdf"/>
+		<ref id="mat-itu_wood" name="bsdf"/>
 	</shape>
 	<shape type="ply" id="mesh-Plane_001" name="mesh-Plane_001">
 		<string name="filename" value="meshes/Plane_001.ply"/>
