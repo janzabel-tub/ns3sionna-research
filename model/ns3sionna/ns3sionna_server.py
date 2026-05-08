@@ -10,6 +10,7 @@ import time
 import GPUtil
 import zmq
 import gc
+import hashlib
 
 from common import message_pb2
 from common.message_debug import *
@@ -323,6 +324,14 @@ class SionnaEnv:
         return np.random.default_rng(seed_sequence)
 
 
+    def _path_solver_seed(self, *parts):
+        seed_text = "|".join(str(part) for part in parts).encode("utf-8")
+        seed = int.from_bytes(hashlib.blake2b(seed_text, digest_size=4).digest(),
+                              byteorder="little",
+                              signed=False)
+        return seed if seed != 0 else 1
+
+
     def _advance_nodes_to(self, target_time, node_ids=None):
         if node_ids is None:
             node_ids = list(self.node_info.keys())
@@ -393,6 +402,7 @@ class SionnaEnv:
         tx_node_id = csi_req.tx_node
         rx_node_id = csi_req.rx_node # this rx node must be included in result set
         req_sim_time = csi_req.time # we need CFR at that point in time [ns]
+        original_req_sim_time = req_sim_time
 
         assert self.time_evo_model == 'position'
 
@@ -438,6 +448,14 @@ class SionnaEnv:
         rx_nodes.remove(tx_node_id)
 
         self._place_tx_rx_nodes_with_lah(lah_time_vec, tx_node_id, rx_nodes)
+        rt_seed = self._path_solver_seed(self.my_seed,
+                                         original_req_sim_time,
+                                         tx_node_id,
+                                         rx_node_id,
+                                         self.mode,
+                                         self.sub_mode,
+                                         tuple(rx_nodes),
+                                         tuple(lah_time_vec))
 
         # Compute propagation paths
         paths = self.p_solver(scene=self.scene,
@@ -450,7 +468,8 @@ class SionnaEnv:
                          synthetic_array=self.rt_synthetic_array,
                          diffraction=self.rt_diffraction,  # costly
                          edge_diffraction=self.rt_edge_diffraction,  # rays that bend around edges
-                         diffraction_lit_region=self.rt_diffraction_lit_region)  # higher physical accuracy
+                         diffraction_lit_region=self.rt_diffraction_lit_region,
+                         seed=rt_seed)  # higher physical accuracy
 
         # AZU: sampling_frequency is only used if num_time_steps > 1
         # a: shape [num_rx, num_rx_ant, num_tx, num_tx_ant, num_paths, num_time_steps],
@@ -807,6 +826,13 @@ class SionnaEnv:
         rx_nodes = nodes_to_update
         rx_nodes.remove(tx_node)
         self._place_tx_rx_node(tx_node, rx_nodes)
+        rt_seed = self._path_solver_seed(self.my_seed,
+                                         req_sim_time,
+                                         tx_node,
+                                         rx_node,
+                                         req_mode,
+                                         self.sub_mode,
+                                         tuple(rx_nodes))
 
         # Compute propagation paths
         paths = self.p_solver(scene=self.scene,
@@ -819,7 +845,8 @@ class SionnaEnv:
                          synthetic_array=self.rt_synthetic_array,
                          diffraction=self.rt_diffraction,  # costly
                          edge_diffraction=self.rt_edge_diffraction,  # rays that bend around edges
-                         diffraction_lit_region=self.rt_diffraction_lit_region)  # higher physical accuracy
+                         diffraction_lit_region=self.rt_diffraction_lit_region,
+                         seed=rt_seed)  # higher physical accuracy
 
         # AZU: sampling_frequency is only used if num_time_steps > 1
         # a: shape [num_rx, num_rx_ant, num_tx, num_tx_ant, num_paths, num_time_steps],
