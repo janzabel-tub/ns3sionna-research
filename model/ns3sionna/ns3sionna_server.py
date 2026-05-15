@@ -1,9 +1,19 @@
+import os
+os.environ['TF_DETERMINISTIC_OPS'] = '1'
+os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':4096:2'
+# TODO: This turns on CPU mode, remove for GPU
+os.environ['MITSUBA_VARIANT'] = 'llvm_ad_mono'
+
 import sionna.rt # must be the first import as otherwise Python crashes
 import drjit as dr
 import traceback
-# dr.set_flag(dr.JitFlag.Debug, True)
 
-import os
+#dr.set_flag(dr.JitFlag.Debug, True)
+#import faulthandler
+#faulthandler.enable()
+#faulthandler.dump_traceback_later(60, repeat=True)
+
+
 import argparse
 import numpy as np
 import time
@@ -104,6 +114,8 @@ class SionnaEnv:
 
         # check GPU support
         self.gpus = tf.config.list_physical_devices("GPU")
+        # TODO: New for determinism
+        tf.config.experimental.enable_op_determinism()
 
         if len(self.gpus) > 0:
             print("TensorFlow GPU devices:", self.gpus)
