@@ -71,8 +71,9 @@ class SionnaEnv:
 
     author: Pilz, Zubow
     """
-    def __init__(self, model_folder='./models/', rt_fast=False, default_mode=MODE_P2P, rt_max_parallel_links=256, est_csi=True, VERBOSE=True,
-                 CHECKS_ENABLED=True, equidistant_walk_steps=0, mobility_bbox_margin=1.0, mobility_bbox_enabled=True):
+    def __init__(self, model_folder='./models/', rt_fast=False, default_mode=MODE_P2P, rt_max_parallel_links=256,
+                 rt_max_num_paths_per_src=10 ** 7, est_csi=True, VERBOSE=True, CHECKS_ENABLED=True,
+                 equidistant_walk_steps=0, mobility_bbox_margin=1.0, mobility_bbox_enabled=True):
         self.model_folder = model_folder
         self.rt_fast = rt_fast
         if rt_fast:
@@ -103,6 +104,7 @@ class SionnaEnv:
 
         # maximum number of parallel computations (needed to fit GPU)
         self.rt_max_parallel_links = rt_max_parallel_links
+        self.rt_max_num_paths_per_src = rt_max_num_paths_per_src
 
         # estimate small-scale fading
         self.est_csi = est_csi
@@ -472,6 +474,7 @@ class SionnaEnv:
         # Compute propagation paths
         paths = self.p_solver(scene=self.scene,
                          max_depth=self.rt_max_depth,
+                         max_num_paths_per_src=self.rt_max_num_paths_per_src,
                          samples_per_src=self.rt_samples_per_src,
                          los=self.rt_los,
                          specular_reflection=self.rt_specular_reflection,  # Can rays bounce off surfaces?
@@ -849,6 +852,7 @@ class SionnaEnv:
         # Compute propagation paths
         paths = self.p_solver(scene=self.scene,
                          max_depth=self.rt_max_depth,
+                         max_num_paths_per_src=self.rt_max_num_paths_per_src,
                          samples_per_src=self.rt_samples_per_src,
                          los=self.rt_los,
                          specular_reflection=self.rt_specular_reflection,  # Can rays bounce off surfaces?
@@ -1068,6 +1072,8 @@ if __name__ == '__main__':
     parser.add_argument("--default_mode", type=int, default=SionnaEnv.MODE_P2MP, help="Which mode to use if not set by ns3")
     parser.add_argument("--rt_fast", help="Use simplified raytracing for faster computations", action='store_true')
     parser.add_argument("--rt_max_parallel_links", type=int, default=256, help="Max no. of link simulated at once; depends on GPU memory")
+    parser.add_argument("--rt_max_num_paths_per_src", type=int, default=10 ** 7,
+                        help="Maximum number of paths per source stored by the Sionna RT PathSolver")
     parser.add_argument("--est_csi", help="Whether to estimate complex CSI per OFDM subcarrier", type=bool, default=True)
     parser.add_argument("--verbose", help="Whether to run in verbose mode", action='store_true')
     parser.add_argument("--equidistant_walk_steps", type=int, default=default_equidistant_walk_steps,
@@ -1082,13 +1088,16 @@ if __name__ == '__main__':
 
     print("ns3sionna v1.0")
     while True:
-        print("Using config: model_folder=%s, single_run=%s, mode=%d, rt_fast=%s, rt_max_parallel_links=%d, est_csi=%r, "
+        print("Using config: model_folder=%s, single_run=%s, mode=%d, rt_fast=%s, rt_max_parallel_links=%d, "
+              "rt_max_num_paths_per_src=%d, est_csi=%r, "
               "equidistant_walk_steps=%d, mobility_bbox_toggle=%s, mobility_bbox_margin=%.3f"
-              % (args.model_folder, args.single_run, args.default_mode, args.rt_fast, args.rt_max_parallel_links, args.est_csi,
+              % (args.model_folder, args.single_run, args.default_mode, args.rt_fast, args.rt_max_parallel_links,
+                 args.rt_max_num_paths_per_src, args.est_csi,
                  args.equidistant_walk_steps, args.mobility_bbox_toggle, args.mobility_bbox_margin))
         print("Waiting for new job ...")
         env = SionnaEnv(args.model_folder, args.rt_fast, args.default_mode, args.rt_max_parallel_links,
-                        args.est_csi, VERBOSE=args.verbose, equidistant_walk_steps=args.equidistant_walk_steps,
+                        rt_max_num_paths_per_src=args.rt_max_num_paths_per_src, est_csi=args.est_csi,
+                        VERBOSE=args.verbose, equidistant_walk_steps=args.equidistant_walk_steps,
                         mobility_bbox_margin=args.mobility_bbox_margin,
                         mobility_bbox_enabled=args.mobility_bbox_toggle)
         env.run()
