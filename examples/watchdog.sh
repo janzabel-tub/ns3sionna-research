@@ -18,19 +18,21 @@ SERVER_DIR="$EXAMPLES/../model/ns3sionna"
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # Coherence times (ms) to sweep over. Add or remove values freely.
-COHERENCE_TIMES=(1 10 100 1000)
+COHERENCE_TIMES=(1)
 
 # Seed range (inclusive)
 START_SEED=1
-END_SEED=100
+END_SEED=1
 
 # Simulation parameters exported to the runner script
 export RUN_LABEL=${RUN_LABEL:-$(date +%Y%m%d_%H%M%S)}
 export MODE=2
 export NUM_RES=16
 export NUM_STAS=1
-export MOBILE_SPEED=1
+export MOBILE_SPEED=7
 export DATA_RATE=600
+export ENVIRONMENT="apartment/apartment.xml"  # Use "munich/munich.xml" for Munich positions
+export TX_POWER=20
 
 # Output: each coherence time gets its own subdirectory under OUTPUT_BASE
 OUTPUT_BASE="$EXAMPLES/results_BBOX/SpeedTest_${RUN_LABEL}"
@@ -220,6 +222,8 @@ echo "[watchdog] ═════════════════════
 echo "[watchdog] Coherence times: ${COHERENCE_TIMES[*]} ms"
 echo "[watchdog] Seeds:           ${START_SEED}..${END_SEED}"
 echo "[watchdog] Run label:       ${RUN_LABEL}"
+echo "[watchdog] Environment:     ${ENVIRONMENT}"
+echo "[watchdog] Tx power:        ${TX_POWER} dBm"
 echo "[watchdog] SNR logging:     ${ENABLE_SNR}"
 echo "[watchdog] Position logging: ${ENABLE_POSITIONS}"
 echo "[watchdog] Equidistant walk step: ${EQUIDISTANT_WALK_STEPS} ns"

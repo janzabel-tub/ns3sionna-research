@@ -5,7 +5,7 @@
 #
 # Required env vars (all have defaults for standalone use):
 #   MODE, NUM_RES, NUM_STAS, MOBILE_SPEED, COHERENCE_TIME, SEED,
-#   DATA_RATE, OUTPUT_DIR, ENABLE_SNR, ENABLE_POSITIONS
+#   DATA_RATE, ENVIRONMENT, TX_POWER, OUTPUT_DIR, ENABLE_SNR, ENABLE_POSITIONS
 
 set -euo pipefail
 
@@ -19,6 +19,8 @@ MOBILE_SPEED=${MOBILE_SPEED:-1}
 COHERENCE_TIME=${COHERENCE_TIME:-0}
 SEED=${SEED:-1}
 DATA_RATE=${DATA_RATE:-600}
+ENVIRONMENT=${ENVIRONMENT:-"apartment/apartment.xml"}
+TX_POWER=${TX_POWER:-20}
 OUTPUT_DIR=${OUTPUT_DIR:-"results/tc${COHERENCE_TIME}"}
 RUN_LABEL=${RUN_LABEL:-manual}
 RUN_ID=${RUN_ID:-$(date +%Y%m%d_%H%M%S)_$$}
@@ -41,6 +43,7 @@ EXTRA_FLAGS=""
 # ── Run simulation ────────────────────────────────────────────────────────────
 ./ns3 run "ns3sionna-performance-sionna-tcp \
   --sim_max_stas=${NUM_STAS} \
+  --environment=${ENVIRONMENT} \
   --mobile_scenario=true \
   --mobile_speed=${MOBILE_SPEED}.0 \
   --caching=true \
@@ -48,6 +51,7 @@ EXTRA_FLAGS=""
   --sub_mode=${NUM_RES} \
   --minCoherenceTimeMs=${COHERENCE_TIME} \
   --dataRate=${DATA_RATE} \
+  --txPower=${TX_POWER} \
   --seed=${SEED} \
   ${EXTRA_FLAGS}"
 

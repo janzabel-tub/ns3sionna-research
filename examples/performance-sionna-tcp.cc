@@ -631,6 +631,18 @@ RunSimulation(  const std::string environment,
                 Vector(posX, posY, posZ));
         }
     }
+    else if (environment == "munich/munich.xml")
+    {
+        std::cout << "Munich executed" << std::endl;
+
+        wifiApNode.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(8.5, 21.0, 27.0));
+
+        for (uint32_t i = 0; i < numStas; i++)
+        {
+            wifiStaNodes.Get(i)->GetObject<MobilityModel>()->SetPosition(
+                Vector(45.0, 90.0, 1.5));
+        }
+    }
     else
     {
         wifiApNode.Get(0)->GetObject<MobilityModel>()->SetPosition(Vector(1.0, 2.0, 1.0));
