@@ -333,36 +333,6 @@ class SionnaEnv:
         return pos
 
 
-    def _clamp_inside_mobility_bounds(self, pos):
-        if self.mobility_bounds is None:
-            return pos
-
-        xmin, xmax, ymin, ymax = self.mobility_bounds
-        bounds = ((xmin, xmax), (ymin, ymax))
-        eps = 1e-7
-        pos = pos.copy()
-
-        for axis, (lower, upper) in enumerate(bounds):
-            if upper - lower <= 2 * eps:
-                pos[axis] = 0.5 * (lower + upper)
-            else:
-                pos[axis] = min(max(pos[axis], lower + eps), upper - eps)
-
-        return pos
-
-
-    def _invert_mobility_direction(self, direction, speed):
-        direction = -np.asarray(direction, dtype=float)
-        norm = np.linalg.norm(direction)
-
-        if not math.isfinite(norm) or norm <= 0:
-            direction = np.array([1.0, 0.0, 0.0])
-        else:
-            direction = direction / norm
-
-        return direction, direction * speed
-
-
     def _make_mobility_rng(self, node_id):
         seed_sequence = np.random.SeedSequence([int(self.my_seed), int(node_id), 0x51A0])
         return np.random.default_rng(seed_sequence)
@@ -741,11 +711,11 @@ class SionnaEnv:
             start_time = self.sim_time
         target_time = start_time + init_dt
 
-        pos = np.asarray(self.node_info[node_id].pos, dtype=float).copy()
-        velocity = np.asarray(self.node_info[node_id].velocity, dtype=float).copy()
+        pos = self.node_info[node_id].pos
+        velocity = self.node_info[node_id].velocity
 
         speed = np.linalg.norm(velocity)
-        if not math.isfinite(speed) or speed == 0:
+        if speed == 0:
             self.node_info[node_id].update_pos(target_time, pos.copy(), velocity.copy(), False)
             self.node_info[node_id].check_set_new_velocity(target_time, 0)
             return
@@ -756,68 +726,58 @@ class SionnaEnv:
         distance = speed * dt / 1e9 # convert dt into sec
         total_moved_distance = distance
 
-        if self.mobility_bounds is not None:
-            started_outside_bounds = not self._is_inside_mobility_bounds(pos)
-            original_pos = pos.copy()
-            pos = self._clamp_inside_mobility_bounds(pos)
-
-        if self.mobility_bounds is not None and started_outside_bounds:
-            warnings.warn(f"Node {node_id} started outside mobility bbox at {original_pos}; clamping inside.",
-                          UserWarning)
-            direction, velocity = self._invert_mobility_direction(direction, speed)
-
-        max_mobility_bounces = 128
-        mobility_bounces = 0
-
         while distance > 1e-9:
-            mobility_bounces += 1
-            if mobility_bounces > max_mobility_bounces:
-                warnings.warn(f"Node {node_id} exceeded {max_mobility_bounces} mobility bounces "
-                              f"while walking to {target_time}ns; stopping at {pos}.",
-                              UserWarning)
-                break
-
-            bbox_hit = self._next_mobility_bbox_hit(pos, direction, distance)
-            ray_distance = distance
-            if bbox_hit is not None:
-                ray_distance = min(ray_distance, bbox_hit[0])
-
             # Create a ray
             ray = mi.Ray3f(mi.Point3f(pos), mi.Vector3f(direction))
-            ray.maxt = mi.Float(ray_distance)
+            ray.maxt = mi.Float(distance)
 
             # Calculate the intersection of the ray with the scene
             si = self.scene.mi_scene.ray_intersect(ray, mi.RayFlags.Minimal, False, True)
 
             if si.is_valid():
-                # If the ray hits an object, turn around and continue along the incoming path.
+                # If the ray hits an object, calculate the reflection
 
                 # The intersection point (position) is set back by one centimeter to prevent cases
                 # where the intersection point is found behind a wall
                 t_np = si.t.numpy()
-                t = min(max(float(t_np[0]) - 0.01, 0.0), ray_distance, distance)
+                t = min(max(float(t_np[0]) - 0.01, 0.0), distance)
                 pos = pos + t * direction
+
+                # The reflected direction is calculated in the z plane
+                n = np.squeeze(si.n.numpy())
+                n = np.array([n[1], -n[0], 0.0])
+                n = n / np.linalg.norm(n)
+
+                mob_theta = self.node_info[node_id].get_next_direction_angle()
+                direction = - (direction - 2 * (np.dot(direction, n) + mob_theta) * n)
+
+                velocity = direction * speed
+
+                # make sure we do not change speed
+                velocity = (velocity / np.linalg.norm(velocity)) * speed
+                direction = velocity / speed
+
                 distance -= t
 
-                direction, velocity = self._invert_mobility_direction(direction, speed)
-                pos = pos + min(1e-7, distance) * direction
-
-                if not self._is_inside_mobility_bounds(pos):
-                    pos = self._clamp_inside_mobility_bounds(pos)
-
             else:
+                bbox_hit = self._next_mobility_bbox_hit(pos, direction, distance)
                 if bbox_hit is None:
                     # If the ray does not hit an object or the mobility bbox, calculate the next position
                     pos = pos + distance * direction
                     distance = 0.0
                 else:
                     t, hit_axes = bbox_hit
-                    t = min(max(t, 0.0), distance)
                     pos = pos + t * direction
                     distance -= t
 
+                    direction = direction.copy()
+                    for axis in hit_axes:
+                        direction[axis] *= -1
+
+                    velocity = direction * speed
+                    velocity = (velocity / np.linalg.norm(velocity)) * speed
+                    direction = velocity / speed
                     pos = self._nudge_inside_mobility_bounds(pos, hit_axes)
-                    direction, velocity = self._invert_mobility_direction(direction, speed)
 
         next_pos = pos
 
