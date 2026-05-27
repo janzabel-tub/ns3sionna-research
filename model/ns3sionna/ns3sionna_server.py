@@ -2,7 +2,7 @@ import os
 os.environ['TF_DETERMINISTIC_OPS'] = '1'
 os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':4096:2'
 # TODO: This turns on CPU mode, remove for GPU
-os.environ['MITSUBA_VARIANT'] = 'llvm_ad_mono'
+# os.environ['MITSUBA_VARIANT'] = 'llvm_ad_mono'
 
 import sionna.rt # must be the first import as otherwise Python crashes
 import drjit as dr

@@ -18,11 +18,11 @@ SERVER_DIR="$EXAMPLES/../model/ns3sionna"
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # Coherence times (ms) to sweep over. Add or remove values freely.
-COHERENCE_TIMES=(1)
+COHERENCE_TIMES=(0 1 10 100 1000)
 
 # Seed range (inclusive)
 START_SEED=1
-END_SEED=1
+END_SEED=10
 
 # Simulation parameters exported to the runner script
 export RUN_LABEL=${RUN_LABEL:-$(date +%Y%m%d_%H%M%S)}
@@ -35,7 +35,7 @@ export ENVIRONMENT="apartment/apartment.xml"  # Use "munich/munich.xml" for Muni
 export TX_POWER=20
 
 # Output: each coherence time gets its own subdirectory under OUTPUT_BASE
-OUTPUT_BASE="$EXAMPLES/results_BBOX/SpeedTest_${RUN_LABEL}"
+OUTPUT_BASE="$EXAMPLES/results_reworkedBBOX2/apartment"
 
 # Optional features passed through to the C++ binary
 export ENABLE_SNR=true
@@ -47,7 +47,7 @@ CHECK_INTERVAL=60
 
 # Max wall-clock seconds one run may take before it is treated like a crash.
 # Set to 0 to disable.
-RUN_TIMEOUT_SECONDS=${RUN_TIMEOUT_SECONDS:-1800}
+RUN_TIMEOUT_SECONDS=${RUN_TIMEOUT_SECONDS:-2100}
 
 # Max consecutive failures before a seed is abandoned and the sweep continues
 MAX_RETRIES=3

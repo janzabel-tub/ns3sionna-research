@@ -56,7 +56,7 @@ EXTRA_FLAGS=""
   ${EXTRA_FLAGS}"
 
 # ── Move outputs into the run-specific directory ──────────────────────────────
-TAG="${COHERENCE_TIME}_${SEED}_${RUN_LABEL}_${RUN_ID}"
+TAG="${COHERENCE_TIME}_${SEED}" # _${RUN_LABEL}_${RUN_ID}
 
 mv "throughput_results.csv" "${OUTPUT_DIR}/throughput_results_${TAG}.csv"
 
