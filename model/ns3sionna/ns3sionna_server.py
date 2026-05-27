@@ -64,6 +64,12 @@ class SionnaEnv:
     MODE_P2MP       = 2
     # compute also future channels; used only if the transmitter is static (receivers are mobile)
     MODE_P2MP_LAH   = 3
+    MOBILITY_BBOX_EPS = 1e-7
+    MOBILITY_COLLISION_EPS = 1e-9
+    MOBILITY_COLLISION_NUDGE = 1e-7
+    MAX_MOBILITY_BOUNCES = 256
+    SPEED_OF_LIGHT_M_PER_S = 299792458.0
+    UNREACHABLE_WB_LOSS_DB = 300.0
 
     """
     This class represents the Sionna component of ns3sionna. It represents the environment where the node
@@ -318,7 +324,7 @@ class SionnaEnv:
 
         xmin, xmax, ymin, ymax = self.mobility_bounds
         bounds = ((xmin, xmax), (ymin, ymax))
-        eps = 1e-7
+        eps = self.MOBILITY_BBOX_EPS
         pos = pos.copy()
 
         for axis in hit_axes:
@@ -331,6 +337,129 @@ class SionnaEnv:
                 pos[axis] = min(max(pos[axis], lower + eps), upper - eps)
 
         return pos
+
+
+    def _clamp_inside_mobility_bounds(self, pos):
+        if self.mobility_bounds is None:
+            return pos.copy()
+
+        xmin, xmax, ymin, ymax = self.mobility_bounds
+        bounds = ((xmin, xmax), (ymin, ymax))
+        eps = self.MOBILITY_BBOX_EPS
+        pos = pos.copy()
+
+        for axis, (lower, upper) in enumerate(bounds):
+            if upper - lower <= 2 * eps:
+                pos[axis] = 0.5 * (lower + upper)
+            else:
+                pos[axis] = min(max(pos[axis], lower + eps), upper - eps)
+
+        return pos
+
+
+    def _mobility_bbox_escape_sides(self, pos):
+        if self.mobility_bounds is None:
+            return []
+
+        xmin, xmax, ymin, ymax = self.mobility_bounds
+        bounds = ((xmin, xmax), (ymin, ymax))
+        escaped = []
+
+        for axis, (lower, upper) in enumerate(bounds):
+            if pos[axis] < lower:
+                escaped.append((axis, -1))
+            elif pos[axis] > upper:
+                escaped.append((axis, 1))
+
+        return escaped
+
+
+    def _normalize_mobility_direction(self, direction, speed):
+        direction = np.asarray(direction, dtype=float)
+        norm = np.linalg.norm(direction)
+
+        if not math.isfinite(norm) or norm <= 0:
+            direction = np.array([1.0, 0.0, 0.0])
+        else:
+            direction = direction / norm
+
+        return direction, direction * speed
+
+
+    def _reflect_mobility_bbox_direction(self, direction, speed, hit_axes):
+        direction = np.asarray(direction, dtype=float).copy()
+
+        for axis in hit_axes:
+            direction[axis] *= -1
+
+        return self._normalize_mobility_direction(direction, speed)
+
+
+    def _recover_outside_mobility_bounds(self, node_id, pos, direction, speed, warn=True):
+        escaped_sides = self._mobility_bbox_escape_sides(pos)
+        if not escaped_sides:
+            return pos, direction, direction * speed, False
+
+        original_pos = pos.copy()
+        pos = self._clamp_inside_mobility_bounds(pos)
+
+        direction = np.asarray(direction, dtype=float).copy()
+        for axis, side in escaped_sides:
+            if direction[axis] * side > 0:
+                direction[axis] *= -1
+
+        direction, velocity = self._normalize_mobility_direction(direction, speed)
+        if warn:
+            warnings.warn(f"Node {node_id} started outside mobility bbox at {original_pos}; "
+                          f"clamped to {pos} and reflected outward velocity components.",
+                          UserWarning)
+        return pos, direction, velocity, True
+
+
+    def _free_space_delay_ns(self, tx_pos, rx_pos):
+        tx_pos = np.asarray(tx_pos, dtype=float)
+        rx_pos = np.asarray(rx_pos, dtype=float)
+        distance = np.linalg.norm(tx_pos - rx_pos)
+
+        if not math.isfinite(distance):
+            return 0
+
+        return max(0, int(round(distance / self.SPEED_OF_LIGHT_M_PER_S * 1e9, 0)))
+
+
+    def _flat_normalized_cfr(self, h):
+        h = np.asarray(h)
+        if h.size > 0:
+            return np.ones(h.size, dtype=np.complex128)
+
+        return np.ones(len(self.frequencies), dtype=np.complex128)
+
+
+    def _extract_link_channel(self, tau_link, h_link, tx_node_id, rx_node_id, tx_pos, rx_pos, sim_time):
+        lnk_tau = np.asarray(np.squeeze(tau_link), dtype=float)
+        valid_tau = lnk_tau[np.isfinite(lnk_tau) & (lnk_tau >= 0)]
+
+        h = np.asarray(np.squeeze(h_link), dtype=np.complex128).reshape(-1)
+        power = np.mean(np.abs(h) ** 2) if h.size > 0 else float("nan")
+
+        invalid_delay = valid_tau.size == 0
+        invalid_power = not math.isfinite(float(power)) or power <= 0
+
+        if invalid_delay or invalid_power:
+            lnk_delay = self._free_space_delay_ns(tx_pos, rx_pos)
+            lnk_loss = self.UNREACHABLE_WB_LOSS_DB
+            h_normalized = self._flat_normalized_cfr(h)
+            warnings.warn(f"No valid Sionna path for {tx_node_id}->{rx_node_id} at {sim_time}ns "
+                          f"(invalid_delay={invalid_delay}, invalid_power={invalid_power}); "
+                          f"using unreachable fallback. tx_pos={tx_pos}, rx_pos={rx_pos}",
+                          UserWarning)
+            return lnk_delay, lnk_loss, h_normalized
+
+        lnk_delay = int(round(np.min(valid_tau) * 1e9, 0))
+        lnk_loss = float(-10 * np.log10(power))
+        h_normalized = h / np.sqrt(power)
+
+        return lnk_delay, lnk_loss, h_normalized
 
 
     def _make_mobility_rng(self, node_id):
@@ -530,18 +659,15 @@ class SionnaEnv:
 
                 rx_id = lah_time_idx * len(rx_nodes) + curr_rx_id
 
-                lnk_tau = np.squeeze(tau[rx_id, :, :, :, :])
-                lnk_delay = int(round(np.min(lnk_tau[lnk_tau >= 0] * 1e9), 0))
-
-                h = np.squeeze(h_raw[rx_id, :, :, :, :, ])
-
-                # see Parseval's theorem
-                lnk_loss = float(-10 * np.log10(np.mean(np.abs(h) ** 2)))
-
-                # for frequency-selective channel
-                power = np.mean(np.abs(h) ** 2)  # shape [batch_size, 1, 1, 1]
-
-                h_normalized = h / np.sqrt(power)
+                rx_pos = self.node_info[curr_rx_node].get_pos_at(lah_time)
+                lnk_delay, lnk_loss, h_normalized = self._extract_link_channel(
+                    tau[rx_id, :, :, :, :],
+                    h_raw[rx_id, :, :, :, :, ],
+                    tx_node_id,
+                    curr_rx_node,
+                    tx_pos,
+                    rx_pos,
+                    lah_time)
 
                 # plausibility test
                 if self.CHECKS_ENABLED:
@@ -552,7 +678,6 @@ class SionnaEnv:
                     print(f'{lah_time/1e9}s: {tx_node_id}->{curr_rx_node} lnk_delay = {lnk_delay}ns, wb_loss = {lnk_loss:.3f}dB, CFR shape: {h_normalized.shape}')
 
                 rx_node_info = csi.rx_nodes.add()
-                rx_pos = self.node_info[curr_rx_node].get_pos_at(lah_time)
                 rx_node_info.id = curr_rx_node
                 rx_node_info.position.x = rx_pos[0]
                 rx_node_info.position.y = rx_pos[1]
@@ -711,11 +836,18 @@ class SionnaEnv:
             start_time = self.sim_time
         target_time = start_time + init_dt
 
-        pos = self.node_info[node_id].pos
-        velocity = self.node_info[node_id].velocity
+        pos = np.asarray(self.node_info[node_id].pos, dtype=float).copy()
+        velocity = np.asarray(self.node_info[node_id].velocity, dtype=float).copy()
+
+        if not np.all(np.isfinite(pos)) or not np.all(np.isfinite(velocity)):
+            warnings.warn(f"Node {node_id} has non-finite mobility state: pos={pos}, velocity={velocity}; "
+                          f"replacing non-finite values with zero.",
+                          UserWarning)
+            pos = np.nan_to_num(pos, nan=0.0, posinf=0.0, neginf=0.0)
+            velocity = np.nan_to_num(velocity, nan=0.0, posinf=0.0, neginf=0.0)
 
         speed = np.linalg.norm(velocity)
-        if speed == 0:
+        if not math.isfinite(speed) or speed == 0:
             self.node_info[node_id].update_pos(target_time, pos.copy(), velocity.copy(), False)
             self.node_info[node_id].check_set_new_velocity(target_time, 0)
             return
@@ -725,42 +857,78 @@ class SionnaEnv:
         direction = velocity / speed
         distance = speed * dt / 1e9 # convert dt into sec
         total_moved_distance = distance
+        pos, direction, velocity, recovered = self._recover_outside_mobility_bounds(node_id, pos, direction, speed)
+        warned_outside_recovery = recovered
+        mobility_bounces = 0
 
         while distance > 1e-9:
+            if not self._is_inside_mobility_bounds(pos):
+                pos, direction, velocity, recovered = self._recover_outside_mobility_bounds(
+                    node_id,
+                    pos,
+                    direction,
+                    speed,
+                    warn=not warned_outside_recovery)
+                warned_outside_recovery = warned_outside_recovery or recovered
+
+            mobility_bounces += 1
+            if mobility_bounces > self.MAX_MOBILITY_BOUNCES:
+                warnings.warn(f"Node {node_id} exceeded {self.MAX_MOBILITY_BOUNCES} mobility bounces "
+                              f"while walking to {target_time}ns; stopping at {pos}.",
+                              UserWarning)
+                break
+
+            bbox_hit = self._next_mobility_bbox_hit(pos, direction, distance)
+            ray_distance = distance
+            if bbox_hit is not None:
+                ray_distance = min(ray_distance, bbox_hit[0])
+
             # Create a ray
             ray = mi.Ray3f(mi.Point3f(pos), mi.Vector3f(direction))
-            ray.maxt = mi.Float(distance)
+            ray.maxt = mi.Float(ray_distance)
 
             # Calculate the intersection of the ray with the scene
             si = self.scene.mi_scene.ray_intersect(ray, mi.RayFlags.Minimal, False, True)
 
+            scene_hit_before_bbox = False
+            scene_t = None
             if si.is_valid():
+                t_np = si.t.numpy()
+                scene_t = max(float(t_np[0]), 0.0)
+                scene_hit_before_bbox = bbox_hit is None or scene_t < bbox_hit[0] - self.MOBILITY_COLLISION_EPS
+
+            if scene_hit_before_bbox:
                 # If the ray hits an object, calculate the reflection
 
                 # The intersection point (position) is set back by one centimeter to prevent cases
                 # where the intersection point is found behind a wall
-                t_np = si.t.numpy()
-                t = min(max(float(t_np[0]) - 0.01, 0.0), distance)
+                t = min(max(scene_t - 0.01, 0.0), ray_distance, distance)
                 pos = pos + t * direction
+                distance -= t
 
                 # The reflected direction is calculated in the z plane
                 n = np.squeeze(si.n.numpy())
                 n = np.array([n[1], -n[0], 0.0])
-                n = n / np.linalg.norm(n)
+                n_norm = np.linalg.norm(n)
+                if not math.isfinite(n_norm) or n_norm <= 0:
+                    warnings.warn(f"Invalid scene-wall normal for node {node_id} at {pos}; "
+                                  f"reversing current scene-wall direction.",
+                                  UserWarning)
+                    direction = -direction
+                else:
+                    n = n / n_norm
 
-                mob_theta = self.node_info[node_id].get_next_direction_angle()
-                direction = - (direction - 2 * (np.dot(direction, n) + mob_theta) * n)
+                    mob_theta = self.node_info[node_id].get_next_direction_angle()
+                    direction = - (direction - 2 * (np.dot(direction, n) + mob_theta) * n)
 
-                velocity = direction * speed
+                direction, velocity = self._normalize_mobility_direction(direction, speed)
 
-                # make sure we do not change speed
-                velocity = (velocity / np.linalg.norm(velocity)) * speed
-                direction = velocity / speed
-
-                distance -= t
+                nudge = min(self.MOBILITY_COLLISION_NUDGE, distance)
+                if nudge > 0:
+                    pos = pos + nudge * direction
+                    distance -= nudge
 
             else:
-                bbox_hit = self._next_mobility_bbox_hit(pos, direction, distance)
                 if bbox_hit is None:
                     # If the ray does not hit an object or the mobility bbox, calculate the next position
                     pos = pos + distance * direction
@@ -770,13 +938,7 @@ class SionnaEnv:
                     pos = pos + t * direction
                     distance -= t
 
-                    direction = direction.copy()
-                    for axis in hit_axes:
-                        direction[axis] *= -1
-
-                    velocity = direction * speed
-                    velocity = (velocity / np.linalg.norm(velocity)) * speed
-                    direction = velocity / speed
+                    direction, velocity = self._reflect_mobility_bbox_direction(direction, speed, hit_axes)
                     pos = self._nudge_inside_mobility_bounds(pos, hit_axes)
 
         next_pos = pos
@@ -888,18 +1050,16 @@ class SionnaEnv:
         h_normalized_arr = []
 
         for rx_id, curr_rx_node in enumerate(rx_nodes):
-            lnk_tau = np.squeeze(tau[rx_id, :, :, :, :])
-            lnk_delay = int(round(np.min(lnk_tau[lnk_tau >= 0] * 1e9), 0))
-
-            h = np.squeeze(h_raw[rx_id, :, :, :, :, ])
-
-            # see Parseval's theorem
-            lnk_loss = float(-10 * np.log10(np.mean(np.abs(h) ** 2)))
-
-            # for frequency-selective channel
-            power = np.mean(np.abs(h) ** 2)  # shape [batch_size, 1, 1, 1]
-
-            h_normalized = h / np.sqrt(power)
+            tx_pos = self.node_info[tx_node].pos
+            rx_pos = self.node_info[curr_rx_node].pos
+            lnk_delay, lnk_loss, h_normalized = self._extract_link_channel(
+                tau[rx_id, :, :, :, :],
+                h_raw[rx_id, :, :, :, :, ],
+                tx_node,
+                curr_rx_node,
+                tx_pos,
+                rx_pos,
+                self.sim_time)
 
             # plausibility test
             if self.CHECKS_ENABLED:
