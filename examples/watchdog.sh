@@ -45,6 +45,10 @@ export EQUIDISTANT_WALK_STEPS=${EQUIDISTANT_WALK_STEPS:-100000}
 # How many seconds between health-check polls
 CHECK_INTERVAL=60
 
+# Max wall-clock seconds one run may take before it is treated like a crash.
+# Set to 0 to disable.
+RUN_TIMEOUT_SECONDS=${RUN_TIMEOUT_SECONDS:-1800}
+
 # Max consecutive failures before a seed is abandoned and the sweep continues
 MAX_RETRIES=3
 
@@ -144,20 +148,46 @@ cleanup() {
 trap cleanup SIGINT SIGTERM
 
 # ── run_until_success ─────────────────────────────────────────────────────────
-# Runs one (tc, seed) pair. Handles server crashes by restarting the server
-# and re-launching the run. Gives up after MAX_RETRIES consecutive failures,
-# including repeated server crashes for the same run.
+# Runs one (tc, seed) pair. Handles server crashes and run timeouts by
+# restarting the server and re-launching the run. Gives up after MAX_RETRIES
+# consecutive failures, including repeated server crashes/timeouts.
 #
 # Returns 0 when the run succeeds, 1 if MAX_RETRIES was hit.
 
 run_until_success() {
     local tc=$1 seed=$2
     local retries=0
+    local run_started_at elapsed
 
     start_run "$tc" "$seed"
+    run_started_at=$(date +%s)
 
     while true; do
         sleep "$CHECK_INTERVAL"
+
+        # Treat a stuck run like a crash: kill run + server, then relaunch both.
+        elapsed=$(( $(date +%s) - run_started_at ))
+        if [[ $RUN_TIMEOUT_SECONDS -gt 0 && $elapsed -ge $RUN_TIMEOUT_SECONDS ]] && kill -0 "$EXP_PID" 2>/dev/null; then
+            ((retries++)) || true
+            echo "[watchdog] Run timed out after ${elapsed}s (limit ${RUN_TIMEOUT_SECONDS}s) — restarting server and re-running seed=${seed} tc=${tc}ms"
+
+            if [[ $retries -ge $MAX_RETRIES ]]; then
+                echo "[watchdog] Max retries reached after repeated timeouts for tc=${tc}ms seed=${seed} — skipping"
+                stop_run
+                stop_server
+                sleep 2
+                start_server
+                return 1
+            fi
+
+            stop_run
+            stop_server
+            sleep 2
+            start_server
+            start_run "$tc" "$seed"
+            run_started_at=$(date +%s)
+            continue
+        fi
 
         # ── Server health check ───────────────────────────────────────────────
         if ! kill -0 "$SERVER_PID" 2>/dev/null; then
@@ -174,6 +204,7 @@ run_until_success() {
             sleep 2
             start_server
             start_run "$tc" "$seed"
+            run_started_at=$(date +%s)
             continue
         fi
 
@@ -197,6 +228,7 @@ run_until_success() {
                 echo "[watchdog] Retrying in 5s..."
                 sleep 5
                 start_run "$tc" "$seed"
+                run_started_at=$(date +%s)
             fi
         fi
     done
@@ -227,6 +259,7 @@ echo "[watchdog] Tx power:        ${TX_POWER} dBm"
 echo "[watchdog] SNR logging:     ${ENABLE_SNR}"
 echo "[watchdog] Position logging: ${ENABLE_POSITIONS}"
 echo "[watchdog] Equidistant walk step: ${EQUIDISTANT_WALK_STEPS} ns"
+echo "[watchdog] Run timeout:     ${RUN_TIMEOUT_SECONDS} s"
 echo "[watchdog] Output base:     ${OUTPUT_BASE}"
 echo "[watchdog] ════════════════════════════════════════════"
 
