@@ -11,6 +11,7 @@
 #include <map>
 #include <ostream>
 #include <set>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -36,8 +37,10 @@
 #include "ns3/ssid.h"
 
 #include "ns3/wifi-mac-header.h"
+#include "ns3/wifi-mac.h"
 #include "ns3/wifi-net-device.h"
 #include "ns3/wifi-phy.h"
+#include "ns3/wifi-tx-vector.h"
 #include "ns3/tcp-westwood-plus.h"
 #include "ns3/minstrel-wifi-manager.h"
 
@@ -53,6 +56,8 @@ uint64_t lastTotalRx100 = 0;
 std::ofstream ofs_throughput("throughput_results.csv");
 std::ofstream ofs_snr;      // --snr
 std::ofstream ofs_position; // --positions
+std::ofstream ofs_minstrel_rates;        // --minstrelRateTrace
+std::ofstream ofs_minstrel_rate_changes; // --minstrelRateTrace
 
 // ── SNR constants (match the Munich script; --txPower overrides TX_POWER_DBM) ──
 double TX_POWER_DBM = 20.0;                          // default PHY TX power, dBm
@@ -62,6 +67,7 @@ static const double NOISE_FLOOR_DBM =
     -174.0 + 10.0 * std::log10(80e6) + NOISE_FIGURE_DB; // Around -95dB
 
 std::set<uint32_t> g_staNodeIds;
+std::map<std::string, uint32_t> g_macNodeIds;
 static constexpr uint32_t INVALID_NODE_ID = 0xFFFFFFFF;
 
 struct PhyRxBeginSample
@@ -247,6 +253,142 @@ ExtractNodeIdFromContext(const std::string& context)
     {
         return INVALID_NODE_ID;
     }
+}
+
+uint32_t
+ExtractDeviceIdFromContext(const std::string& context)
+{
+    static const std::string needle = "/DeviceList/";
+    const size_t start = context.find(needle);
+    if (start == std::string::npos)
+    {
+        return INVALID_NODE_ID;
+    }
+
+    const size_t idBegin = start + needle.size();
+    const size_t idEnd = context.find('/', idBegin);
+    if (idEnd == std::string::npos || idEnd == idBegin)
+    {
+        return INVALID_NODE_ID;
+    }
+
+    try
+    {
+        return static_cast<uint32_t>(std::stoul(context.substr(idBegin, idEnd - idBegin)));
+    }
+    catch (const std::exception&)
+    {
+        return INVALID_NODE_ID;
+    }
+}
+
+std::string
+MacAddressToString(Mac48Address address)
+{
+    std::ostringstream stream;
+    stream << address;
+    return stream.str();
+}
+
+uint32_t
+LookupNodeIdForMac(Mac48Address address)
+{
+    const auto it = g_macNodeIds.find(MacAddressToString(address));
+    return it != g_macNodeIds.end() ? it->second : INVALID_NODE_ID;
+}
+
+void
+RegisterWifiDeviceMacs(const NetDeviceContainer& devices)
+{
+    for (uint32_t i = 0; i < devices.GetN(); ++i)
+    {
+        Ptr<WifiNetDevice> wifiDevice = DynamicCast<WifiNetDevice>(devices.Get(i));
+        if (!wifiDevice || !wifiDevice->GetMac() || !wifiDevice->GetNode())
+        {
+            continue;
+        }
+
+        g_macNodeIds[MacAddressToString(wifiDevice->GetMac()->GetAddress())] =
+            wifiDevice->GetNode()->GetId();
+    }
+}
+
+std::string
+WifiModeToString(WifiMode mode)
+{
+    return mode.GetUniqueName();
+}
+
+void
+MinstrelRateChangeTrace(std::string context, uint64_t oldRate, uint64_t newRate)
+{
+    if (!ofs_minstrel_rate_changes.is_open())
+    {
+        return;
+    }
+
+    const uint32_t nodeId = ExtractNodeIdFromContext(context);
+    const uint32_t deviceId = ExtractDeviceIdFromContext(context);
+
+    ofs_minstrel_rate_changes << Simulator::Now().GetSeconds()
+                              << "," << nodeId
+                              << "," << deviceId
+                              << "," << oldRate
+                              << "," << newRate
+                              << "," << (newRate / 1e6)
+                              << "\n";
+}
+
+void
+MinstrelTxVectorTrace(std::string context,
+                      Ptr<const Packet> packet,
+                      uint16_t channelFreqMhz,
+                      WifiTxVector txVector,
+                      MpduInfo mpduInfo,
+                      uint16_t staId)
+{
+    if (!ofs_minstrel_rates.is_open() || !packet)
+    {
+        return;
+    }
+
+    WifiMacHeader hdr;
+    if (packet->PeekHeader(hdr) == 0 || !hdr.IsData())
+    {
+        return;
+    }
+
+    const uint32_t txNodeId = ExtractNodeIdFromContext(context);
+    const uint32_t txDeviceId = ExtractDeviceIdFromContext(context);
+    const Mac48Address dstAddress = hdr.GetAddr1();
+    const Mac48Address srcAddress = hdr.GetAddr2();
+    const uint32_t srcNodeId = LookupNodeIdForMac(srcAddress);
+    const uint32_t dstNodeId = LookupNodeIdForMac(dstAddress);
+    const uint16_t channelWidthMhz = txVector.GetChannelWidth();
+    const uint16_t guardIntervalNs = txVector.GetGuardInterval();
+    const uint8_t nss = txVector.GetNss();
+    const uint64_t rateBps = txVector.GetMode().GetDataRate(txVector);
+
+    ofs_minstrel_rates << Simulator::Now().GetSeconds()
+                       << "," << txNodeId
+                       << "," << txDeviceId
+                       << "," << srcNodeId
+                       << "," << dstNodeId
+                       << "," << MacAddressToString(dstAddress)
+                       << "," << MacAddressToString(srcAddress)
+                       << "," << packet->GetUid()
+                       << "," << WifiModeToString(txVector.GetMode())
+                       << "," << rateBps
+                       << "," << (rateBps / 1e6)
+                       << "," << channelFreqMhz
+                       << "," << channelWidthMhz
+                       << "," << guardIntervalNs
+                       << "," << static_cast<uint32_t>(nss)
+                       << "," << txVector.IsAggregation()
+                       << "," << static_cast<uint32_t>(mpduInfo.type)
+                       << "," << mpduInfo.mpduRefNumber
+                       << "," << staId
+                       << "\n";
 }
 
 /**
@@ -439,11 +581,13 @@ RunSimulation(  const std::string environment,
                 const int data_Rate_mbps,
                 const int seed,
                 const bool enable_snr,
-                const bool enable_positions)
+                const bool enable_positions,
+                const bool enable_minstrel_rate_trace)
 {
     g_sinks.clear();
     g_phyRxBeginSamples.clear();
     g_phyRxFinalized.clear();
+    g_macNodeIds.clear();
     lastTotalRx10 = 0;
     lastTotalRx100 = 0;
 
@@ -537,6 +681,12 @@ RunSimulation(  const std::string environment,
                 "EnableBeaconJitter", BooleanValue(false));
     spectrumPhy.Set("ChannelSettings", StringValue(channelStr));
     apDevices = wifi.Install(spectrumPhy, mac, wifiApNode);
+
+    if (enable_minstrel_rate_trace)
+    {
+        RegisterWifiDeviceMacs(staDevices);
+        RegisterWifiDeviceMacs(apDevices);
+    }
 
     MobilityHelper mobility;
 
@@ -734,6 +884,17 @@ RunSimulation(  const std::string environment,
                         MakeCallback(&PhyRxOkTrace));
     }
 
+    if (enable_minstrel_rate_trace)
+    {
+        ofs_minstrel_rates << "Time_s,TxNodeId,TxDeviceId,SrcNodeId,DstNodeId,DstMac,SrcMac,PacketUid,Mode,Rate_bps,Rate_Mbps,ChannelFreq_MHz,ChannelWidth_MHz,GuardInterval_ns,Nss,IsAggregated,MpduType,MpduRefNumber,StaId\n";
+        ofs_minstrel_rate_changes << "Time_s,NodeId,DeviceId,OldRate_bps,NewRate_bps,NewRate_Mbps\n";
+
+        Config::Connect("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Phy/$ns3::WifiPhy/MonitorSnifferTx",
+                        MakeCallback(&MinstrelTxVectorTrace));
+        Config::Connect("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/RemoteStationManager/$ns3::MinstrelHtWifiManager/Rate",
+                        MakeCallback(&MinstrelRateChangeTrace));
+    }
+
     // Log for throughput:
     ofs_throughput << "Time,Throughput_Mbps,measuring interval in ms\n";
 
@@ -752,6 +913,11 @@ RunSimulation(  const std::string environment,
         ofs_snr.close();
     if (enable_positions)
         ofs_position.close();
+    if (enable_minstrel_rate_trace)
+    {
+        ofs_minstrel_rates.close();
+        ofs_minstrel_rate_changes.close();
+    }
 
     auto endTime = std::chrono::system_clock::now();
     std::chrono::duration<double> elapsedTime = endTime - startTime;
@@ -787,6 +953,7 @@ main(int argc, char* argv[])
    int seed = 1;
    bool enable_snr = false;
    bool enable_positions = false;
+   bool enable_minstrel_rate_trace = false;
 
    CommandLine cmd(__FILE__);
    cmd.AddValue("channel", "The WiFi channel number", wifi_channel_num);
@@ -804,6 +971,7 @@ main(int argc, char* argv[])
    cmd.AddValue("seed", "Set the seed for the run", seed);
    cmd.AddValue("snr", "Enable PHY-level per-reception SNR logging (including failed decodes) to snr_results.csv", enable_snr);
    cmd.AddValue("positions", "Enable PHY-level per-reception position logging to position_results.csv", enable_positions);
+   cmd.AddValue("minstrelRateTrace", "Enable Minstrel per-TX-rate and rate-change logging", enable_minstrel_rate_trace);
    cmd.AddValue("txPower", "Transmit power in dBm (used by PHY and SNR math)", TX_POWER_DBM);
 
    cmd.Parse(argc, argv);
@@ -816,6 +984,13 @@ main(int argc, char* argv[])
        ofs_position.open("position_results.csv");
        std::cout << "Position logging enabled → position_results.csv" << std::endl;
        std::cout << "  (now sampled at PHY reception start, with OK/ERROR/DROP status columns)" << std::endl;
+   }
+
+   if (enable_minstrel_rate_trace)
+   {
+       ofs_minstrel_rates.open("minstrel_rate_results.csv");
+       ofs_minstrel_rate_changes.open("minstrel_rate_changes.csv");
+       std::cout << "Minstrel rate tracing enabled -> minstrel_rate_results.csv, minstrel_rate_changes.csv" << std::endl;
    }
 
    if (verbose)
@@ -831,7 +1006,9 @@ main(int argc, char* argv[])
    std::cout << " caching " << caching << " env " << environment;
    std::cout << " mode " << mode << " submode " << sub_mode << std::endl;
    std::cout << " txPower " << TX_POWER_DBM << " dBm";
-   std::cout << " snr " << enable_snr << " positions " << enable_positions << std::endl;
+   std::cout << " snr " << enable_snr
+             << " positions " << enable_positions
+             << " minstrelRateTrace " << enable_minstrel_rate_trace << std::endl;
 
    uint32_t numStas = sim_min_stas;
    double computationTime = 0.0;
@@ -841,7 +1018,8 @@ main(int argc, char* argv[])
                                        mobile_speed, caching, mode, sub_mode,
                                        verbose, min_coherence_time_ms,
                                        data_Rate_mbps, seed, enable_snr,
-                                       enable_positions);
+                                       enable_positions,
+                                       enable_minstrel_rate_trace);
        numStas = numStas * 2;
    }
 
