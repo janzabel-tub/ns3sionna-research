@@ -1,20 +1,14 @@
 import os
 os.environ['TF_DETERMINISTIC_OPS'] = '1'
 os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':4096:2'
-# TODO: This turns on CPU mode, remove for GPU
 # os.environ['MITSUBA_VARIANT'] = 'llvm_ad_mono'
 
-import sionna.rt # must be the first import as otherwise Python crashes
+import sionna.rt
 import drjit as dr
 import traceback
 
-#dr.set_flag(dr.JitFlag.Debug, True)
-#import faulthandler
-#faulthandler.enable()
-#faulthandler.dump_traceback_later(60, repeat=True)
-
-
 import argparse
+import csv
 import numpy as np
 import time
 import GPUtil
@@ -79,7 +73,8 @@ class SionnaEnv:
     """
     def __init__(self, model_folder='./models/', rt_fast=False, default_mode=MODE_P2P, rt_max_parallel_links=256,
                  rt_max_num_paths_per_src=10 ** 7, est_csi=True, VERBOSE=True, CHECKS_ENABLED=True,
-                 equidistant_walk_steps=0, mobility_bbox_margin=1.0, mobility_bbox_enabled=True):
+                 equidistant_walk_steps=0, mobility_bbox_margin=1.0, mobility_bbox_enabled=True,
+                 wb_loss_log=None):
         self.model_folder = model_folder
         self.rt_fast = rt_fast
         if rt_fast:
@@ -144,9 +139,66 @@ class SionnaEnv:
             raise ValueError("mobility_bbox_margin must be non-negative")
         self.mobility_bbox_enabled = bool(mobility_bbox_enabled)
         self.mobility_bounds = None
+        self.wb_loss_log_path = wb_loss_log
+        self.wb_loss_log_file = None
+        self.wb_loss_log_writer = None
 
         if self.absolute_time_mobility:
             print(f'Absolute-time mobility enabled with internal walk step={self.equidistant_walk_steps}ns')
+
+        if self.wb_loss_log_path:
+            print(f'Wideband loss logging enabled: {self.wb_loss_log_path}')
+
+
+    def _get_wb_loss_log_writer(self):
+        if not self.wb_loss_log_path:
+            return None
+
+        if self.wb_loss_log_writer is not None:
+            return self.wb_loss_log_writer
+
+        log_dir = os.path.dirname(self.wb_loss_log_path)
+        if log_dir:
+            os.makedirs(log_dir, exist_ok=True)
+
+        write_header = not os.path.exists(self.wb_loss_log_path) or os.path.getsize(self.wb_loss_log_path) == 0
+        self.wb_loss_log_file = open(self.wb_loss_log_path, "a", newline="")
+        self.wb_loss_log_writer = csv.writer(self.wb_loss_log_file)
+
+        if write_header:
+            self.wb_loss_log_writer.writerow([
+                "time_ns", "mode", "sub_mode", "tx_id", "rx_id",
+                "tx_x", "tx_y", "tx_z", "rx_x", "rx_y", "rx_z",
+                "delay_ns", "wb_loss_db", "wb_gain_db", "wb_gain_linear",
+                "num_subcarriers",
+            ])
+            self.wb_loss_log_file.flush()
+
+        return self.wb_loss_log_writer
+
+
+    def _log_wb_loss_sample(self, time_ns, mode, tx_id, rx_id, tx_pos, rx_pos, delay_ns, wb_loss_db, h_normalized):
+        writer = self._get_wb_loss_log_writer()
+        if writer is None:
+            return
+
+        wb_gain_db = -float(wb_loss_db)
+        wb_gain_linear = 10 ** (wb_gain_db / 10)
+        writer.writerow([
+            int(time_ns), int(mode), int(self.sub_mode), int(tx_id), int(rx_id),
+            float(tx_pos[0]), float(tx_pos[1]), float(tx_pos[2]),
+            float(rx_pos[0]), float(rx_pos[1]), float(rx_pos[2]),
+            int(delay_ns), float(wb_loss_db), wb_gain_db, wb_gain_linear,
+            int(np.asarray(h_normalized).size),
+        ])
+        self.wb_loss_log_file.flush()
+
+
+    def _close_wb_loss_log(self):
+        if self.wb_loss_log_file is not None:
+            self.wb_loss_log_file.close()
+            self.wb_loss_log_file = None
+            self.wb_loss_log_writer = None
 
 
     def init_simulation_env(self, sim_init_msg):
@@ -684,6 +736,8 @@ class SionnaEnv:
                 rx_node_info.position.z = rx_pos[2]
                 rx_node_info.delay = lnk_delay
                 rx_node_info.wb_loss = lnk_loss
+                self._log_wb_loss_sample(lah_time, self.mode, tx_node_id, curr_rx_node, tx_pos, rx_pos,
+                                         lnk_delay, lnk_loss, h_normalized)
 
                 if self.est_csi:
                     rx_node_info.frequencies.extend(self.frequencies.tolist())
@@ -788,6 +842,8 @@ class SionnaEnv:
             rx_node_info.position.z = rx_pos[2]
             rx_node_info.delay = lnk_delay[idx]
             rx_node_info.wb_loss = lnk_loss[idx]
+            self._log_wb_loss_sample(self.sim_time, req_mode, tx_node_id, comp_rx_node_id, tx_pos, rx_pos,
+                                     lnk_delay[idx], lnk_loss[idx], h_normalized[idx])
 
             if self.est_csi:
                 rx_node_info.frequencies.extend(self.frequencies.tolist())
@@ -1207,6 +1263,7 @@ class SionnaEnv:
             socket.send(resp_msg.SerializeToString())
 
         socket.close()
+        self._close_wb_loss_log()
         print("Computed no. CSI samples: %d" % total_num_csi_samples)
         print("Sionna server socket closed.")
 
@@ -1244,22 +1301,26 @@ if __name__ == '__main__':
     parser.add_argument("--mobility_bbox_toggle", type=str_to_bool, nargs='?', const=True,
                         default=default_mobility_bbox_toggle,
                         help="Enable the scene bbox mobility guard (true/false)")
+    parser.add_argument("--wb_loss_log", type=str, default=None,
+                        help="Optional CSV path for per-link wideband loss logging")
     args = parser.parse_args()
 
     print("ns3sionna v1.0")
     while True:
         print("Using config: model_folder=%s, single_run=%s, mode=%d, rt_fast=%s, rt_max_parallel_links=%d, "
               "rt_max_num_paths_per_src=%d, est_csi=%r, "
-              "equidistant_walk_steps=%d, mobility_bbox_toggle=%s, mobility_bbox_margin=%.3f"
+              "equidistant_walk_steps=%d, mobility_bbox_toggle=%s, mobility_bbox_margin=%.3f, wb_loss_log=%s"
               % (args.model_folder, args.single_run, args.default_mode, args.rt_fast, args.rt_max_parallel_links,
                  args.rt_max_num_paths_per_src, args.est_csi,
-                 args.equidistant_walk_steps, args.mobility_bbox_toggle, args.mobility_bbox_margin))
+                 args.equidistant_walk_steps, args.mobility_bbox_toggle, args.mobility_bbox_margin,
+                 args.wb_loss_log))
         print("Waiting for new job ...")
         env = SionnaEnv(args.model_folder, args.rt_fast, args.default_mode, args.rt_max_parallel_links,
                         rt_max_num_paths_per_src=args.rt_max_num_paths_per_src, est_csi=args.est_csi,
                         VERBOSE=args.verbose, equidistant_walk_steps=args.equidistant_walk_steps,
                         mobility_bbox_margin=args.mobility_bbox_margin,
-                        mobility_bbox_enabled=args.mobility_bbox_toggle)
+                        mobility_bbox_enabled=args.mobility_bbox_toggle,
+                        wb_loss_log=args.wb_loss_log)
         env.run()
 
         if args.single_run:

@@ -36,6 +36,7 @@ export TX_POWER=20
 
 # Output: each coherence time gets its own subdirectory under OUTPUT_BASE
 OUTPUT_BASE="$EXAMPLES/results_reworkedBBOX2/apartment"
+WB_LOSS_LOG="$OUTPUT_BASE/wb_loss_${RUN_LABEL}.csv"
 
 # Optional features passed through to the C++ binary
 export ENABLE_SNR=true
@@ -88,9 +89,12 @@ clear_state() {
 
 start_server() {
     echo "[watchdog] Starting Sionna server..."
+    mkdir -p "$OUTPUT_BASE"
     cd "$SERVER_DIR" || { echo "Cannot cd to $SERVER_DIR"; exit 1; }
     export NS3SIONNA_MODEL_FOLDER="$SERVER_DIR/models"
-    python ns3sionna_server.py --equidistant_walk_steps "$EQUIDISTANT_WALK_STEPS" > "$SERVER_DIR/server.log" 2>&1 &
+    python ns3sionna_server.py \
+        --equidistant_walk_steps "$EQUIDISTANT_WALK_STEPS" \
+        --wb_loss_log "$WB_LOSS_LOG" > "$SERVER_DIR/server.log" 2>&1 &
     SERVER_PID=$!
     echo "[watchdog] Server PID=${SERVER_PID}, waiting for init..."
     sleep 8
@@ -258,6 +262,7 @@ echo "[watchdog] Environment:     ${ENVIRONMENT}"
 echo "[watchdog] Tx power:        ${TX_POWER} dBm"
 echo "[watchdog] SNR logging:     ${ENABLE_SNR}"
 echo "[watchdog] Position logging: ${ENABLE_POSITIONS}"
+echo "[watchdog] WB loss logging:  ${WB_LOSS_LOG}"
 echo "[watchdog] Equidistant walk step: ${EQUIDISTANT_WALK_STEPS} ns"
 echo "[watchdog] Run timeout:     ${RUN_TIMEOUT_SECONDS} s"
 echo "[watchdog] Output base:     ${OUTPUT_BASE}"

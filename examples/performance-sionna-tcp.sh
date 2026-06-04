@@ -5,7 +5,8 @@
 #
 # Required env vars (all have defaults for standalone use):
 #   MODE, NUM_RES, NUM_STAS, MOBILE_SPEED, COHERENCE_TIME, SEED,
-#   DATA_RATE, ENVIRONMENT, TX_POWER, OUTPUT_DIR, ENABLE_SNR, ENABLE_POSITIONS
+#   DATA_RATE, ENVIRONMENT, TX_POWER, OUTPUT_DIR, ENABLE_SNR, ENABLE_POSITIONS,
+#   ENABLE_RATE_TRACE
 
 set -euo pipefail
 
@@ -23,15 +24,15 @@ ENVIRONMENT=${ENVIRONMENT:-"apartment/apartment.xml"}
 TX_POWER=${TX_POWER:-20}
 OUTPUT_DIR=${OUTPUT_DIR:-"results/tc${COHERENCE_TIME}"}
 RUN_LABEL=${RUN_LABEL:-manual}
-RUN_ID=${RUN_ID:-$(date +%Y%m%d_%H%M%S)_$$}
 
 # Optional feature flags (set to "true" to enable)
 ENABLE_SNR=${ENABLE_SNR:-false}
 ENABLE_POSITIONS=${ENABLE_POSITIONS:-false}
+ENABLE_RATE_TRACE=${ENABLE_RATE_TRACE:-false}
 
 # ── Prepare output directory ──────────────────────────────────────────────────
 mkdir -p "$OUTPUT_DIR"
-echo "[runner] label=${RUN_LABEL} run=${RUN_ID}"
+echo "[runner] label=${RUN_LABEL}"
 
 echo "[runner] coherence=${COHERENCE_TIME}ms seed=${SEED} → ${OUTPUT_DIR}"
 
@@ -39,6 +40,7 @@ echo "[runner] coherence=${COHERENCE_TIME}ms seed=${SEED} → ${OUTPUT_DIR}"
 EXTRA_FLAGS=""
 [[ "$ENABLE_SNR"       == "true" ]] && EXTRA_FLAGS="$EXTRA_FLAGS --snr=true"
 [[ "$ENABLE_POSITIONS" == "true" ]] && EXTRA_FLAGS="$EXTRA_FLAGS --positions=true"
+[[ "$ENABLE_RATE_TRACE" == "true" ]] && EXTRA_FLAGS="$EXTRA_FLAGS --minstrelRateTrace=true"
 
 # ── Run simulation ────────────────────────────────────────────────────────────
 ./ns3 run "ns3sionna-performance-sionna-tcp \
@@ -56,7 +58,7 @@ EXTRA_FLAGS=""
   ${EXTRA_FLAGS}"
 
 # ── Move outputs into the run-specific directory ──────────────────────────────
-TAG="${COHERENCE_TIME}_${SEED}" # _${RUN_LABEL}_${RUN_ID}
+TAG="${COHERENCE_TIME}_${SEED}"
 
 mv "throughput_results.csv" "${OUTPUT_DIR}/throughput_results_${TAG}.csv"
 
@@ -68,5 +70,11 @@ mv "throughput_results.csv" "${OUTPUT_DIR}/throughput_results_${TAG}.csv"
 
 [[ "$ENABLE_POSITIONS" == "true" && -f "position_results.csv" ]] && \
     mv "position_results.csv"  "${OUTPUT_DIR}/position_results_${TAG}.csv"
+
+[[ "$ENABLE_RATE_TRACE" == "true" && -f "minstrel_rate_results.csv" ]] && \
+    mv "minstrel_rate_results.csv" "${OUTPUT_DIR}/minstrel_rate_results_${TAG}.csv"
+
+[[ "$ENABLE_RATE_TRACE" == "true" && -f "minstrel_rate_changes.csv" ]] && \
+    mv "minstrel_rate_changes.csv" "${OUTPUT_DIR}/minstrel_rate_changes_${TAG}.csv"
 
 echo "[runner] done → outputs saved to ${OUTPUT_DIR}/"
