@@ -47,16 +47,6 @@ std::string snrFname = "example-sionna-fixedTc-mobile-sensing-snr-position.csv";
 std::ofstream ofs_snr(snrFname);
 
 void
-RxTraceWithAddresses(std::string context, Ptr<const Packet> packet, const Address& from, const Address& to)
-{
-    NS_LOG_INFO("*** " << Simulator::Now().GetSeconds() << "s [" << context
-                       << "]: Server received packet of " << packet->GetSize()
-                       << " bytes from " << InetSocketAddress::ConvertFrom(from).GetIpv4()
-                       << " to " << InetSocketAddress::ConvertFrom(to).GetIpv4()
-                       << ":" << InetSocketAddress::ConvertFrom(to).GetPort());
-}
-
-void
 PhyRxOkTrace(std::string context, Ptr<const Packet> p, double snr, WifiMode mode, WifiPreamble preamble)
 {
     double snrDb = 10 * std::log10(snr);
@@ -87,6 +77,7 @@ main(int argc, char* argv[])
     int sim_end_time_sec = 10;
     int channel_width = 80;
     int min_coherence_time_ms = 100;
+    int data_Rate_mbps = 150;
     uint32_t seed = 1;
     double speed = 1.0;
 
@@ -99,6 +90,7 @@ main(int argc, char* argv[])
     cmd.AddValue("simEndTimeSec", "The total simulation time", sim_end_time_sec);
     cmd.AddValue("channelWidth", "The WiFi channel width in MHz", channel_width);
     cmd.AddValue("minCoherenceTimeMs", "The fixed coherence time in msec", min_coherence_time_ms);
+    cmd.AddValue("dataRate", "Data Rate in Mb/s", data_Rate_mbps);
     cmd.AddValue("seed", "Set the seed for the run", seed);
     cmd.AddValue("speed", "STA random-walk speed in m/s", speed);
     cmd.Parse(argc, argv);
@@ -106,8 +98,6 @@ main(int argc, char* argv[])
     if (verbose)
     {
         LogComponentEnable("ExampleSionnaFixedTcMobileSensing", LOG_INFO);
-        LogComponentEnable("UdpEchoClientApplication", LOG_LEVEL_INFO);
-        LogComponentEnable("UdpEchoServerApplication", LOG_LEVEL_INFO);
         LogComponentEnable("SionnaPropagationDelayModel", LOG_INFO);
         LogComponentEnable("SionnaPropagationLossModel", LOG_INFO);
         LogComponentEnable("SionnaPropagationCache", LOG_INFO);
@@ -218,23 +208,24 @@ main(int argc, char* argv[])
     Ipv4InterfaceContainer wifiStaInterfaces = address.Assign(staDevices);
     address.Assign(apDevices);
 
-    UdpEchoServerHelper echoServer(9);
-    ApplicationContainer serverApps = echoServer.Install(wifiStaNode);
-    serverApps.Start(Seconds(1.0));
-    serverApps.Stop(Seconds(sim_end_time_sec));
-
-    Config::Connect("/NodeList/*/ApplicationList/*/$ns3::UdpEchoServer/RxWithAddresses",
-                    MakeCallback(&RxTraceWithAddresses));
-
     Config::Connect("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Phy/$ns3::WifiPhy/State/RxOk",
                     MakeCallback(&PhyRxOkTrace));
 
-    UdpEchoClientHelper echoClient(wifiStaInterfaces.GetAddress(0), 9);
-    echoClient.SetAttribute("MaxPackets", UintegerValue(1000));
-    echoClient.SetAttribute("Interval", TimeValue(MilliSeconds(100)));
-    echoClient.SetAttribute("PacketSize", UintegerValue(1024));
+    PacketSinkHelper sinkHelper("ns3::TcpSocketFactory",
+                                InetSocketAddress(Ipv4Address::GetAny(), 9));
+    ApplicationContainer sinkApps = sinkHelper.Install(wifiStaNode);
+    sinkApps.Start(Seconds(0.9));
+    sinkApps.Stop(Seconds(sim_end_time_sec));
 
-    ApplicationContainer clientApps = echoClient.Install(wifiApNode);
+    OnOffHelper tcpClient("ns3::TcpSocketFactory",
+                          InetSocketAddress(wifiStaInterfaces.GetAddress(0), 9));
+    tcpClient.SetAttribute("PacketSize", UintegerValue(1472));
+    tcpClient.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
+    tcpClient.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
+    tcpClient.SetAttribute("DataRate",
+                           DataRateValue(DataRate(std::to_string(data_Rate_mbps) + "Mb/s")));
+
+    ApplicationContainer clientApps = tcpClient.Install(wifiApNode);
     clientApps.Start(Seconds(1.0));
     clientApps.Stop(Seconds(sim_end_time_sec));
 
