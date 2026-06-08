@@ -67,6 +67,24 @@ build_lib_example(
         LIBRARIES_TO_LINK ${libsionna} ${libwifi} ${libbuildings} ${libinternet} ${libapplications}
 )
 
+build_lib_example(
+        NAME ns3sionna-example-sionna-fixedTc
+        SOURCE_FILES example-sionna-fixedTc.cc
+        LIBRARIES_TO_LINK ${libsionna} ${libwifi} ${libbuildings} ${libinternet} ${libapplications}
+)
+
+build_lib_example(
+        NAME ns3sionna-example-sionna-fixedTc-mobile
+        SOURCE_FILES example-sionna-fixedTc-mobile.cc
+        LIBRARIES_TO_LINK ${libsionna} ${libwifi} ${libbuildings} ${libinternet} ${libapplications}
+)
+
+build_lib_example(
+        NAME ns3sionna-example-sionna-fixedTc-mobile-sensing
+        SOURCE_FILES example-sionna-fixedTc-mobile-sensing.cc
+        LIBRARIES_TO_LINK ${libsionna} ${libwifi} ${libbuildings} ${libinternet} ${libapplications}
+)
+
 
 # performance & benchmark scripts
 
