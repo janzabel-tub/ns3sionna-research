@@ -68,6 +68,18 @@ build_lib_example(
 )
 
 build_lib_example(
+        NAME ns3sionna-example-sionna-tcp-sensing-low
+        SOURCE_FILES example-sionna-tcp-sensing-low.cc
+        LIBRARIES_TO_LINK ${libsionna} ${libwifi} ${libbuildings} ${libinternet} ${libapplications}
+)
+
+build_lib_example(
+        NAME ns3sionna-example-sionna-tcp-minstrel
+        SOURCE_FILES example-sionna-tcp-minstrel.cc
+        LIBRARIES_TO_LINK ${libsionna} ${libwifi} ${libbuildings} ${libinternet} ${libapplications}
+)
+
+build_lib_example(
         NAME ns3sionna-example-sionna-fixedTc
         SOURCE_FILES example-sionna-fixedTc.cc
         LIBRARIES_TO_LINK ${libsionna} ${libwifi} ${libbuildings} ${libinternet} ${libapplications}
