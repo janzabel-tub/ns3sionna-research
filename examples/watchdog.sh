@@ -22,7 +22,7 @@ COHERENCE_TIMES=(0 1 10 100 1000)
 
 # Seed range (inclusive)
 START_SEED=1
-END_SEED=10
+END_SEED=1
 
 # Simulation parameters exported to the runner script
 export RUN_LABEL=${RUN_LABEL:-$(date +%Y%m%d_%H%M%S)}
@@ -30,17 +30,18 @@ export MODE=2
 export NUM_RES=16
 export NUM_STAS=1
 export MOBILE_SPEED=7
-export DATA_RATE=600
+export DATA_RATE=150
 export ENVIRONMENT="apartment/apartment.xml"  # Use "munich/munich.xml" for Munich positions
-export TX_POWER=20
+export TX_POWER=30
 
 # Output: each coherence time gets its own subdirectory under OUTPUT_BASE
-OUTPUT_BASE="$EXAMPLES/results_reworkedBBOX2/apartment"
+OUTPUT_BASE="$EXAMPLES/results_sionna2/regApartmenthighSpeed30dbm"
 WB_LOSS_LOG="$OUTPUT_BASE/wb_loss_${RUN_LABEL}.csv"
 
 # Optional features passed through to the C++ binary
 export ENABLE_SNR=true
 export ENABLE_POSITIONS=true
+export ENABLE_RATE_TRACE=false
 export EQUIDISTANT_WALK_STEPS=${EQUIDISTANT_WALK_STEPS:-100000}
 
 # How many seconds between health-check polls
@@ -48,7 +49,7 @@ CHECK_INTERVAL=60
 
 # Max wall-clock seconds one run may take before it is treated like a crash.
 # Set to 0 to disable.
-RUN_TIMEOUT_SECONDS=${RUN_TIMEOUT_SECONDS:-2100}
+RUN_TIMEOUT_SECONDS=${RUN_TIMEOUT_SECONDS:-1800}
 
 # Max consecutive failures before a seed is abandoned and the sweep continues
 MAX_RETRIES=3

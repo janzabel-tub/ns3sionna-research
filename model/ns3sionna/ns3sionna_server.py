@@ -1,9 +1,9 @@
 import os
-os.environ['TF_DETERMINISTIC_OPS'] = '1'
-os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':4096:2'
-# os.environ['MITSUBA_VARIANT'] = 'llvm_ad_mono'
+# Optional. Usually let Sionna RT choose automatically.
+# os.environ["MITSUBA_VARIANT"] = "cuda_ad_mono_polarized"
+# os.environ["MITSUBA_VARIANT"] = "llvm_ad_mono_polarized"
 
-import sionna.rt
+# import sionna.rt
 import drjit as dr
 import traceback
 
@@ -22,7 +22,6 @@ from common.message_debug import *
 from collections import deque
 import warnings
 
-import tensorflow as tf
 import mitsuba as mi
 import math
 from millify import millify
@@ -30,7 +29,6 @@ from millify import millify
 from ns3sionna_utils import subcarrier_frequencies, compute_coherence_time, SECOND, MILLISECOND, coherence_from_velocities, \
     MAX_COHERENCE_TIME
 
-import sionna
 from sionna.rt import load_scene, Camera, Transmitter, Receiver, PlanarArray, PathSolver
 
 # import mobility models
@@ -73,7 +71,7 @@ class SionnaEnv:
     """
     def __init__(self, model_folder='./models/', rt_fast=False, default_mode=MODE_P2P, rt_max_parallel_links=256,
                  rt_max_num_paths_per_src=10 ** 7, est_csi=True, VERBOSE=True, CHECKS_ENABLED=True,
-                 equidistant_walk_steps=0, mobility_bbox_margin=1.0, mobility_bbox_enabled=True,
+                 equidistant_walk_steps=0, mobility_bbox_margin=1.0, mobility_bbox_enabled=False,
                  wb_loss_log=None):
         self.model_folder = model_folder
         self.rt_fast = rt_fast
@@ -115,15 +113,16 @@ class SionnaEnv:
         self.VERBOSE = VERBOSE
         self.CHECKS_ENABLED = CHECKS_ENABLED
 
-        # check GPU support
-        self.gpus = tf.config.list_physical_devices("GPU")
-        # TODO: New for determinism
-        tf.config.experimental.enable_op_determinism()
+        # Replaced tensorflow block
+        try:
+            self.gpus = GPUtil.getGPUs()
+        except Exception:
+            self.gpus = []
 
-        if len(self.gpus) > 0:
-            print("TensorFlow GPU devices:", self.gpus)
+        if self.gpus:
+            print("NVIDIA GPU devices:", [f"{gpu.id}: {gpu.name}" for gpu in self.gpus])
         else:
-            print("No TensorFlow GPU devices visible")
+            print("No NVIDIA GPU devices visible to GPUtil")
 
         print("Mitsuba backend:", mi.variant())
 
@@ -265,7 +264,6 @@ class SionnaEnv:
 
         # Set the random seed for reproducibility
         np.random.seed(sim_init_msg.seed)
-        tf.random.set_seed(sim_init_msg.seed)
         self.my_seed = sim_init_msg.seed
 
         # configure mobility models

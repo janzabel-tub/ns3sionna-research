@@ -44,7 +44,7 @@
  * One AP sends TCP traffic to one mobile STA. The STA logs successful, failed,
  * and dropped PHY data-frame receptions with position, pathloss, RX power and SNR.
  *
- * To run: ./ns3 run ns3sionna-example-sionna-tcp-sensing-low
+ * To run: ./example-sionna-tcp-sensing-low.sh
  */
 
 using namespace ns3;

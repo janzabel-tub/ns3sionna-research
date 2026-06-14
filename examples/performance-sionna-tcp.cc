@@ -60,7 +60,7 @@ std::ofstream ofs_minstrel_rates;        // --minstrelRateTrace
 std::ofstream ofs_minstrel_rate_changes; // --minstrelRateTrace
 
 // ── SNR constants (match the Munich script; --txPower overrides TX_POWER_DBM) ──
-double TX_POWER_DBM = 20.0;                          // default PHY TX power, dBm
+double TX_POWER_DBM = 30.0;                          // default PHY TX power, dBm
 static constexpr double NOISE_FIGURE_DB  = 7.0;      // typical WiFi noise figure
 // Thermal noise floor for 80 MHz channel with the given noise figure
 static const double NOISE_FLOOR_DBM =
@@ -592,8 +592,8 @@ RunSimulation(  const std::string environment,
     lastTotalRx100 = 0;
 
     // Wifi config
-    int wifi_channel_num = 42; // center at 5200, set to 40
-    int channel_width = 80; //set to 20
+    int wifi_channel_num = 42; // center at 5200, set to 40 or 42
+    int channel_width = 80; //set to 20 or 80
     // Use a single seed value so ns-3 and the Python server share the same run seed.
     RngSeedManager::SetSeed(seed);
 
@@ -735,7 +735,7 @@ RunSimulation(  const std::string environment,
     randY->SetAttribute("Max", DoubleValue(3.9));
 
     // For Apartment Setting
-    if (environment == "apartment/apartment.xml")
+    if ((environment == "apartment/apartment.xml") || (environment == "apartment_wood/apartment_wood.xml"))
     {
         std::cout << "Apartment executed" << std::endl;
 
