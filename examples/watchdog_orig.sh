@@ -9,7 +9,7 @@
 # Notes:
 # - The original server has no --equidistant_walk_steps CLI option.
 # - COHERENCE_TIME is still passed to the ns-3 TCP example as
-#   --minCoherenceTimeMs. The original server receives that value through the
+#   --fixedCoherenceTimeMs. The original server receives that value through the
 #   simulation init message, but parts of the original server mark it as unused.
 
 set -uo pipefail

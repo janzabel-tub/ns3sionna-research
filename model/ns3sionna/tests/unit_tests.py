@@ -200,7 +200,7 @@ class TestServer(unittest.TestCase):
         sim_info.sim_init_msg.subcarrier_spacing        = 78125
         sim_info.sim_init_msg.mode                      = mode #1
         sim_info.sim_init_msg.sub_mode                  = 4 #1
-        sim_info.sim_init_msg.min_coherence_time_ms     = 100000
+        sim_info.sim_init_msg.fixed_coherence_time_ms     = 100000
         sim_info.sim_init_msg.time_evo_model            = 'position'
 
         n0 = sim_info.sim_init_msg.nodes.add()
@@ -228,7 +228,7 @@ class TestServer(unittest.TestCase):
         sim_info.sim_init_msg.subcarrier_spacing        = 78125
         sim_info.sim_init_msg.mode                      = mode #1
         sim_info.sim_init_msg.sub_mode                  = 8 #1
-        sim_info.sim_init_msg.min_coherence_time_ms     = 100000
+        sim_info.sim_init_msg.fixed_coherence_time_ms     = 100000
         sim_info.sim_init_msg.time_evo_model            = 'position'
 
         # first node static

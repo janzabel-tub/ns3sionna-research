@@ -64,23 +64,23 @@ cd ns-3.40
   --caching=true \
   --mode=2 \
   --sub_mode=16 \
-  --minCoherenceTimeMs=100 \
+  --fixedCoherenceTimeMs=100 \
   --dataRate=600 \
   --txPower=20 \
   --seed=1"
 ```
 
-`--minCoherenceTimeMs=0` keeps the velocity-based coherence time. Any non-zero
+`--fixedCoherenceTimeMs=0` keeps the velocity-based coherence time. Any non-zero
 value forces the server to use a fixed coherence time for channel validity.
 
 Note: in the current Jan branch the server scales this raw value by `100000 ns`,
 so the effective value is in 0.1 ms units:
 
 ```text
---minCoherenceTimeMs=1     -> 0.1 ms
---minCoherenceTimeMs=10    -> 1 ms
---minCoherenceTimeMs=100   -> 10 ms
---minCoherenceTimeMs=1000  -> 100 ms
+--fixedCoherenceTimeMs=1     -> 0.1 ms
+--fixedCoherenceTimeMs=10    -> 1 ms
+--fixedCoherenceTimeMs=100   -> 10 ms
+--fixedCoherenceTimeMs=1000  -> 100 ms
 ```
 
 For Munich, keep the same server command and change the environment:
@@ -95,7 +95,7 @@ cd ns-3.40
   --caching=true \
   --mode=2 \
   --sub_mode=16 \
-  --minCoherenceTimeMs=100 \
+  --fixedCoherenceTimeMs=100 \
   --dataRate=600 \
   --txPower=30 \
   --seed=1"
@@ -120,7 +120,7 @@ for tc in 0 10 100 1000; do
       --caching=true \
       --mode=2 \
       --sub_mode=16 \
-      --minCoherenceTimeMs=${tc} \
+      --fixedCoherenceTimeMs=${tc} \
       --dataRate=600 \
       --txPower=20 \
       --seed=${seed}"

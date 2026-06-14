@@ -144,8 +144,8 @@ class SionnaEnv:
 
         self.fc = sim_init_msg.frequency * 1e6
         self.fft_size = sim_init_msg.fft_size  # max FFT size
-        # todo: min Tc is not used
-        self.min_coherence_time_ms = sim_init_msg.min_coherence_time_ms # min Tc
+        # todo: fixed Tc is not used
+        self.fixed_coherence_time_ms = sim_init_msg.fixed_coherence_time_ms # fixed Tc
         self.subcarrier_spacing = sim_init_msg.subcarrier_spacing # in Hz
 
         print(f'Operating in mode: {self.mode}, sub_mode: {self.sub_mode}, time_evo_model: {self.time_evo_model}'
@@ -832,4 +832,3 @@ if __name__ == '__main__':
 
         if args.single_run:
             break
-

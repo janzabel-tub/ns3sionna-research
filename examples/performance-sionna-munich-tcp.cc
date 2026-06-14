@@ -165,7 +165,7 @@ RunSimulation(  const std::string environment,
                 const int mode,
                 const int sub_mode,
                 const bool verbose,
-                const int min_coherence_time_ms,
+                const int fixed_coherence_time_ms,
                 const int data_Rate_mbps,
                 const int seed)
 {
@@ -355,12 +355,12 @@ RunSimulation(  const std::string environment,
     double fc = get_center_freq(apDevices.Get(0));
 
     // set center frequency & bandwidth for Sionna
-    // int min_coherence_time_ms = tc;
+    // int fixed_coherence_time_ms = tc;
     sionnaHelper.Configure(fc,
                            channel_width,
                            getFFTSize(wifi_standard, channel_width),
                            getSubcarrierSpacing(wifi_standard),
-                           min_coherence_time_ms);
+                           fixed_coherence_time_ms);
 
     sionnaHelper.SetMode(mode);
     sionnaHelper.SetSubMode(sub_mode);
@@ -396,7 +396,7 @@ RunSimulation(  const std::string environment,
 
     std::ofstream ofs_compTime("computationtime.csv", std::ios::app);
 
-    ofs_compTime << min_coherence_time_ms << "," << computationTime << "," << mobile_speed << "," << seed << "\n";
+    ofs_compTime << fixed_coherence_time_ms << "," << computationTime << "," << mobile_speed << "," << seed << "\n";
 
     ofs_compTime.close();
 
@@ -421,7 +421,7 @@ main(int argc, char* argv[])
    int sim_max_stas = 4;
    int mode = 3;
    int sub_mode = 16;
-   int min_coherence_time_ms = 0;
+   int fixed_coherence_time_ms = 0;
    int data_Rate_mbps = 150;
    int seed = 1;
 
@@ -436,7 +436,7 @@ main(int argc, char* argv[])
    cmd.AddValue("mode", "The Sionna mode", mode);
    cmd.AddValue("sub_mode", "The Sionna submode", sub_mode);
    cmd.AddValue("verbose", "Enable logging", verbose);
-   cmd.AddValue("minCoherenceTimeMs", "The minimal coherence time in msec", min_coherence_time_ms);
+   cmd.AddValue("fixedCoherenceTimeMs", "The fixed coherence time in msec", fixed_coherence_time_ms);
    cmd.AddValue("dataRate", "Data Rate in Mb/s", data_Rate_mbps);
    cmd.AddValue("seed", "Set the seed for the run", seed);
    cmd.AddValue("txPower", "Transmit power in dBm (applied to all nodes)", TX_POWER_DBM);
@@ -462,7 +462,7 @@ main(int argc, char* argv[])
    while (computationTime < 2 * 60 * 60 && numStas <= (uint32_t)sim_max_stas) // as long as a single run is below 2h
    {
        computationTime = RunSimulation(environment, numStas, mobile_scenario, mobile_speed, caching, mode,
-            sub_mode, verbose, min_coherence_time_ms, data_Rate_mbps, seed);
+            sub_mode, verbose, fixed_coherence_time_ms, data_Rate_mbps, seed);
        numStas = numStas * 2;
    }
 

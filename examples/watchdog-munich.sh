@@ -13,7 +13,7 @@ set -uo pipefail
 EXAMPLES="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVER_DIR="$EXAMPLES/../model/ns3sionna"
 
-# Setting for the run, min coherence time, seeds
+# Setting for the run, fixed coherence time, seeds
 
 COHERENCE_TIMES=(1 10 100 1000)
 

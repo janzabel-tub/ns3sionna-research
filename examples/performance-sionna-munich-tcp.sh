@@ -39,7 +39,7 @@ echo "[runner-munich] coherence=${COHERENCE_TIME}ms seed=${SEED} → ${OUTPUT_DI
   --caching=true \
   --mode=${MODE} \
   --sub_mode=${NUM_RES} \
-  --minCoherenceTimeMs=${COHERENCE_TIME} \
+  --fixedCoherenceTimeMs=${COHERENCE_TIME} \
   --dataRate=${DATA_RATE} \
   --seed=${SEED}"
 

@@ -251,10 +251,10 @@ class SionnaEnv:
 
         self.fc = sim_init_msg.frequency * 1e6
         self.fft_size = sim_init_msg.fft_size  # max FFT size
-        if sim_init_msg.min_coherence_time_ms != 0:
-            self.min_coherence_time_ms = sim_init_msg.min_coherence_time_ms * 100000 # min Tc, multiplied for 0.1ms for fine grained control
+        if sim_init_msg.fixed_coherence_time_ms != 0:
+            self.fixed_coherence_time_ms = sim_init_msg.fixed_coherence_time_ms * 100000 # fixed Tc, multiplied for 0.1ms for fine grained control
         else:
-            self.min_coherence_time_ms = 0
+            self.fixed_coherence_time_ms = 0
         self.subcarrier_spacing = sim_init_msg.subcarrier_spacing # in Hz
 
         print(f'Operating in mode: {self.mode}, sub_mode: {self.sub_mode}, time_evo_model: {self.time_evo_model}'
@@ -290,8 +290,8 @@ class SionnaEnv:
                 self.chan_coh_time_mode3 = compute_coherence_time(speed_arr[0], self.fc, model='rappaport2')
             else:
                 self.chan_coh_time_mode3 = MAX_COHERENCE_TIME
-            #if self.min_coherence_time_ms != 0:
-            #   self.chan_coh_time_mode3 = self.min_coherence_time_ms
+            #if self.fixed_coherence_time_ms != 0:
+            #   self.chan_coh_time_mode3 = self.fixed_coherence_time_ms
 
             print(f'Running mode=3 w/ Tc: {self.chan_coh_time_mode3/1e6}ms')
 
@@ -622,9 +622,9 @@ class SionnaEnv:
                                                     self.node_info[tx_node_id].velocity, self.fc,
                                                     pos_tx=self.node_info[node_id].pos,
                                                     pos_rx=self.node_info[tx_node_id].pos)
-                    # JZA: Set min Tc
-                    if self.min_coherence_time_ms != 0:
-                        tc = self.min_coherence_time_ms
+                    # JZA: Set fixed Tc
+                    if self.fixed_coherence_time_ms != 0:
+                        tc = self.fixed_coherence_time_ms
 
                     csi_tc_arr.append(tc)
 
@@ -749,8 +749,8 @@ class SionnaEnv:
                                                 pos_tx=self.node_info[curr_rx_node].get_pos_at(lah_time),
                                                 pos_rx=self.node_info[tx_node_id].pos)
 
-                if self.min_coherence_time_ms != 0:
-                    tc = self.min_coherence_time_ms
+                if self.fixed_coherence_time_ms != 0:
+                    tc = self.fixed_coherence_time_ms
 
                 rx_node_info.end_time2 = csi.start_time + tc
                 csi_tc_arr.append(tc)
@@ -857,8 +857,8 @@ class SionnaEnv:
                                             pos_tx=self.node_info[comp_rx_node_id].pos,
                                             pos_rx=self.node_info[tx_node_id].pos)
             # JZA: This is used most often
-            if self.min_coherence_time_ms != 0:
-                tc = self.min_coherence_time_ms
+            if self.fixed_coherence_time_ms != 0:
+                tc = self.fixed_coherence_time_ms
 
             rx_node_info.end_time2 = tc
             csi_tc_arr.append(tc)

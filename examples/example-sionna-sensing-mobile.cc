@@ -138,7 +138,7 @@ main(int argc, char* argv[])
     int wifi_channel_num = 42; // center at 5210
     int sim_end_time_sec = 10;
     int channel_width = 80;
-    int min_coherence_time_ms = 0; // total sim duration
+    int fixed_coherence_time_ms = 0; // total sim duration
 
     CommandLine cmd(__FILE__);
     cmd.AddValue("verbose", "Enable logging", verbose);
@@ -148,7 +148,7 @@ main(int argc, char* argv[])
     cmd.AddValue("channel", "The WiFi channel number", wifi_channel_num);
     cmd.AddValue("simEndTimeSec", "The total simulation time", sim_end_time_sec);
     cmd.AddValue("channelWidth", "The WiFi channel width in MHz", channel_width);
-    cmd.AddValue("minCoherenceTimeMs", "The minimal coherence time in msec", min_coherence_time_ms);
+    cmd.AddValue("fixedCoherenceTimeMs", "The fixed coherence time in msec", fixed_coherence_time_ms);
     cmd.Parse(argc, argv);
 
     if (verbose)
@@ -296,7 +296,7 @@ main(int argc, char* argv[])
 
     // set center frequency & bandwidth for Sionna
     sionnaHelper.Configure(fc, channel_width,
-        getFFTSize(wifi_standard, channel_width), getSubcarrierSpacing(wifi_standard), min_coherence_time_ms);
+        getFFTSize(wifi_standard, channel_width), getSubcarrierSpacing(wifi_standard), fixed_coherence_time_ms);
     sionnaHelper.SetMode(SionnaHelper::MODE_P2P); // compute CSI for P2P only; no look-ahead computation
 
     // Tracing

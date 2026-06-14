@@ -225,7 +225,7 @@ main(int argc, char* argv[])
     int wifi_channel_num = 42;
     int sim_end_time_sec = 10;
     int channel_width = 80;
-    int min_coherence_time_ms = 100;
+    int fixed_coherence_time_ms = 100;
     int data_Rate_mbps = 150;
     uint32_t seed = 1;
     double speed = 1.0;
@@ -239,7 +239,7 @@ main(int argc, char* argv[])
     cmd.AddValue("channel", "The WiFi channel number", wifi_channel_num);
     cmd.AddValue("simEndTimeSec", "The total simulation time", sim_end_time_sec);
     cmd.AddValue("channelWidth", "The WiFi channel width in MHz", channel_width);
-    cmd.AddValue("minCoherenceTimeMs", "The fixed coherence time in msec", min_coherence_time_ms);
+    cmd.AddValue("fixedCoherenceTimeMs", "The fixed coherence time in msec", fixed_coherence_time_ms);
     cmd.AddValue("dataRate", "Data Rate in Mb/s", data_Rate_mbps);
     cmd.AddValue("seed", "Set the seed for the run", seed);
     cmd.AddValue("speed", "STA random-walk speed in m/s", speed);
@@ -399,7 +399,7 @@ main(int argc, char* argv[])
                            channel_width,
                            getFFTSize(wifi_standard, channel_width),
                            getSubcarrierSpacing(wifi_standard),
-                           min_coherence_time_ms);
+                           fixed_coherence_time_ms);
     sionnaHelper.SetMode(SionnaHelper::MODE_P2P);
 
     Config::Connect("/NodeList/*/DeviceList/*/$ns3::WifiNetDevice/Phy/$ns3::WifiPhy/MonitorSnifferTx",
