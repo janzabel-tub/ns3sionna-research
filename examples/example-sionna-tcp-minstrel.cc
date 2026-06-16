@@ -43,7 +43,7 @@
  * One AP sends TCP traffic to one mobile STA. The example logs the selected
  * WifiTxVector for transmitted data frames and Minstrel rate-change events.
  *
- * To run: ./ns3 run ns3sionna-example-sionna-tcp-minstrel
+ * To run: ./example-sionna-tcp-minstrel.sh
  */
 
 using namespace ns3;
