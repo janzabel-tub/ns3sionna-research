@@ -125,60 +125,13 @@ This writes:
 - `example-sionna-tcp-minstrel-rate-changes.csv` for Minstrel rate-change
   events.
 
-For larger measurements, use the TCP performance example directly:
-
-```bash
-cd ns-3.40
-./ns3 run "ns3sionna-performance-sionna-tcp \
-  --sim_max_stas=1 \
-  --environment=apartment/apartment.xml \
-  --mobile_scenario=true \
-  --mobile_speed=7.0 \
-  --caching=true \
-  --mode=2 \
-  --sub_mode=16 \
-  --fixedCoherenceTimeMs=100 \
-  --dataRate=600 \
-  --txPower=20 \
-  --seed=1"
-```
-
-`--fixedCoherenceTimeMs=0` keeps the velocity-based coherence time. Any non-zero
-value forces a fixed coherence time for channel-cache validity.
-
-The value is currently interpreted in 0.1 ms units:
-
-```text
---fixedCoherenceTimeMs=1     -> 0.1 ms
---fixedCoherenceTimeMs=10    -> 1 ms
---fixedCoherenceTimeMs=100   -> 10 ms
---fixedCoherenceTimeMs=1000  -> 100 ms
-```
-
-For the Munich scene, keep the same server command and change the ns-3
-environment and transmit power:
-
-```bash
-cd ns-3.40
-./ns3 run "ns3sionna-performance-sionna-tcp \
-  --sim_max_stas=1 \
-  --environment=munich/munich.xml \
-  --mobile_scenario=true \
-  --mobile_speed=7.0 \
-  --caching=true \
-  --mode=2 \
-  --sub_mode=16 \
-  --fixedCoherenceTimeMs=100 \
-  --dataRate=600 \
-  --txPower=30 \
-  --seed=1"
-```
-
 ## Absolute-Time Mobility
 
 By default, mobility is updated when ns-3 asks the Python server for a channel.
 This request-based mode is simple, but the effective mobility integration step
-depends on the traffic pattern and the channel request schedule.
+depends on the traffic pattern and the channel request schedule. This ensures the mobility 
+of a station is the same across multiple coherence times. Recorded values may still differ
+based on how the mobility is recorded.
 
 `--equidistant_walk_steps` switches the server to fixed internal mobility steps.
 For example:
@@ -202,12 +155,11 @@ The wrapper script `run_equidistant.sh` uses the same `100000` ns step as
 
 The bounding-box guard prevents random-walk nodes from drifting indefinitely
 outside the Sionna scene. It uses the scene bounding box in x/y, expands it by
-`--mobility_bbox_margin`, and reflects or clamps random-walk movement at that
-outer limit.
+`--mobility_bbox_margin`, and reflects movement at that outer limit.
 
 Scene walls are still handled by the normal ray-intersection logic. The
 bounding-box guard is an outer safety guard, not a replacement for scene
-geometry.
+geometry. It does not reflect any other rays and only affects mobility.
 
 Enable it explicitly with a 1 m margin:
 
@@ -217,109 +169,16 @@ python ns3sionna_server.py \
   --mobility_bbox_margin 1.0
 ```
 
-Disable it with:
-
-```bash
-python ns3sionna_server.py --mobility_bbox_toggle false
-```
+It is disabled by default.
 
 The wrapper script `run_equidistant_bbox.sh` combines the 100000 ns mobility
 step with `--mobility_bbox_toggle true` and `--mobility_bbox_margin 1.0`.
-
-## Small Manual Sweep
-
-The `watchdog.sh` script automates long sweeps, server restarts, retry handling,
-timeouts, and output organization. For a small manual experiment, the following
-loop is enough.
-
-Restart the Python server only when changing server-side settings such as
-`--equidistant_walk_steps` or `--mobility_bbox_margin`.
-
-```bash
-cd ns-3.40
-for tc in 0 10 100 1000; do
-  for seed in 1 2 3; do
-    ./ns3 run "ns3sionna-performance-sionna-tcp \
-      --sim_max_stas=1 \
-      --environment=apartment/apartment.xml \
-      --mobile_scenario=true \
-      --mobile_speed=7.0 \
-      --caching=true \
-      --mode=2 \
-      --sub_mode=16 \
-      --fixedCoherenceTimeMs=${tc} \
-      --dataRate=600 \
-      --txPower=20 \
-      --seed=${seed}"
-
-    out="contrib/sionna/examples/results_tutorial/tc${tc}"
-    mkdir -p "${out}"
-    mv throughput_results.csv "${out}/throughput_results_${tc}_${seed}.csv"
-    if [ -f computationtime.csv ]; then
-      mv computationtime.csv "${out}/computationtime_${tc}_${seed}.csv"
-    fi
-  done
-done
-```
-
-For the managed sweep, use:
-
-```bash
-cd ns-3.40/contrib/sionna/examples
-./watchdog.sh --reset
-```
-
-`watchdog.sh` starts the server, sweeps over coherence times and seeds, restarts
-after server failures, and moves result CSV files into per-coherence-time output
-folders.
-
-## Optional Logging and Debug Outputs
-
-The TCP performance example can write extra CSV files when the corresponding
-flags are enabled:
-
-```bash
-cd ns-3.40
-./ns3 run "ns3sionna-performance-sionna-tcp \
-  --sim_max_stas=1 \
-  --environment=apartment/apartment.xml \
-  --mobile_scenario=true \
-  --mobile_speed=7.0 \
-  --caching=true \
-  --mode=2 \
-  --sub_mode=16 \
-  --fixedCoherenceTimeMs=100 \
-  --dataRate=600 \
-  --txPower=20 \
-  --seed=1 \
-  --snr=true \
-  --positions=true \
-  --minstrelRateTrace=true"
-```
-
-The extra files are:
-
-- `snr_results.csv`: PHY-level reception samples, including OK, ERROR, and DROP
-  receptions.
-- `position_results.csv`: PHY reception positions and reception status.
-- `minstrel_rate_results.csv`: per-transmission Minstrel-selected rates.
-- `minstrel_rate_changes.csv`: Minstrel rate-change events.
-
-The Python server can also write per-link wideband-loss samples:
-
-```bash
-cd ns-3.40/contrib/sionna/model/ns3sionna
-python ns3sionna_server.py \
-  --equidistant_walk_steps 100000 \
-  --wb_loss_log ../../examples/wb_loss_tutorial.csv
-```
 
 Other useful runtime controls are:
 
 - `--rt_max_num_paths_per_src`: limit the number of stored Sionna RT paths per
   source.
 - `--rt_fast`: use a faster, less detailed ray-tracing configuration.
-- `--txPower`: set WiFi transmit power in the TCP performance examples.
 
 ## Summary
 
