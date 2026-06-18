@@ -111,6 +111,12 @@ The example writes a CSV file named
 frame reception at the STA and contains time, node ID, position, pathloss, RX
 power, SNR, reception status, packet UID, packet size, and failure reason.
 
+![Computation Time](./doc/img/compTime.png)
+
+![SnR Plot](./doc/img/sensing-low-snr.png)
+
+![Position Plot](./doc/img/sensing-low-position.png)
+
 For TCP with MinstrelHt rate adaptation:
 
 ```bash
@@ -125,11 +131,13 @@ This writes:
 - `example-sionna-tcp-minstrel-rate-changes.csv` for Minstrel rate-change
   events.
 
+![Minstrel Rate Change](./doc/img/minstrel-rate-changes.png)
+
 ## Absolute-Time Mobility
 
 By default, mobility is updated when ns-3 asks the Python server for a channel.
 This request-based mode is simple, but the effective mobility integration step
-depends on the traffic pattern and the channel request schedule. This ensures the mobility 
+depends on the traffic pattern and the channel request schedule. This ensures the mobility
 of a station is the same across multiple coherence times. Recorded values may still differ
 based on how the mobility is recorded.
 
@@ -169,10 +177,15 @@ python ns3sionna_server.py \
   --mobility_bbox_margin 1.0
 ```
 
-It is disabled by default.
+It is disabled by default. Not every environment requires a bounding box, this is
+intended for small environments with high mobility.
 
 The wrapper script `run_equidistant_bbox.sh` combines the 100000 ns mobility
 step with `--mobility_bbox_toggle true` and `--mobility_bbox_margin 1.0`.
+
+![Station moves out of Range](./doc/img/Runaway.png)
+
+![Bounding Box activated](./doc/img/StayWithMe.png)
 
 Other useful runtime controls are:
 
