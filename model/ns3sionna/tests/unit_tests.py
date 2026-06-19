@@ -22,6 +22,155 @@ faulthandler.dump_traceback_later(10, repeat=False)  # after 10s, if not removed
 
     author: Zubow
 '''
+class _FakeNumpyValue:
+    def __init__(self, value):
+        self._value = np.asarray(value)
+
+
+    def numpy(self):
+        return self._value
+
+
+class _FakeSurfaceInteraction:
+    def __init__(self, valid, t=0.0, normal=(0.0, 1.0, 0.0)):
+        self._valid = valid
+        self.t = _FakeNumpyValue([t])
+        self.n = _FakeNumpyValue(normal)
+
+
+    def is_valid(self):
+        return self._valid
+
+
+class _FakeMiScene:
+    def __init__(self, responses):
+        self._responses = list(responses)
+
+
+    def ray_intersect(self, *args, **kwargs):
+        if self._responses:
+            return self._responses.pop(0)
+
+        return _FakeSurfaceInteraction(False)
+
+
+class _FakeScene:
+    def __init__(self, responses):
+        self.mi_scene = _FakeMiScene(responses)
+
+
+class _FakeMobilityNode:
+    def __init__(self, pos, velocity):
+        self.pos = np.asarray(pos, dtype=float)
+        self.velocity = np.asarray(velocity, dtype=float)
+        self.last_update = 0
+        self.checked_time = None
+        self.checked_distance = None
+
+
+    def update_pos(self, sim_time, pos, velocity, hit_wall):
+        self.last_update = sim_time
+        self.pos = np.asarray(pos, dtype=float)
+        self.velocity = np.asarray(velocity, dtype=float)
+        self.hit_wall = hit_wall
+
+
+    def check_set_new_velocity(self, sim_time, distance):
+        self.checked_time = sim_time
+        self.checked_distance = distance
+
+
+    def get_next_direction_angle(self):
+        return 0.0
+
+
+class TestMobilityBBox(unittest.TestCase):
+
+    def _make_env(self):
+        env = SionnaEnv.__new__(SionnaEnv)
+        env.mobility_bounds = (0.0, 1.0, 0.0, 1.0)
+        env.frequencies = np.asarray([1, 2, 3])
+        env.CHECKS_ENABLED = True
+        env.sim_time = 0
+        env.node_info = {}
+        env.scene = _FakeScene([])
+        return env
+
+
+    def test_bbox_clamp_preserves_z(self):
+        env = self._make_env()
+        pos = env._clamp_inside_mobility_bounds(np.asarray([-1.0, 2.0, 9.0]))
+
+        self.assertGreater(pos[0], env.mobility_bounds[0])
+        self.assertLess(pos[1], env.mobility_bounds[3])
+        self.assertEqual(pos[2], 9.0)
+
+
+    def test_bbox_corner_hit_reports_both_axes(self):
+        env = self._make_env()
+        direction = np.asarray([1.0, 1.0, 0.0]) / np.sqrt(2.0)
+        distance, hit_axes = env._next_mobility_bbox_hit(np.asarray([0.5, 0.5, 0.0]),
+                                                         direction,
+                                                         10.0)
+
+        self.assertAlmostEqual(distance, np.sqrt(0.5), places=12)
+        self.assertEqual(hit_axes, [0, 1])
+
+
+    def test_bbox_reflection_flips_only_hit_axis(self):
+        env = self._make_env()
+        direction, velocity = env._reflect_mobility_bbox_direction(np.asarray([0.6, 0.8, 0.0]),
+                                                                   7.0,
+                                                                   [0])
+
+        np.testing.assert_allclose(direction, np.asarray([-0.6, 0.8, 0.0]))
+        self.assertAlmostEqual(np.linalg.norm(velocity), 7.0)
+
+
+    def test_walk_recovers_station_that_started_outside_bbox(self):
+        env = self._make_env()
+        env.node_info[1] = _FakeMobilityNode([-0.5, 0.5, 1.6], [-1.0, 0.0, 0.0])
+
+        with self.assertWarns(UserWarning):
+            env._walk(1, 100_000_000, sync_backend=False)
+
+        self.assertTrue(env._is_inside_mobility_bounds(env.node_info[1].pos))
+        self.assertGreater(env.node_info[1].velocity[0], 0.0)
+
+
+    def test_scene_wall_hit_does_not_use_bbox_full_inversion(self):
+        env = self._make_env()
+        env.mobility_bounds = None
+        start_direction = np.asarray([1.0, 1.0, 0.0]) / np.sqrt(2.0)
+        env.node_info[1] = _FakeMobilityNode([0.0, 0.0, 1.6], start_direction)
+        env.scene = _FakeScene([
+            _FakeSurfaceInteraction(True, t=0.5, normal=(0.0, 1.0, 0.0)),
+            _FakeSurfaceInteraction(False),
+        ])
+
+        env._walk(1, 1_000_000_000, sync_backend=False)
+
+        self.assertGreater(env.node_info[1].velocity[0], 0.0)
+        self.assertLess(env.node_info[1].velocity[1], 0.0)
+        np.testing.assert_allclose(np.linalg.norm(env.node_info[1].velocity), 1.0)
+
+
+    def test_invalid_channel_uses_unreachable_fallback(self):
+        env = self._make_env()
+        with self.assertWarns(UserWarning):
+            delay, loss, h = env._extract_link_channel(np.asarray([-1.0]),
+                                                       np.zeros(3, dtype=np.complex128),
+                                                       0,
+                                                       1,
+                                                       np.asarray([0.0, 0.0, 0.0]),
+                                                       np.asarray([3.0, 4.0, 0.0]),
+                                                       123)
+
+        self.assertEqual(delay, 17)
+        self.assertEqual(loss, env.UNREACHABLE_WB_LOSS_DB)
+        np.testing.assert_allclose(h, np.ones(3, dtype=np.complex128))
+
+
 class TestServer(unittest.TestCase):
 
     def setUp(self):
@@ -51,7 +200,7 @@ class TestServer(unittest.TestCase):
         sim_info.sim_init_msg.subcarrier_spacing        = 78125
         sim_info.sim_init_msg.mode                      = mode #1
         sim_info.sim_init_msg.sub_mode                  = 4 #1
-        sim_info.sim_init_msg.min_coherence_time_ms     = 100000
+        sim_info.sim_init_msg.fixed_coherence_time_ms     = 100000
         sim_info.sim_init_msg.time_evo_model            = 'position'
 
         n0 = sim_info.sim_init_msg.nodes.add()
@@ -79,7 +228,7 @@ class TestServer(unittest.TestCase):
         sim_info.sim_init_msg.subcarrier_spacing        = 78125
         sim_info.sim_init_msg.mode                      = mode #1
         sim_info.sim_init_msg.sub_mode                  = 8 #1
-        sim_info.sim_init_msg.min_coherence_time_ms     = 100000
+        sim_info.sim_init_msg.fixed_coherence_time_ms     = 100000
         sim_info.sim_init_msg.time_evo_model            = 'position'
 
         # first node static

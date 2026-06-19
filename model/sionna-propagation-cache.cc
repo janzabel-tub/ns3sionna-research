@@ -246,7 +246,7 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
     propagation_request->set_tx_node(node_a->GetId());
     propagation_request->set_rx_node(node_b->GetId());
     propagation_request->set_time(current_time.GetNanoSeconds());
-    
+
     // Serialize the request message
     std::string serialized_message;
     wrapper.SerializeToString(&serialized_message);
@@ -258,7 +258,6 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
     // Receive the reply message
     zmq::message_t zmq_reply;
     zmq::recv_result_t result = m_sionnaHelper->m_zmq_socket.recv(zmq_reply, zmq::recv_flags::none);
-    
     NS_ASSERT_MSG(result, "Failed to receive reply after propagation request message.");
 
     // Check if the reply message is a propagation response
@@ -303,6 +302,7 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
 
             // Add the info from all other receivers to the cache
             CacheKey otherkey = CacheKey(txId, rxId);
+
             CacheEntry entry = CacheEntry(delay, wb_loss, start_time, end_time, num_ofdm_subcarrier,
                 txId, rxId ,Vector(txPos.x(),txPos.y(),txPos.z()), Vector(rxPos.x(),rxPos.y(),rxPos.z()));
 

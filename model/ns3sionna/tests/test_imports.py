@@ -48,3 +48,9 @@ try:
     print("Package zmq is installed")
 except ImportError:
     print("Package zmq is not installed")
+
+try:
+    import millify
+    print("Package millify is installed")
+except ImportError:
+    print("Package millify is not installed")

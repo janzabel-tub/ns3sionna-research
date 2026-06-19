@@ -1,12 +1,20 @@
-import sionna.rt # must be the first import as otherwise Python crashes
-
 import os
+# Optional. Usually let Sionna RT choose automatically.
+# os.environ["MITSUBA_VARIANT"] = "cuda_ad_mono_polarized"
+# os.environ["MITSUBA_VARIANT"] = "llvm_ad_mono_polarized"
+
+# import sionna.rt
+import drjit as dr
+import traceback
+
 import argparse
+import csv
 import numpy as np
 import time
 import GPUtil
 import zmq
 import gc
+import hashlib
 
 from common import message_pb2
 from common.message_debug import *
@@ -14,7 +22,6 @@ from common.message_debug import *
 from collections import deque
 import warnings
 
-import tensorflow as tf
 import mitsuba as mi
 import math
 from millify import millify
@@ -22,11 +29,24 @@ from millify import millify
 from ns3sionna_utils import subcarrier_frequencies, compute_coherence_time, SECOND, MILLISECOND, coherence_from_velocities, \
     MAX_COHERENCE_TIME
 
-import sionna
 from sionna.rt import load_scene, Camera, Transmitter, Receiver, PlanarArray, PathSolver
 
 # import mobility models
 from mobility import *
+
+
+def str_to_bool(value):
+    if isinstance(value, bool):
+        return value
+
+    value = value.lower()
+    if value in ('1', 'true', 't', 'yes', 'y', 'on', 'enable', 'enabled'):
+        return True
+    if value in ('0', 'false', 'f', 'no', 'n', 'off', 'disable', 'disabled'):
+        return False
+
+    raise argparse.ArgumentTypeError(f"Boolean value expected, got '{value}'")
+
 
 class SionnaEnv:
 
@@ -36,6 +56,12 @@ class SionnaEnv:
     MODE_P2MP       = 2
     # compute also future channels; used only if the transmitter is static (receivers are mobile)
     MODE_P2MP_LAH   = 3
+    MOBILITY_BBOX_EPS = 1e-7
+    MOBILITY_COLLISION_EPS = 1e-9
+    MOBILITY_COLLISION_NUDGE = 1e-7
+    MAX_MOBILITY_BOUNCES = 256
+    SPEED_OF_LIGHT_M_PER_S = 299792458.0
+    UNREACHABLE_WB_LOSS_DB = 300.0
 
     """
     This class represents the Sionna component of ns3sionna. It represents the environment where the node
@@ -43,8 +69,10 @@ class SionnaEnv:
 
     author: Pilz, Zubow
     """
-    def __init__(self, model_folder='./models/', rt_fast=False, default_mode=MODE_P2P, rt_max_parallel_links=256, est_csi=True, VERBOSE=True,
-                 CHECKS_ENABLED=True):
+    def __init__(self, model_folder='./models/', rt_fast=False, default_mode=MODE_P2P, rt_max_parallel_links=256,
+                 rt_max_num_paths_per_src=10 ** 7, est_csi=True, VERBOSE=True, CHECKS_ENABLED=True,
+                 equidistant_walk_steps=0, mobility_bbox_margin=1.0, mobility_bbox_enabled=False,
+                 wb_loss_log=None):
         self.model_folder = model_folder
         self.rt_fast = rt_fast
         if rt_fast:
@@ -75,6 +103,7 @@ class SionnaEnv:
 
         # maximum number of parallel computations (needed to fit GPU)
         self.rt_max_parallel_links = rt_max_parallel_links
+        self.rt_max_num_paths_per_src = rt_max_num_paths_per_src
 
         # estimate small-scale fading
         self.est_csi = est_csi
@@ -84,19 +113,91 @@ class SionnaEnv:
         self.VERBOSE = VERBOSE
         self.CHECKS_ENABLED = CHECKS_ENABLED
 
-        # check GPU support
-        self.gpus = tf.config.list_physical_devices("GPU")
+        # Replaced tensorflow block
+        try:
+            self.gpus = GPUtil.getGPUs()
+        except Exception:
+            self.gpus = []
 
-        if len(self.gpus) > 0:
-            print("GPU support detected; no GPUs:", self.gpus)
+        if self.gpus:
+            print("NVIDIA GPU devices:", [f"{gpu.id}: {gpu.name}" for gpu in self.gpus])
         else:
-            print("Using CPU backend")
+            print("No NVIDIA GPU devices visible to GPUtil")
+
+        print("Mitsuba backend:", mi.variant())
 
         self.disp_r = 10
         # storing information about every node under simulation
         self.node_info = {}
         # all node which are currently placed on the scene
         self.placed_radio_node_names = []
+        self.equidistant_walk_steps = max(0, int(equidistant_walk_steps))
+        self.absolute_time_mobility = self.equidistant_walk_steps > 0
+        self.mobility_bbox_margin = float(mobility_bbox_margin)
+        if self.mobility_bbox_margin < 0:
+            raise ValueError("mobility_bbox_margin must be non-negative")
+        self.mobility_bbox_enabled = bool(mobility_bbox_enabled)
+        self.mobility_bounds = None
+        self.wb_loss_log_path = wb_loss_log
+        self.wb_loss_log_file = None
+        self.wb_loss_log_writer = None
+
+        if self.absolute_time_mobility:
+            print(f'Absolute-time mobility enabled with internal walk step={self.equidistant_walk_steps}ns')
+
+        if self.wb_loss_log_path:
+            print(f'Wideband loss logging enabled: {self.wb_loss_log_path}')
+
+
+    def _get_wb_loss_log_writer(self):
+        if not self.wb_loss_log_path:
+            return None
+
+        if self.wb_loss_log_writer is not None:
+            return self.wb_loss_log_writer
+
+        log_dir = os.path.dirname(self.wb_loss_log_path)
+        if log_dir:
+            os.makedirs(log_dir, exist_ok=True)
+
+        write_header = not os.path.exists(self.wb_loss_log_path) or os.path.getsize(self.wb_loss_log_path) == 0
+        self.wb_loss_log_file = open(self.wb_loss_log_path, "a", newline="")
+        self.wb_loss_log_writer = csv.writer(self.wb_loss_log_file)
+
+        if write_header:
+            self.wb_loss_log_writer.writerow([
+                "time_ns", "mode", "sub_mode", "tx_id", "rx_id",
+                "tx_x", "tx_y", "tx_z", "rx_x", "rx_y", "rx_z",
+                "delay_ns", "wb_loss_db", "wb_gain_db", "wb_gain_linear",
+                "num_subcarriers",
+            ])
+            self.wb_loss_log_file.flush()
+
+        return self.wb_loss_log_writer
+
+
+    def _log_wb_loss_sample(self, time_ns, mode, tx_id, rx_id, tx_pos, rx_pos, delay_ns, wb_loss_db, h_normalized):
+        writer = self._get_wb_loss_log_writer()
+        if writer is None:
+            return
+
+        wb_gain_db = -float(wb_loss_db)
+        wb_gain_linear = 10 ** (wb_gain_db / 10)
+        writer.writerow([
+            int(time_ns), int(mode), int(self.sub_mode), int(tx_id), int(rx_id),
+            float(tx_pos[0]), float(tx_pos[1]), float(tx_pos[2]),
+            float(rx_pos[0]), float(rx_pos[1]), float(rx_pos[2]),
+            int(delay_ns), float(wb_loss_db), wb_gain_db, wb_gain_linear,
+            int(np.asarray(h_normalized).size),
+        ])
+        self.wb_loss_log_file.flush()
+
+
+    def _close_wb_loss_log(self):
+        if self.wb_loss_log_file is not None:
+            self.wb_loss_log_file.close()
+            self.wb_loss_log_file = None
+            self.wb_loss_log_writer = None
 
 
     def init_simulation_env(self, sim_init_msg):
@@ -112,10 +213,15 @@ class SionnaEnv:
         filepath = os.path.join(self.model_folder, sim_init_msg.scene_fname)
         try:
             self.scene = load_scene(filepath)
+            self.p_solver  = PathSolver()
         except Exception as e:
-            return False, "Failed to load scene file in: " + filepath + ", error: " + str(e)
+            # Print full traceback to console so the cause is visible
+            print("Exception while loading scene:", filepath)
+            traceback.print_exc()
+            return False, "Failed to load scene file in: " + filepath + ", error: " + str(e) + " (see server console for traceback)"
 
         self.bbox = self.scene.mi_scene.bbox()
+        self._init_mobility_bounds()
 
         if self.VERBOSE:
             # show some stats about the scene
@@ -144,8 +250,10 @@ class SionnaEnv:
 
         self.fc = sim_init_msg.frequency * 1e6
         self.fft_size = sim_init_msg.fft_size  # max FFT size
-        # todo: min Tc is not used
-        self.min_coherence_time_ms = sim_init_msg.min_coherence_time_ms # min Tc
+        if sim_init_msg.fixed_coherence_time_ms != 0:
+            self.fixed_coherence_time_ms = sim_init_msg.fixed_coherence_time_ms * 100000 # fixed Tc, multiplied for 0.1ms for fine grained control
+        else:
+            self.fixed_coherence_time_ms = 0
         self.subcarrier_spacing = sim_init_msg.subcarrier_spacing # in Hz
 
         print(f'Operating in mode: {self.mode}, sub_mode: {self.sub_mode}, time_evo_model: {self.time_evo_model}'
@@ -156,7 +264,6 @@ class SionnaEnv:
 
         # Set the random seed for reproducibility
         np.random.seed(sim_init_msg.seed)
-        tf.random.set_seed(sim_init_msg.seed)
         self.my_seed = sim_init_msg.seed
 
         # configure mobility models
@@ -181,6 +288,8 @@ class SionnaEnv:
                 self.chan_coh_time_mode3 = compute_coherence_time(speed_arr[0], self.fc, model='rappaport2')
             else:
                 self.chan_coh_time_mode3 = MAX_COHERENCE_TIME
+            #if self.fixed_coherence_time_ms != 0:
+            #   self.chan_coh_time_mode3 = self.fixed_coherence_time_ms
 
             print(f'Running mode=3 w/ Tc: {self.chan_coh_time_mode3/1e6}ms')
 
@@ -195,6 +304,257 @@ class SionnaEnv:
         self.sim_time = 0
 
         return True, "OK"
+
+
+    def _scalar_to_float(self, value):
+        if hasattr(value, "numpy"):
+            value = value.numpy()
+        return float(np.asarray(value).reshape(-1)[0])
+
+
+    def _init_mobility_bounds(self):
+        self.mobility_bounds = None
+        if not self.mobility_bbox_enabled:
+            print('Sionna mobility bbox guard disabled')
+            return
+
+        margin = self.mobility_bbox_margin
+        xmin = self._scalar_to_float(self.bbox.min.x) - margin
+        xmax = self._scalar_to_float(self.bbox.max.x) + margin
+        ymin = self._scalar_to_float(self.bbox.min.y) - margin
+        ymax = self._scalar_to_float(self.bbox.max.y) + margin
+        bounds = (xmin, xmax, ymin, ymax)
+
+        if not all(math.isfinite(value) for value in bounds) or xmin > xmax or ymin > ymax:
+            warnings.warn(f"Invalid scene bbox for mobility guard: {bounds}; disabling bbox guard.", UserWarning)
+            return
+
+        self.mobility_bounds = bounds
+        print(f'Mobility bbox guard enabled: x=[{xmin:.2f}, {xmax:.2f}]m, '
+              f'y=[{ymin:.2f}, {ymax:.2f}]m, margin={margin:.2f}m')
+
+
+    def _is_inside_mobility_bounds(self, pos):
+        if self.mobility_bounds is None:
+            return True
+
+        xmin, xmax, ymin, ymax = self.mobility_bounds
+        return xmin <= pos[0] <= xmax and ymin <= pos[1] <= ymax
+
+
+    def _next_mobility_bbox_hit(self, pos, direction, max_distance):
+        if self.mobility_bounds is None:
+            return None
+
+        xmin, xmax, ymin, ymax = self.mobility_bounds
+        eps = 1e-9
+        candidates = []
+
+        for axis, lower, upper in ((0, xmin, xmax), (1, ymin, ymax)):
+            if abs(direction[axis]) <= eps:
+                continue
+
+            boundary = upper if direction[axis] > 0 else lower
+            distance = (boundary - pos[axis]) / direction[axis]
+            if eps < distance <= max_distance + eps:
+                candidates.append((max(0.0, distance), axis))
+
+        if not candidates:
+            return None
+
+        hit_distance = min(distance for distance, _ in candidates)
+        hit_axes = [axis for distance, axis in candidates if abs(distance - hit_distance) <= 1e-7]
+
+        return hit_distance, hit_axes
+
+
+    def _nudge_inside_mobility_bounds(self, pos, hit_axes):
+        if self.mobility_bounds is None:
+            return pos
+
+        xmin, xmax, ymin, ymax = self.mobility_bounds
+        bounds = ((xmin, xmax), (ymin, ymax))
+        eps = self.MOBILITY_BBOX_EPS
+        pos = pos.copy()
+
+        for axis in hit_axes:
+            lower, upper = bounds[axis]
+            if pos[axis] <= lower:
+                pos[axis] = lower + eps
+            elif pos[axis] >= upper:
+                pos[axis] = upper - eps
+            else:
+                pos[axis] = min(max(pos[axis], lower + eps), upper - eps)
+
+        return pos
+
+
+    def _clamp_inside_mobility_bounds(self, pos):
+        if self.mobility_bounds is None:
+            return pos.copy()
+
+        xmin, xmax, ymin, ymax = self.mobility_bounds
+        bounds = ((xmin, xmax), (ymin, ymax))
+        eps = self.MOBILITY_BBOX_EPS
+        pos = pos.copy()
+
+        for axis, (lower, upper) in enumerate(bounds):
+            if upper - lower <= 2 * eps:
+                pos[axis] = 0.5 * (lower + upper)
+            else:
+                pos[axis] = min(max(pos[axis], lower + eps), upper - eps)
+
+        return pos
+
+
+    def _mobility_bbox_escape_sides(self, pos):
+        if self.mobility_bounds is None:
+            return []
+
+        xmin, xmax, ymin, ymax = self.mobility_bounds
+        bounds = ((xmin, xmax), (ymin, ymax))
+        escaped = []
+
+        for axis, (lower, upper) in enumerate(bounds):
+            if pos[axis] < lower:
+                escaped.append((axis, -1))
+            elif pos[axis] > upper:
+                escaped.append((axis, 1))
+
+        return escaped
+
+
+    def _normalize_mobility_direction(self, direction, speed):
+        direction = np.asarray(direction, dtype=float)
+        norm = np.linalg.norm(direction)
+
+        if not math.isfinite(norm) or norm <= 0:
+            direction = np.array([1.0, 0.0, 0.0])
+        else:
+            direction = direction / norm
+
+        return direction, direction * speed
+
+
+    def _reflect_mobility_bbox_direction(self, direction, speed, hit_axes):
+        direction = np.asarray(direction, dtype=float).copy()
+
+        for axis in hit_axes:
+            direction[axis] *= -1
+
+        return self._normalize_mobility_direction(direction, speed)
+
+
+    def _recover_outside_mobility_bounds(self, node_id, pos, direction, speed, warn=True):
+        escaped_sides = self._mobility_bbox_escape_sides(pos)
+        if not escaped_sides:
+            return pos, direction, direction * speed, False
+
+        original_pos = pos.copy()
+        pos = self._clamp_inside_mobility_bounds(pos)
+
+        direction = np.asarray(direction, dtype=float).copy()
+        for axis, side in escaped_sides:
+            if direction[axis] * side > 0:
+                direction[axis] *= -1
+
+        direction, velocity = self._normalize_mobility_direction(direction, speed)
+        if warn:
+            warnings.warn(f"Node {node_id} started outside mobility bbox at {original_pos}; "
+                          f"clamped to {pos} and reflected outward velocity components.",
+                          UserWarning)
+        return pos, direction, velocity, True
+
+
+    def _free_space_delay_ns(self, tx_pos, rx_pos):
+        tx_pos = np.asarray(tx_pos, dtype=float)
+        rx_pos = np.asarray(rx_pos, dtype=float)
+        distance = np.linalg.norm(tx_pos - rx_pos)
+
+        if not math.isfinite(distance):
+            return 0
+
+        return max(0, int(round(distance / self.SPEED_OF_LIGHT_M_PER_S * 1e9, 0)))
+
+
+    def _flat_normalized_cfr(self, h):
+        h = np.asarray(h)
+        if h.size > 0:
+            return np.ones(h.size, dtype=np.complex128)
+
+        return np.ones(len(self.frequencies), dtype=np.complex128)
+
+
+    def _extract_link_channel(self, tau_link, h_link, tx_node_id, rx_node_id, tx_pos, rx_pos, sim_time):
+        lnk_tau = np.asarray(np.squeeze(tau_link), dtype=float)
+        valid_tau = lnk_tau[np.isfinite(lnk_tau) & (lnk_tau >= 0)]
+
+        h = np.asarray(np.squeeze(h_link), dtype=np.complex128).reshape(-1)
+        power = np.mean(np.abs(h) ** 2) if h.size > 0 else float("nan")
+
+        invalid_delay = valid_tau.size == 0
+        invalid_power = not math.isfinite(float(power)) or power <= 0
+
+        if invalid_delay or invalid_power:
+            lnk_delay = self._free_space_delay_ns(tx_pos, rx_pos)
+            lnk_loss = self.UNREACHABLE_WB_LOSS_DB
+            h_normalized = self._flat_normalized_cfr(h)
+            warnings.warn(f"No valid Sionna path for {tx_node_id}->{rx_node_id} at {sim_time}ns "
+                          f"(invalid_delay={invalid_delay}, invalid_power={invalid_power}); "
+                          f"using unreachable fallback. tx_pos={tx_pos}, rx_pos={rx_pos}",
+                          UserWarning)
+            return lnk_delay, lnk_loss, h_normalized
+
+        lnk_delay = int(round(np.min(valid_tau) * 1e9, 0))
+        lnk_loss = float(-10 * np.log10(power))
+        h_normalized = h / np.sqrt(power)
+
+        return lnk_delay, lnk_loss, h_normalized
+
+
+    def _make_mobility_rng(self, node_id):
+        seed_sequence = np.random.SeedSequence([int(self.my_seed), int(node_id), 0x51A0])
+        return np.random.default_rng(seed_sequence)
+
+
+    def _path_solver_seed(self, *parts):
+        seed_text = "|".join(str(part) for part in parts).encode("utf-8")
+        seed = int.from_bytes(hashlib.blake2b(seed_text, digest_size=4).digest(),
+                              byteorder="little",
+                              signed=False)
+        return seed if seed != 0 else 1
+
+
+    def _advance_nodes_to(self, target_time, node_ids=None):
+        if node_ids is None:
+            node_ids = list(self.node_info.keys())
+
+        for node_id in node_ids:
+            self._advance_node_to(node_id, target_time)
+
+
+    def _advance_node_to(self, node_id, target_time):
+        node = self.node_info[node_id]
+        if target_time <= node.last_update:
+            return
+
+        while node.last_update < target_time:
+            step_dt = min(self.equidistant_walk_steps, target_time - node.last_update)
+            if step_dt <= 0:
+                break
+            self._walk(node_id, step_dt, start_time=node.last_update, sync_backend=False)
+            node = self.node_info[node_id]
+
+
+    def _update_nodes_to_time(self, target_time, nodes_to_update):
+        if self.absolute_time_mobility:
+            dr.eval()
+            dr.sync_thread()
+            self._advance_nodes_to(target_time, nodes_to_update)
+        else:
+            dt = target_time - self.sim_time
+            for node_id in nodes_to_update:
+                self._walk(node_id, dt)
 
 
     def compute_cfr(self, csi_req, reply_wrapper):
@@ -235,6 +595,7 @@ class SionnaEnv:
         tx_node_id = csi_req.tx_node
         rx_node_id = csi_req.rx_node # this rx node must be included in result set
         req_sim_time = csi_req.time # we need CFR at that point in time [ns]
+        original_req_sim_time = req_sim_time
 
         assert self.time_evo_model == 'position'
 
@@ -251,18 +612,18 @@ class SionnaEnv:
         # sim future node positions
         lah_time_vec = []
         for lah_i in range(look_ahead):
-            # move in time
-            dt = req_sim_time - self.sim_time
-
+            self._update_nodes_to_time(req_sim_time, nodes_to_update)
             csi_tc_arr = []
             for node_id in nodes_to_update:
-                # perform walk
-                self._walk(node_id, dt)
                 if node_id != tx_node_id:
                     tc = coherence_from_velocities(self.node_info[node_id].velocity,
                                                     self.node_info[tx_node_id].velocity, self.fc,
                                                     pos_tx=self.node_info[node_id].pos,
                                                     pos_rx=self.node_info[tx_node_id].pos)
+                    # JZA: Set fixed Tc
+                    if self.fixed_coherence_time_ms != 0:
+                        tc = self.fixed_coherence_time_ms
+
                     csi_tc_arr.append(tc)
 
             # take the worst case Tc from all RX nodes
@@ -280,13 +641,19 @@ class SionnaEnv:
         rx_nodes.remove(tx_node_id)
 
         self._place_tx_rx_nodes_with_lah(lah_time_vec, tx_node_id, rx_nodes)
-
-        # create pathsolver; todo: check reuse
-        p_solver  = PathSolver()
+        rt_seed = self._path_solver_seed(self.my_seed,
+                                         original_req_sim_time,
+                                         tx_node_id,
+                                         rx_node_id,
+                                         self.mode,
+                                         self.sub_mode,
+                                         tuple(rx_nodes),
+                                         tuple(lah_time_vec))
 
         # Compute propagation paths
-        paths = p_solver(scene=self.scene,
+        paths = self.p_solver(scene=self.scene,
                          max_depth=self.rt_max_depth,
+                         max_num_paths_per_src=self.rt_max_num_paths_per_src,
                          samples_per_src=self.rt_samples_per_src,
                          los=self.rt_los,
                          specular_reflection=self.rt_specular_reflection,  # Can rays bounce off surfaces?
@@ -295,11 +662,13 @@ class SionnaEnv:
                          synthetic_array=self.rt_synthetic_array,
                          diffraction=self.rt_diffraction,  # costly
                          edge_diffraction=self.rt_edge_diffraction,  # rays that bend around edges
-                         diffraction_lit_region=self.rt_diffraction_lit_region)  # higher physical accuracy
+                         diffraction_lit_region=self.rt_diffraction_lit_region,
+                         seed=rt_seed)  # higher physical accuracy
 
         # AZU: sampling_frequency is only used if num_time_steps > 1
         # a: shape [num_rx, num_rx_ant, num_tx, num_tx_ant, num_paths, num_time_steps],
         a, tau = paths.cir(sampling_frequency=1e9, normalize_delays=False, out_type="numpy")
+        dr.eval()
 
         # shape: [num_rx, num_rx_ant, num_tx, num_tx_ant, num_ofdm_symbols, num_subcarriers]
         h_raw = paths.cfr(frequencies=self.frequencies,
@@ -310,6 +679,10 @@ class SionnaEnv:
                   # antennas of a transmitter and receiver arrives at tau=0
                   normalize=False,  # Normalize energy
                   out_type="numpy")
+        dr.eval()
+
+        del paths          # <-- explicitly release GPU buffers
+        dr.sync_thread()   # <-- wait for deallocation to complete
 
         # max single transmitter
         assert h_raw.shape[2] == 1
@@ -336,18 +709,15 @@ class SionnaEnv:
 
                 rx_id = lah_time_idx * len(rx_nodes) + curr_rx_id
 
-                lnk_tau = np.squeeze(tau[rx_id, :, :, :, :])
-                lnk_delay = int(round(np.min(lnk_tau[lnk_tau >= 0] * 1e9), 0))
-
-                h = np.squeeze(h_raw[rx_id, :, :, :, :, ])
-
-                # see Parseval's theorem
-                lnk_loss = float(-10 * np.log10(np.mean(np.abs(h) ** 2)))
-
-                # for frequency-selective channel
-                power = np.mean(np.abs(h) ** 2)  # shape [batch_size, 1, 1, 1]
-
-                h_normalized = h / np.sqrt(power)
+                rx_pos = self.node_info[curr_rx_node].get_pos_at(lah_time)
+                lnk_delay, lnk_loss, h_normalized = self._extract_link_channel(
+                    tau[rx_id, :, :, :, :],
+                    h_raw[rx_id, :, :, :, :, ],
+                    tx_node_id,
+                    curr_rx_node,
+                    tx_pos,
+                    rx_pos,
+                    lah_time)
 
                 # plausibility test
                 if self.CHECKS_ENABLED:
@@ -358,13 +728,14 @@ class SionnaEnv:
                     print(f'{lah_time/1e9}s: {tx_node_id}->{curr_rx_node} lnk_delay = {lnk_delay}ns, wb_loss = {lnk_loss:.3f}dB, CFR shape: {h_normalized.shape}')
 
                 rx_node_info = csi.rx_nodes.add()
-                rx_pos = self.node_info[curr_rx_node].get_pos_at(lah_time)
                 rx_node_info.id = curr_rx_node
                 rx_node_info.position.x = rx_pos[0]
                 rx_node_info.position.y = rx_pos[1]
                 rx_node_info.position.z = rx_pos[2]
                 rx_node_info.delay = lnk_delay
                 rx_node_info.wb_loss = lnk_loss
+                self._log_wb_loss_sample(lah_time, self.mode, tx_node_id, curr_rx_node, tx_pos, rx_pos,
+                                         lnk_delay, lnk_loss, h_normalized)
 
                 if self.est_csi:
                     rx_node_info.frequencies.extend(self.frequencies.tolist())
@@ -376,6 +747,9 @@ class SionnaEnv:
                                                 pos_tx=self.node_info[curr_rx_node].get_pos_at(lah_time),
                                                 pos_rx=self.node_info[tx_node_id].pos)
 
+                if self.fixed_coherence_time_ms != 0:
+                    tc = self.fixed_coherence_time_ms
+
                 rx_node_info.end_time2 = csi.start_time + tc
                 csi_tc_arr.append(tc)
 
@@ -384,7 +758,7 @@ class SionnaEnv:
             Tc_p2mp_lah.append(Tc_p2mp)
             csi.end_time = csi.start_time + Tc_p2mp - 1 # -1ns to have non-overlapping intervals
 
-        print(f'{self.sim_time / 1e9}s: Computed CSI with Tc: {np.round(np.asarray(Tc_p2mp_lah) / 1e6,2)}ms, #links: {num_computed_lnks}')
+        # print(f'{self.sim_time / 1e9}s: Computed CSI with Tc: {np.round(np.asarray(Tc_p2mp_lah) / 1e6,2)}ms, #links: {num_computed_lnks}')
 
         return num_computed_lnks
 
@@ -466,6 +840,8 @@ class SionnaEnv:
             rx_node_info.position.z = rx_pos[2]
             rx_node_info.delay = lnk_delay[idx]
             rx_node_info.wb_loss = lnk_loss[idx]
+            self._log_wb_loss_sample(self.sim_time, req_mode, tx_node_id, comp_rx_node_id, tx_pos, rx_pos,
+                                     lnk_delay[idx], lnk_loss[idx], h_normalized[idx])
 
             if self.est_csi:
                 rx_node_info.frequencies.extend(self.frequencies.tolist())
@@ -478,81 +854,153 @@ class SionnaEnv:
                                             self.node_info[tx_node_id].velocity, self.fc,
                                             pos_tx=self.node_info[comp_rx_node_id].pos,
                                             pos_rx=self.node_info[tx_node_id].pos)
+            # JZA: This is used most often
+            if self.fixed_coherence_time_ms != 0:
+                tc = self.fixed_coherence_time_ms
+
             rx_node_info.end_time2 = tc
             csi_tc_arr.append(tc)
 
         # take the worst case Tc from all RX nodes
         Tc_p2mp = int(np.min(np.asarray(csi_tc_arr)))
 
-        print(f'{self.sim_time / 1e9}s: Computed CSI with Tc: {round(Tc_p2mp / 1e6,2)}ms, #links: {len(rx_nodes)}')
+        # print(f'{self.sim_time / 1e9}s: Computed CSI with Tc: {round(Tc_p2mp / 1e6,2)}ms, #links: {len(rx_nodes)}')
 
         csi.end_time = self.sim_time + Tc_p2mp
         return len(rx_nodes)
 
 
-    def _walk(self, node_id, dt):
+    def _walk(self, node_id, dt, start_time=None, sync_backend=True):
         """
         Move the given node to the given time interval.
         :param node_id: node_id of the node to move
         :param dt: time interval in ns
         """
-        init_dt = dt
 
-        pos = self.node_info[node_id].pos
-        velocity = self.node_info[node_id].velocity
+        if dt <= 0:
+            return
+
+        if sync_backend:
+            # Reduce server crashing hopefully.
+            dr.eval()
+            dr.sync_thread()
+
+        init_dt = dt
+        if start_time is None:
+            start_time = self.sim_time
+        target_time = start_time + init_dt
+
+        pos = np.asarray(self.node_info[node_id].pos, dtype=float).copy()
+        velocity = np.asarray(self.node_info[node_id].velocity, dtype=float).copy()
+
+        if not np.all(np.isfinite(pos)) or not np.all(np.isfinite(velocity)):
+            warnings.warn(f"Node {node_id} has non-finite mobility state: pos={pos}, velocity={velocity}; "
+                          f"replacing non-finite values with zero.",
+                          UserWarning)
+            pos = np.nan_to_num(pos, nan=0.0, posinf=0.0, neginf=0.0)
+            velocity = np.nan_to_num(velocity, nan=0.0, posinf=0.0, neginf=0.0)
 
         speed = np.linalg.norm(velocity)
-        if speed == 0:
+        if not math.isfinite(speed) or speed == 0:
+            self.node_info[node_id].update_pos(target_time, pos.copy(), velocity.copy(), False)
+            self.node_info[node_id].check_set_new_velocity(target_time, 0)
             return
 
         # Check if the next position is inside the borders
         # Calculate direction vector and travel distance
         direction = velocity / speed
-        distance = np.linalg.norm(velocity * dt / 1e9) # convert dt into sec
+        distance = speed * dt / 1e9 # convert dt into sec
+        total_moved_distance = distance
+        pos, direction, velocity, recovered = self._recover_outside_mobility_bounds(node_id, pos, direction, speed)
+        warned_outside_recovery = recovered
+        mobility_bounces = 0
 
-        while True:
+        while distance > 1e-9:
+            if not self._is_inside_mobility_bounds(pos):
+                pos, direction, velocity, recovered = self._recover_outside_mobility_bounds(
+                    node_id,
+                    pos,
+                    direction,
+                    speed,
+                    warn=not warned_outside_recovery)
+                warned_outside_recovery = warned_outside_recovery or recovered
+
+            mobility_bounces += 1
+            if mobility_bounces > self.MAX_MOBILITY_BOUNCES:
+                warnings.warn(f"Node {node_id} exceeded {self.MAX_MOBILITY_BOUNCES} mobility bounces "
+                              f"while walking to {target_time}ns; stopping at {pos}.",
+                              UserWarning)
+                break
+
+            bbox_hit = self._next_mobility_bbox_hit(pos, direction, distance)
+            ray_distance = distance
+            if bbox_hit is not None:
+                ray_distance = min(ray_distance, bbox_hit[0])
+
             # Create a ray
             ray = mi.Ray3f(mi.Point3f(pos), mi.Vector3f(direction))
-            ray.maxt = mi.Float(distance)
+            ray.maxt = mi.Float(ray_distance)
 
             # Calculate the intersection of the ray with the scene
             si = self.scene.mi_scene.ray_intersect(ray, mi.RayFlags.Minimal, False, True)
 
+            scene_hit_before_bbox = False
+            scene_t = None
             if si.is_valid():
+                t_np = si.t.numpy()
+                scene_t = max(float(t_np[0]), 0.0)
+                scene_hit_before_bbox = bbox_hit is None or scene_t < bbox_hit[0] - self.MOBILITY_COLLISION_EPS
+
+            if scene_hit_before_bbox:
                 # If the ray hits an object, calculate the reflection
 
                 # The intersection point (position) is set back by one centimeter to prevent cases
                 # where the intersection point is found behind a wall
-                t_np = si.t.numpy()
-                t = float(t_np[0]) - 0.01
+                t = min(max(scene_t - 0.01, 0.0), ray_distance, distance)
                 pos = pos + t * direction
+                distance -= t
 
                 # The reflected direction is calculated in the z plane
                 n = np.squeeze(si.n.numpy())
-                n = [n[1], -n[0], 0.0]
-                n = n / np.linalg.norm(n)
+                n = np.array([n[1], -n[0], 0.0])
+                n_norm = np.linalg.norm(n)
+                if not math.isfinite(n_norm) or n_norm <= 0:
+                    warnings.warn(f"Invalid scene-wall normal for node {node_id} at {pos}; "
+                                  f"reversing current scene-wall direction.",
+                                  UserWarning)
+                    direction = -direction
+                else:
+                    n = n / n_norm
 
-                mob_theta = self.node_info[node_id].get_next_direction_angle()
-                direction = - (direction - 2 * (np.dot(direction, n) + mob_theta) * n)
+                    mob_theta = self.node_info[node_id].get_next_direction_angle()
+                    direction = - (direction - 2 * (np.dot(direction, n) + mob_theta) * n)
 
-                velocity = direction * speed
+                direction, velocity = self._normalize_mobility_direction(direction, speed)
 
-                # make sure we do not change speed
-                velocity = (velocity / np.linalg.norm(velocity)) * speed
-
-                distance -= t
-                dt -= (t / speed) * 1e9
+                nudge = min(self.MOBILITY_COLLISION_NUDGE, distance)
+                if nudge > 0:
+                    pos = pos + nudge * direction
+                    distance -= nudge
 
             else:
-                # If the ray does not hit an object, calculate the next position
-                break
+                if bbox_hit is None:
+                    # If the ray does not hit an object or the mobility bbox, calculate the next position
+                    pos = pos + distance * direction
+                    distance = 0.0
+                else:
+                    t, hit_axes = bbox_hit
+                    pos = pos + t * direction
+                    distance -= t
 
-        next_pos = pos + (velocity * dt / 1e9)
+                    direction, velocity = self._reflect_mobility_bbox_direction(direction, speed, hit_axes)
+                    pos = self._nudge_inside_mobility_bounds(pos, hit_axes)
+
+        next_pos = pos
 
         # update node pos & velocity
-        self.node_info[node_id].update_pos(self.sim_time + init_dt, next_pos, velocity, False)
+        self.node_info[node_id].update_pos(target_time, next_pos, velocity, False)
         # check if new velocity must be set
-        self.node_info[node_id].check_set_new_velocity(self.sim_time + init_dt, distance)
+        self.node_info[node_id].check_set_new_velocity(target_time, total_moved_distance)
 
 
     def _place_tx_rx_node(self, tx_node: int, rx_nodes: list):
@@ -592,9 +1040,6 @@ class SionnaEnv:
         :return: (list(rx_node), list(link propagation delay), list(wideband loss), list(normalized CFR))
         '''
 
-        # execute mobility
-        dt = req_sim_time - self.sim_time
-
         # estimate the node we need to update their position
         if req_mode == SionnaEnv.MODE_P2P:
             nodes_to_update = [tx_node, rx_node] # only TX and RX
@@ -602,8 +1047,8 @@ class SionnaEnv:
             # both P2MP and P2MP_LAH
             nodes_to_update = list(self.node_info.keys())
 
-        for node_id in nodes_to_update:
-            self._walk(node_id, dt)
+        # execute mobility
+        self._update_nodes_to_time(req_sim_time, nodes_to_update)
 
         # update time
         self.sim_time = req_sim_time
@@ -612,13 +1057,18 @@ class SionnaEnv:
         rx_nodes = nodes_to_update
         rx_nodes.remove(tx_node)
         self._place_tx_rx_node(tx_node, rx_nodes)
-
-        # create pathsolver; todo: check reuse
-        p_solver  = PathSolver()
+        rt_seed = self._path_solver_seed(self.my_seed,
+                                         req_sim_time,
+                                         tx_node,
+                                         rx_node,
+                                         req_mode,
+                                         self.sub_mode,
+                                         tuple(rx_nodes))
 
         # Compute propagation paths
-        paths = p_solver(scene=self.scene,
+        paths = self.p_solver(scene=self.scene,
                          max_depth=self.rt_max_depth,
+                         max_num_paths_per_src=self.rt_max_num_paths_per_src,
                          samples_per_src=self.rt_samples_per_src,
                          los=self.rt_los,
                          specular_reflection=self.rt_specular_reflection,  # Can rays bounce off surfaces?
@@ -627,11 +1077,13 @@ class SionnaEnv:
                          synthetic_array=self.rt_synthetic_array,
                          diffraction=self.rt_diffraction,  # costly
                          edge_diffraction=self.rt_edge_diffraction,  # rays that bend around edges
-                         diffraction_lit_region=self.rt_diffraction_lit_region)  # higher physical accuracy
+                         diffraction_lit_region=self.rt_diffraction_lit_region,
+                         seed=rt_seed)  # higher physical accuracy
 
         # AZU: sampling_frequency is only used if num_time_steps > 1
         # a: shape [num_rx, num_rx_ant, num_tx, num_tx_ant, num_paths, num_time_steps],
         a, tau = paths.cir(sampling_frequency=1e9, normalize_delays=False, out_type="numpy")
+        dr.eval()
 
         # shape: [num_rx, num_rx_ant, num_tx, num_tx_ant, num_ofdm_symbols, num_subcarriers]
         h_raw = paths.cfr(frequencies=self.frequencies,
@@ -642,24 +1094,26 @@ class SionnaEnv:
                   # antennas of a transmitter and receiver arrives at tau=0
                   normalize=False,  # Normalize energy
                   out_type="numpy")
+        dr.eval()
+
+        del paths          # <-- explicitly release GPU buffers
+        dr.sync_thread()   # <-- wait for deallocation to complete
 
         lnk_delay_arr = []
         lnk_loss_arr = []
         h_normalized_arr = []
 
         for rx_id, curr_rx_node in enumerate(rx_nodes):
-            lnk_tau = np.squeeze(tau[rx_id, :, :, :, :])
-            lnk_delay = int(round(np.min(lnk_tau[lnk_tau >= 0] * 1e9), 0))
-
-            h = np.squeeze(h_raw[rx_id, :, :, :, :, ])
-
-            # see Parseval's theorem
-            lnk_loss = float(-10 * np.log10(np.mean(np.abs(h) ** 2)))
-
-            # for frequency-selective channel
-            power = np.mean(np.abs(h) ** 2)  # shape [batch_size, 1, 1, 1]
-
-            h_normalized = h / np.sqrt(power)
+            tx_pos = self.node_info[tx_node].pos
+            rx_pos = self.node_info[curr_rx_node].pos
+            lnk_delay, lnk_loss, h_normalized = self._extract_link_channel(
+                tau[rx_id, :, :, :, :],
+                h_raw[rx_id, :, :, :, :, ],
+                tx_node,
+                curr_rx_node,
+                tx_pos,
+                rx_pos,
+                self.sim_time)
 
             # plausibility test
             if self.CHECKS_ENABLED:
@@ -729,9 +1183,13 @@ class SionnaEnv:
                     direction_params = (random_walk_model.direction.normal.mean,
                                         random_walk_model.direction.normal.variance)
 
+                rng = None
+                if self.absolute_time_mobility:
+                    rng = self._make_mobility_rng(node_info.id)
+
                 self.node_info[node_info.id] = RandomWalkMobility(node_info.id, [pos.x, pos.y, pos.z],
                                                                   mode, mode_params, speed, speed_params,
-                                                                  direction, direction_params)
+                                                                  direction, direction_params, rng=rng)
 
 
     def run(self):
@@ -772,6 +1230,9 @@ class SionnaEnv:
                     print("Sionna server init sucessful ...")
                 else:
                     print("Sionna server init failed ...")
+                    # Print detailed error message returned by init_simulation_env
+                    if error_msg:
+                        print("Error message:\n", error_msg)
                     do_terminate = True
 
             elif ns3_msg.HasField("channel_state_request"):
@@ -800,6 +1261,7 @@ class SionnaEnv:
             socket.send(resp_msg.SerializeToString())
 
         socket.close()
+        self._close_wb_loss_log()
         print("Computed no. CSI samples: %d" % total_num_csi_samples)
         print("Sionna server socket closed.")
 
@@ -807,29 +1269,57 @@ class SionnaEnv:
     def release(self):
         # delete / release the scene before loading a new one
         del self.scene
+        del self.p_solver
+        dr.sync_thread()
         gc.collect()  # force garbage collection
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    default_equidistant_walk_steps = int(os.environ.get("NS3SIONNA_EQUIDISTANT_WALK_STEPS", "0"))
+    # The mobility bbox guard is a safety net around scene extents, not a physical wall model.
+    # Walls still come from scene ray intersections; this outward margin only limits unbounded escape.
+    # The margin defaults to 1m and can be changed with NS3SIONNA_MOBILITY_BBOX_MARGIN or --mobility_bbox_margin.
+    default_mobility_bbox_margin = float(os.environ.get("NS3SIONNA_MOBILITY_BBOX_MARGIN", "1.0"))
+    default_mobility_bbox_toggle = str_to_bool(os.environ.get("NS3SIONNA_MOBILITY_BBOX_TOGGLE", "true"))
     parser.add_argument("--model_folder", type=str, default='models/', help="The folder containing the XML files of the scenes")
     parser.add_argument("--single_run", help="Whether not to terminate after single run", action='store_true')
     parser.add_argument("--default_mode", type=int, default=SionnaEnv.MODE_P2MP, help="Which mode to use if not set by ns3")
     parser.add_argument("--rt_fast", help="Use simplified raytracing for faster computations", action='store_true')
     parser.add_argument("--rt_max_parallel_links", type=int, default=256, help="Max no. of link simulated at once; depends on GPU memory")
+    parser.add_argument("--rt_max_num_paths_per_src", type=int, default=10 ** 7,
+                        help="Maximum number of paths per source stored by the Sionna RT PathSolver")
     parser.add_argument("--est_csi", help="Whether to estimate complex CSI per OFDM subcarrier", type=bool, default=True)
     parser.add_argument("--verbose", help="Whether to run in verbose mode", action='store_true')
+    parser.add_argument("--equidistant_walk_steps", type=int, default=default_equidistant_walk_steps,
+                        help="Fixed internal mobility step in ns for absolute-time walking; 0 keeps the legacy request-based mode")
+    parser.add_argument("--mobility_bbox_margin", type=float, default=default_mobility_bbox_margin,
+                        help="Outward x/y margin in meters for the scene bbox mobility guard; "
+                             "defaults to 1m via NS3SIONNA_MOBILITY_BBOX_MARGIN")
+    parser.add_argument("--mobility_bbox_toggle", type=str_to_bool, nargs='?', const=True,
+                        default=default_mobility_bbox_toggle,
+                        help="Enable the scene bbox mobility guard (true/false)")
+    parser.add_argument("--wb_loss_log", type=str, default=None,
+                        help="Optional CSV path for per-link wideband loss logging")
     args = parser.parse_args()
 
     print("ns3sionna v1.0")
     while True:
-        print("Using config: model_folder=%s, single_run=%s, mode=%d, rt_fast=%s, rt_max_parallel_links=%d, est_csi=%r"
-              % (args.model_folder, args.single_run, args.default_mode, args.rt_fast, args.rt_max_parallel_links, args.est_csi))
+        print("Using config: model_folder=%s, single_run=%s, mode=%d, rt_fast=%s, rt_max_parallel_links=%d, "
+              "rt_max_num_paths_per_src=%d, est_csi=%r, "
+              "equidistant_walk_steps=%d, mobility_bbox_toggle=%s, mobility_bbox_margin=%.3f, wb_loss_log=%s"
+              % (args.model_folder, args.single_run, args.default_mode, args.rt_fast, args.rt_max_parallel_links,
+                 args.rt_max_num_paths_per_src, args.est_csi,
+                 args.equidistant_walk_steps, args.mobility_bbox_toggle, args.mobility_bbox_margin,
+                 args.wb_loss_log))
         print("Waiting for new job ...")
         env = SionnaEnv(args.model_folder, args.rt_fast, args.default_mode, args.rt_max_parallel_links,
-                        args.est_csi, VERBOSE=args.verbose)
+                        rt_max_num_paths_per_src=args.rt_max_num_paths_per_src, est_csi=args.est_csi,
+                        VERBOSE=args.verbose, equidistant_walk_steps=args.equidistant_walk_steps,
+                        mobility_bbox_margin=args.mobility_bbox_margin,
+                        mobility_bbox_enabled=args.mobility_bbox_toggle,
+                        wb_loss_log=args.wb_loss_log)
         env.run()
 
         if args.single_run:
             break
-
