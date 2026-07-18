@@ -45,6 +45,8 @@ set(proto_source_files model/message.proto)
 
 # Module sources and headers
 set(SOURCE_FILES
+        model/mimo-channel-matrix.cc
+        model/su-mimo-link-model.cc
         model/sionna-mobility-model.cc
         model/sionna-propagation-cache.cc
         model/sionna-propagation-delay-model.cc
@@ -57,6 +59,8 @@ set(SOURCE_FILES
 )
 
 set(HEADER_FILES
+        model/mimo-channel-matrix.h
+        model/su-mimo-link-model.h
         model/sionna-mobility-model.h
         model/sionna-propagation-cache.h
         model/sionna-propagation-delay-model.h
@@ -87,8 +91,11 @@ build_lib(
         ${libnetwork}
         ${libpropagation}
         ${libspectrum}
+        ${libwifi}
         ${ZeroMQ_LIBRARIES}
         ${Protobuf_LIBRARIES}
+        TEST_SOURCES
+        test/sionna-test-suite.cc
 )
 
 # need protobuf_generate func to generate messages
