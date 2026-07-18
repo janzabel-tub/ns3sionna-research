@@ -11,6 +11,13 @@
 namespace ns3
 {
 
+MimoChannelMatrix::MimoChannelMatrix()
+    : m_numSubcarriers(0),
+      m_numRxAntennas(0),
+      m_numTxAntennas(0)
+{
+}
+
 MimoChannelMatrix::MimoChannelMatrix(uint32_t numSubcarriers,
                                      uint32_t numRxAntennas,
                                      uint32_t numTxAntennas)

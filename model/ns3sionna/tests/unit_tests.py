@@ -166,6 +166,40 @@ class TestServer(unittest.TestCase):
         self.env.compute_cfr(csi_req, csi_resp)
 
 
+    def test_get_csi_mimo_2x2(self):
+        """Test real Sionna 2x2 CFR dimensions and normalization on CPU."""
+        sim_info = self._create_sim_init_constant_mob(mode=SionnaEnv.MODE_P2P)
+        for array_config, pattern in (
+            (sim_info.sim_init_msg.tx_array, "tr38901"),
+            (sim_info.sim_init_msg.rx_array, "dipole"),
+        ):
+            array_config.num_rows = 1
+            array_config.num_cols = 2
+            array_config.vertical_spacing = 0.5
+            array_config.horizontal_spacing = 0.5
+            array_config.pattern = pattern
+            array_config.polarization = "V"
+
+        successful, error_msg = self.env.init_simulation_env(sim_info.sim_init_msg)
+        self.assertTrue(successful, error_msg)
+
+        csi_req = self._create_channel_state_request(time=0).channel_state_request
+        csi_resp = self._create_channel_state_response()
+        self.env.compute_cfr(csi_req, csi_resp)
+
+        rx_info = csi_resp.channel_state_response.csi[0].rx_nodes[0]
+        self.assertEqual(rx_info.num_rx_antennas, 2)
+        self.assertEqual(rx_info.num_tx_antennas, 2)
+        self.assertEqual(len(rx_info.frequencies), 256)
+        self.assertEqual(len(rx_info.csi_real), 256 * 2 * 2)
+        self.assertEqual(len(rx_info.csi_imag), 256 * 2 * 2)
+
+        flat_cfr = np.asarray(rx_info.csi_real) + 1j * np.asarray(rx_info.csi_imag)
+        cfr = flat_cfr.reshape((256, 2, 2))
+        self.assertTrue(np.all(np.isfinite(cfr)))
+        self.assertAlmostEqual(float(np.mean(np.abs(cfr) ** 2)), 1.0, places=6)
+
+
     #@unittest.skip("Not yet")
     def test_get_csi_mode3(self):
         '''

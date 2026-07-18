@@ -5,6 +5,7 @@
  */
 
 #include "ns3/mimo-channel-matrix.h"
+#include "ns3/sionna-propagation-cache.h"
 #include "ns3/su-mimo-link-model.h"
 #include "ns3/test.h"
 
@@ -140,6 +141,86 @@ class SuMimoFrequencySelectiveTest : public TestCase
     }
 };
 
+class LegacySisoDeserializationTest : public TestCase
+{
+  public:
+    LegacySisoDeserializationTest()
+        : TestCase("missing protobuf antenna dimensions decode as legacy 1x1")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        ns3sionna::ChannelStateResponse::ChannelState::RxNodeInfo message;
+        message.add_frequencies(-10);
+        message.add_frequencies(10);
+        message.add_csi_real(1.5);
+        message.add_csi_real(2.5);
+        message.add_csi_imag(-1.0);
+        message.add_csi_imag(-2.0);
+
+        const auto channel = SionnaPropagationCache::DeserializeChannelMatrix(message);
+        NS_TEST_ASSERT_MSG_EQ(channel.GetNumSubcarriers(), 2, "Legacy subcarrier count changed");
+        NS_TEST_ASSERT_MSG_EQ(channel.GetNumRxAntennas(), 1, "Legacy RX dimension is not 1");
+        NS_TEST_ASSERT_MSG_EQ(channel.GetNumTxAntennas(), 1, "Legacy TX dimension is not 1");
+        NS_TEST_ASSERT_MSG_EQ(channel.Get(1, 0, 0),
+                              std::complex<double>(2.5, -2.0),
+                              "Legacy SISO coefficient changed");
+    }
+};
+
+class MimoProtobufDeserializationTest : public TestCase
+{
+  public:
+    MimoProtobufDeserializationTest()
+        : TestCase("synthetic 2x2 protobuf CFR arrives in exact subcarrier-RX-TX order")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        ns3sionna::Wrapper outgoing;
+        auto* message =
+            outgoing.mutable_channel_state_response()->add_csi()->add_rx_nodes();
+        message->add_frequencies(-10);
+        message->add_frequencies(10);
+        message->set_num_rx_antennas(2);
+        message->set_num_tx_antennas(2);
+        for (int value = 1; value <= 8; ++value)
+        {
+            message->add_csi_real(value);
+            message->add_csi_imag(-value);
+        }
+
+        std::string wireBytes;
+        NS_TEST_ASSERT_MSG_EQ(outgoing.SerializeToString(&wireBytes),
+                              true,
+                              "Failed to serialize synthetic MIMO response");
+
+        ns3sionna::Wrapper incoming;
+        NS_TEST_ASSERT_MSG_EQ(incoming.ParseFromString(wireBytes),
+                              true,
+                              "Failed to parse synthetic MIMO response");
+        const auto channel = SionnaPropagationCache::DeserializeChannelMatrix(
+            incoming.channel_state_response().csi(0).rx_nodes(0));
+
+        NS_TEST_ASSERT_MSG_EQ(channel.GetNumSubcarriers(), 2, "Wrong subcarrier count");
+        NS_TEST_ASSERT_MSG_EQ(channel.GetNumRxAntennas(), 2, "Wrong RX dimension");
+        NS_TEST_ASSERT_MSG_EQ(channel.GetNumTxAntennas(), 2, "Wrong TX dimension");
+        NS_TEST_ASSERT_MSG_EQ(channel.Get(0, 1, 1),
+                              std::complex<double>(4.0, -4.0),
+                              "First subcarrier was reordered");
+        NS_TEST_ASSERT_MSG_EQ(channel.Get(1, 0, 1),
+                              std::complex<double>(6.0, -6.0),
+                              "Second subcarrier was reordered");
+        NS_TEST_ASSERT_MSG_EQ(channel.Get(1, 1, 1),
+                              std::complex<double>(8.0, -8.0),
+                              "Last MIMO coefficient was reordered");
+    }
+};
+
 class SionnaTestSuite : public TestSuite
 {
   public:
@@ -150,6 +231,8 @@ class SionnaTestSuite : public TestSuite
         AddTestCase(new SuMimoSisoReductionTest, TestCase::QUICK);
         AddTestCase(new SuMimoOrthogonalChannelTest, TestCase::QUICK);
         AddTestCase(new SuMimoFrequencySelectiveTest, TestCase::QUICK);
+        AddTestCase(new LegacySisoDeserializationTest, TestCase::QUICK);
+        AddTestCase(new MimoProtobufDeserializationTest, TestCase::QUICK);
     }
 };
 

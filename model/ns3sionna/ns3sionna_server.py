@@ -19,6 +19,10 @@ import mitsuba as mi
 import math
 from millify import millify
 
+from mimo_data_contract import (RX_ARRAY_DEFAULTS, TX_ARRAY_DEFAULTS,
+                                append_cfr_to_message, extract_link_cfr,
+                                normalize_link_cfr, resolve_array_config)
+
 from ns3sionna_utils import subcarrier_frequencies, compute_coherence_time, SECOND, MILLISECOND, coherence_from_velocities, \
     MAX_COHERENCE_TIME
 
@@ -184,12 +188,15 @@ class SionnaEnv:
 
             print(f'Running mode=3 w/ Tc: {self.chan_coh_time_mode3/1e6}ms')
 
-        # Configure antenna array for all transmitters/receivers
-        self.scene.tx_array = PlanarArray(num_rows=1, num_cols=1, vertical_spacing=0.5, horizontal_spacing=0.5,
-                                     pattern="tr38901", polarization="V")
+        # Missing messages deliberately reproduce the legacy 1x1 settings.
+        tx_array_msg = sim_init_msg.tx_array if sim_init_msg.HasField("tx_array") else None
+        rx_array_msg = sim_init_msg.rx_array if sim_init_msg.HasField("rx_array") else None
+        tx_array_config = resolve_array_config(tx_array_msg, TX_ARRAY_DEFAULTS)
+        rx_array_config = resolve_array_config(rx_array_msg, RX_ARRAY_DEFAULTS)
 
-        self.scene.rx_array = PlanarArray(num_rows=1, num_cols=1, vertical_spacing=0.5, horizontal_spacing=0.5,
-                                     pattern="dipole", polarization="V")
+        self.scene.tx_array = PlanarArray(**tx_array_config)
+        self.scene.rx_array = PlanarArray(**rx_array_config)
+
 
         # set current sim time to 0ns
         self.sim_time = 0
@@ -339,17 +346,9 @@ class SionnaEnv:
                 lnk_tau = np.squeeze(tau[rx_id, :, :, :, :])
                 lnk_delay = int(round(np.min(lnk_tau[lnk_tau >= 0] * 1e9), 0))
 
-                h = np.squeeze(h_raw[rx_id, :, :, :, :, ])
+                h = extract_link_cfr(h_raw, rx_id)
+                lnk_loss, h_normalized = normalize_link_cfr(h)
 
-                # see Parseval's theorem
-                lnk_loss = float(-10 * np.log10(np.mean(np.abs(h) ** 2)))
-
-                # for frequency-selective channel
-                power = np.mean(np.abs(h) ** 2)  # shape [batch_size, 1, 1, 1]
-
-                h_normalized = h / np.sqrt(power)
-
-                # plausibility test
                 if self.CHECKS_ENABLED:
                     power_normalized = np.mean(np.abs(h_normalized) ** 2)
                     assert math.isclose(power_normalized, 1.0, rel_tol=1e-3)   # Should be close to 1
@@ -367,9 +366,7 @@ class SionnaEnv:
                 rx_node_info.wb_loss = lnk_loss
 
                 if self.est_csi:
-                    rx_node_info.frequencies.extend(self.frequencies.tolist())
-                    rx_node_info.csi_imag.extend(np.imag(h_normalized).tolist())
-                    rx_node_info.csi_real.extend(np.real(h_normalized).tolist())
+                    append_cfr_to_message(rx_node_info, self.frequencies, h_normalized)
 
                 tc = coherence_from_velocities(self.node_info[curr_rx_node].get_velo_at(lah_time),
                                                 self.node_info[tx_node_id].velocity, self.fc,
@@ -468,9 +465,7 @@ class SionnaEnv:
             rx_node_info.wb_loss = lnk_loss[idx]
 
             if self.est_csi:
-                rx_node_info.frequencies.extend(self.frequencies.tolist())
-                rx_node_info.csi_imag.extend(np.imag(h_normalized[idx]).tolist())
-                rx_node_info.csi_real.extend(np.real(h_normalized[idx]).tolist())
+                append_cfr_to_message(rx_node_info, self.frequencies, h_normalized[idx])
 
             # compute coherence time: with direction vectors you can compute the radial (projected) relative
             # speed directly and from that the Doppler and coherence time.
@@ -651,17 +646,9 @@ class SionnaEnv:
             lnk_tau = np.squeeze(tau[rx_id, :, :, :, :])
             lnk_delay = int(round(np.min(lnk_tau[lnk_tau >= 0] * 1e9), 0))
 
-            h = np.squeeze(h_raw[rx_id, :, :, :, :, ])
+            h = extract_link_cfr(h_raw, rx_id)
+            lnk_loss, h_normalized = normalize_link_cfr(h)
 
-            # see Parseval's theorem
-            lnk_loss = float(-10 * np.log10(np.mean(np.abs(h) ** 2)))
-
-            # for frequency-selective channel
-            power = np.mean(np.abs(h) ** 2)  # shape [batch_size, 1, 1, 1]
-
-            h_normalized = h / np.sqrt(power)
-
-            # plausibility test
             if self.CHECKS_ENABLED:
                 power_normalized = np.mean(np.abs(h_normalized) ** 2)
                 assert math.isclose(power_normalized, 1.0, rel_tol=1e-3)   # Should be close to 1

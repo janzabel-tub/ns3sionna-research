@@ -20,6 +20,7 @@
 #ifndef SIONNA_PROPAGATION_CACHE_H
 #define SIONNA_PROPAGATION_CACHE_H
  
+#include "mimo-channel-matrix.h"
 #include "ns3/mobility-model.h"
 #include "ns3/nstime.h"
 #include "ns3/object.h"
@@ -55,6 +56,16 @@ class SionnaPropagationCache : public ns3::Object
         double GetPropagationLoss(Ptr<MobilityModel> a, Ptr<MobilityModel> b, double txPowerDbm) const;
         // small-scale fading
         std::vector<std::complex<double>> GetPropagationCSI(Ptr<const MobilityModel> a, Ptr<const MobilityModel> b) const;
+        // dimension-safe small-scale fading
+        MimoChannelMatrix GetPropagationChannelMatrix(Ptr<const MobilityModel> a,
+                                                       Ptr<const MobilityModel> b) const;
+
+        /**
+         * Decode a CFR response. Missing antenna dimensions denote legacy 1x1.
+         */
+        static MimoChannelMatrix DeserializeChannelMatrix(
+            const ns3sionna::ChannelStateResponse::ChannelState::RxNodeInfo& message);
+
         // frequency of subcarriers
         std::vector<int> GetPropagationFreq(Ptr<const MobilityModel> a, Ptr<const MobilityModel> b) const;
 
@@ -103,21 +114,21 @@ class SionnaPropagationCache : public ns3::Object
             * @param loss the estimated wideband pathloss
             * @param start_time the point in time when the CSI was estimated
             * @param end_time valid until (=start_time + computed channel coherence time)
-            * @param num_ofdm_subcarrier the number of OFDM subcarriers in CFR
+            * @param channel the dimensioned channel frequency response
             */
-            CacheEntry(Time delay, double loss, Time start_time, Time end_time, int num_ofdm_subcarrier,
-                uint32_t a, uint32_t b, Vector a_position, Vector b_position)
+            CacheEntry(Time delay, double loss, Time start_time, Time end_time,
+                const MimoChannelMatrix& channel, uint32_t a, uint32_t b,
+                Vector a_position, Vector b_position)
                 : m_delay(delay),
                   m_loss(loss),
                   m_start_time(start_time),
                   m_end_time(end_time),
-                  m_num_ofdm_subcarrier(num_ofdm_subcarrier),
                   m_a(a),
                   m_b(b),
                   m_a_position(a_position),
-                  m_b_position(b_position)
+                  m_b_position(b_position),
+                  m_cfr(channel)
             {
-                m_cfr.reserve(num_ofdm_subcarrier);
             }
 
             CacheEntry(): m_start_time(-1), m_end_time(-1)
@@ -128,14 +139,13 @@ class SionnaPropagationCache : public ns3::Object
             double m_loss;
             Time m_start_time;
             Time m_end_time;
-            int m_num_ofdm_subcarrier;
             uint32_t m_a;
             uint32_t m_b;
             Vector m_a_position;
             Vector m_b_position;
             // optional
             std::vector<int> m_freq;
-            std::vector<std::complex<double>> m_cfr; // channel frequency response
+            MimoChannelMatrix m_cfr; // channel frequency response
         };
 
         CacheEntry GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityModel> b) const;

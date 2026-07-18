@@ -119,6 +119,65 @@ SionnaHelper::Configure(int frequency, int channel_bw, int fft_size, int ofdm_su
         << ", MinTc=" << m_min_coherence_time_ms << "ms" << std::endl;
 }
 
+void
+SionnaHelper::ConfigureArray(AntennaArrayConfiguration& config,
+                             uint32_t numRows,
+                             uint32_t numColumns,
+                             double verticalSpacing,
+                             double horizontalSpacing,
+                             const std::string& pattern,
+                             const std::string& polarization)
+{
+    NS_ASSERT_MSG(numRows > 0 && numColumns > 0,
+                  "Antenna-array rows and columns must be positive");
+    NS_ASSERT_MSG(verticalSpacing > 0.0 && horizontalSpacing > 0.0,
+                  "Antenna-array spacings must be positive");
+    NS_ASSERT_MSG(!pattern.empty() && !polarization.empty(),
+                  "Antenna pattern and polarization must be set");
+
+    config.configured = true;
+    config.numRows = numRows;
+    config.numColumns = numColumns;
+    config.verticalSpacing = verticalSpacing;
+    config.horizontalSpacing = horizontalSpacing;
+    config.pattern = pattern;
+    config.polarization = polarization;
+}
+
+void
+SionnaHelper::ConfigureTransmitArray(uint32_t numRows,
+                                     uint32_t numColumns,
+                                     double verticalSpacing,
+                                     double horizontalSpacing,
+                                     const std::string& pattern,
+                                     const std::string& polarization)
+{
+    ConfigureArray(m_txArray,
+                   numRows,
+                   numColumns,
+                   verticalSpacing,
+                   horizontalSpacing,
+                   pattern,
+                   polarization);
+}
+
+void
+SionnaHelper::ConfigureReceiveArray(uint32_t numRows,
+                                    uint32_t numColumns,
+                                    double verticalSpacing,
+                                    double horizontalSpacing,
+                                    const std::string& pattern,
+                                    const std::string& polarization)
+{
+    ConfigureArray(m_rxArray,
+                   numRows,
+                   numColumns,
+                   verticalSpacing,
+                   horizontalSpacing,
+                   pattern,
+                   polarization);
+}
+
 double
 SionnaHelper::GetNoiseFloor()
 {
@@ -178,6 +237,24 @@ SionnaHelper::Start()
     simulation_info->set_subcarrier_spacing(m_subcarrier_spacing);
     simulation_info->set_mode(m_mode);
     simulation_info->set_sub_mode(m_sub_mode);
+
+    auto writeArrayConfig = [](const AntennaArrayConfiguration& source,
+                               ns3sionna::AntennaArrayConfig* target) {
+        target->set_num_rows(source.numRows);
+        target->set_num_cols(source.numColumns);
+        target->set_vertical_spacing(source.verticalSpacing);
+        target->set_horizontal_spacing(source.horizontalSpacing);
+        target->set_pattern(source.pattern);
+        target->set_polarization(source.polarization);
+    };
+    if (m_txArray.configured)
+    {
+        writeArrayConfig(m_txArray, simulation_info->mutable_tx_array());
+    }
+    if (m_rxArray.configured)
+    {
+        writeArrayConfig(m_rxArray, simulation_info->mutable_rx_array());
+    }
 
     NodeContainer c = NodeContainer::GetGlobal();
     for (auto iter = c.Begin(); iter != c.End(); ++iter)

@@ -65,6 +65,32 @@ public:
     void Configure(int frequency, int channel_bw, int fft_size, int ofdm_subcarrier_spacing);
 
     /**
+     * Configure the global Sionna transmit PlanarArray.
+     *
+     * Spacings are measured in wavelengths. If this method is not called, the
+     * legacy 1x1 tr38901/V array is used.
+     */
+    void ConfigureTransmitArray(uint32_t numRows,
+                                uint32_t numColumns,
+                                double verticalSpacing = 0.5,
+                                double horizontalSpacing = 0.5,
+                                const std::string& pattern = "tr38901",
+                                const std::string& polarization = "V");
+
+    /**
+     * Configure the global Sionna receive PlanarArray.
+     *
+     * Spacings are measured in wavelengths. If this method is not called, the
+     * legacy 1x1 dipole/V array is used.
+     */
+    void ConfigureReceiveArray(uint32_t numRows,
+                               uint32_t numColumns,
+                               double verticalSpacing = 0.5,
+                               double horizontalSpacing = 0.5,
+                               const std::string& pattern = "dipole",
+                               const std::string& polarization = "V");
+
+    /**
      * Connect ns3 to Sionna.
      */
     void Start();
@@ -90,6 +116,25 @@ public:
     int GetFrequency();
 
 private:
+    struct AntennaArrayConfiguration
+    {
+        bool configured{false};
+        uint32_t numRows{1};
+        uint32_t numColumns{1};
+        double verticalSpacing{0.5};
+        double horizontalSpacing{0.5};
+        std::string pattern;
+        std::string polarization;
+    };
+
+    static void ConfigureArray(AntennaArrayConfiguration& config,
+                               uint32_t numRows,
+                               uint32_t numColumns,
+                               double verticalSpacing,
+                               double horizontalSpacing,
+                               const std::string& pattern,
+                               const std::string& polarization);
+
     void SetFrequency(int frequency); // in MHz
     void SetChannelBandwidth(int channel_bw); // in MHz
     void SetFFTSize(int fft_size);
@@ -107,6 +152,8 @@ private:
     int m_fft_size;
     int m_subcarrier_spacing; // in Hz
     double m_noiseDbm;
+    AntennaArrayConfiguration m_txArray;
+    AntennaArrayConfiguration m_rxArray;
     std::string m_time_evo_model; // position or doppler based
 
 public:

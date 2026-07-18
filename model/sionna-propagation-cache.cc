@@ -11,6 +11,7 @@
 #include "message.pb.h"
 #include "sionna-mobility-model.h"
 
+#include "ns3/abort.h"
 #include "ns3/log.h"
 #include "ns3/node.h"
 #include "ns3/simulator.h"
@@ -143,7 +144,54 @@ SionnaPropagationCache::GetPropagationCSI(Ptr<const MobilityModel> a, Ptr<const 
 {
     Ptr<MobilityModel> tmp_a = ConstCast<MobilityModel>(a);
     Ptr<MobilityModel> tmp_b = ConstCast<MobilityModel>(b);
+    return GetPropagationData(tmp_a, tmp_b).m_cfr.GetCoefficients();
+}
+
+MimoChannelMatrix
+SionnaPropagationCache::GetPropagationChannelMatrix(Ptr<const MobilityModel> a,
+                                                     Ptr<const MobilityModel> b) const
+{
+    Ptr<MobilityModel> tmp_a = ConstCast<MobilityModel>(a);
+    Ptr<MobilityModel> tmp_b = ConstCast<MobilityModel>(b);
     return GetPropagationData(tmp_a, tmp_b).m_cfr;
+}
+
+MimoChannelMatrix
+SionnaPropagationCache::DeserializeChannelMatrix(
+    const ns3sionna::ChannelStateResponse::ChannelState::RxNodeInfo& message)
+{
+    const int coefficientCount = message.csi_real_size();
+    NS_ABORT_MSG_IF(message.csi_imag_size() != coefficientCount,
+                    "Real and imaginary CFR arrays have different sizes");
+
+    const int numSubcarriers = message.frequencies_size();
+    if (coefficientCount == 0 && numSubcarriers == 0)
+    {
+        return MimoChannelMatrix();
+    }
+
+    const uint32_t numRxAntennas =
+        message.num_rx_antennas() == 0 ? 1 : message.num_rx_antennas();
+    const uint32_t numTxAntennas =
+        message.num_tx_antennas() == 0 ? 1 : message.num_tx_antennas();
+    const std::size_t expectedCount =
+        static_cast<std::size_t>(numSubcarriers) * numRxAntennas * numTxAntennas;
+
+    NS_ABORT_MSG_IF(numSubcarriers == 0, "A non-empty CFR needs subcarrier frequencies");
+    NS_ABORT_MSG_IF(static_cast<std::size_t>(coefficientCount) != expectedCount,
+                    "CFR coefficient count does not match sc/rx/tx dimensions");
+
+    std::vector<std::complex<double>> coefficients;
+    coefficients.reserve(expectedCount);
+    for (int i = 0; i < coefficientCount; ++i)
+    {
+        coefficients.emplace_back(message.csi_real(i), message.csi_imag(i));
+    }
+
+    return MimoChannelMatrix(numSubcarriers,
+                             numRxAntennas,
+                             numTxAntennas,
+                             coefficients);
 }
 
 void
@@ -286,35 +334,33 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
         auto txPos = csi_response.csi(csi_i).tx_node().position();
 
         for (int rx_i=0; rx_i < csi_response.csi(csi_i).rx_nodes_size(); rx_i++) {
-            Time delay = NanoSeconds(csi_response.csi(csi_i).rx_nodes(rx_i).delay());
-            double wb_loss = csi_response.csi(csi_i).rx_nodes(rx_i).wb_loss();
-            //Time ttl = NanoSeconds(csi_response.csi(csi_i).rx_nodes(rx_i).ttl());
+            const auto& rxMessage = csi_response.csi(csi_i).rx_nodes(rx_i);
+            Time delay = NanoSeconds(rxMessage.delay());
+            double wb_loss = rxMessage.wb_loss();
 
-            google::protobuf::uint32 rxId = csi_response.csi(csi_i).rx_nodes(rx_i).id();
-            auto rxPos = csi_response.csi(csi_i).rx_nodes(rx_i).position();
-
-            int num_ofdm_subcarrier = csi_response.csi(csi_i).rx_nodes(rx_i).csi_imag().size();
+            google::protobuf::uint32 rxId = rxMessage.id();
+            auto rxPos = rxMessage.position();
+            MimoChannelMatrix channel = DeserializeChannelMatrix(rxMessage);
+            uint32_t num_ofdm_subcarrier = channel.GetNumSubcarriers();
 
             NS_LOG_DEBUG("\t\t: Response (delay: " << delay << ", loss: " << wb_loss << ")"
               << " (TxId: " << txId << " [" << csi_response.csi(csi_i).tx_node().position().x()
               << "," << csi_response.csi(csi_i).tx_node().position().y() << "," << csi_response.csi(csi_i).tx_node().position().z() << "] -> "
-              << rxId << " [" << csi_response.csi(csi_i).rx_nodes(rx_i).position().x() << "," << csi_response.csi(csi_i).rx_nodes(rx_i).position().y()
-              << "," << csi_response.csi(csi_i).rx_nodes(rx_i).position().z() << ",NSC" << num_ofdm_subcarrier << "])");
+              << rxId << " [" << rxPos.x() << "," << rxPos.y() << "," << rxPos.z()
+              << ",NSC=" << num_ofdm_subcarrier
+              << ",NRX=" << channel.GetNumRxAntennas()
+              << ",NTX=" << channel.GetNumTxAntennas() << "])");
 
             // Add the info from all other receivers to the cache
             CacheKey otherkey = CacheKey(txId, rxId);
-            CacheEntry entry = CacheEntry(delay, wb_loss, start_time, end_time, num_ofdm_subcarrier,
-                txId, rxId ,Vector(txPos.x(),txPos.y(),txPos.z()), Vector(rxPos.x(),rxPos.y(),rxPos.z()));
+            CacheEntry entry = CacheEntry(delay, wb_loss, start_time, end_time, channel,
+                txId, rxId, Vector(txPos.x(), txPos.y(), txPos.z()),
+                Vector(rxPos.x(), rxPos.y(), rxPos.z()));
 
-            // CFR: remove guards
-            for (int i=0; i < num_ofdm_subcarrier; i++)
+            // Frequencies remain one value per subcarrier, independent of antennas.
+            for (int i = 0; i < rxMessage.frequencies_size(); i++)
             {
-                int freq = csi_response.csi(csi_i).rx_nodes(rx_i).frequencies(i);
-                entry.m_freq.emplace_back(freq);
-
-                double imag = csi_response.csi(csi_i).rx_nodes(rx_i).csi_imag(i);
-                double real = csi_response.csi(csi_i).rx_nodes(rx_i).csi_real(i);
-                entry.m_cfr.emplace_back(real, imag);
+                entry.m_freq.emplace_back(rxMessage.frequencies(i));
             }
 
             auto cache_it = m_cache.find(otherkey);

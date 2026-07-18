@@ -28,6 +28,13 @@ class MimoChannelMatrix
 {
   public:
     /**
+     * Create an empty CFR tensor.
+     *
+     * This state represents a response for which CSI estimation was disabled.
+     */
+    MimoChannelMatrix();
+
+    /**
      * Create a zero-filled CFR tensor.
      *
      * @param numSubcarriers number of OFDM subcarriers

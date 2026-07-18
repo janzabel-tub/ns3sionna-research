@@ -5,6 +5,17 @@ package ns3sionna;
 // Definition of messages used for IPC between NS3 and Sionna
 // author: Pilz, Zubow
 
+// Sionna PlanarArray configuration. Spacings are measured in wavelengths.
+// If a SimInitMessage omits an array, the server uses its legacy 1x1 array.
+message AntennaArrayConfig {
+    uint32 num_rows = 1;
+    uint32 num_cols = 2;
+    double vertical_spacing = 3;
+    double horizontal_spacing = 4;
+    string pattern = 5;
+    string polarization = 6;
+}
+
 message SimInitMessage {
     string scene_fname = 1; // the scene to be loaded
     int32 seed = 2; // random seed
@@ -77,6 +88,8 @@ message SimInitMessage {
     }
 
     repeated NodeInfo nodes = 11;
+    AntennaArrayConfig tx_array = 12;
+    AntennaArrayConfig rx_array = 13;
 }
 
 // sent my Sioanna to confirm reception of SimInitMessage or CloseRequest
@@ -134,6 +147,11 @@ message ChannelStateResponse {
             repeated double csi_imag = 7;
             // max validity for that link
             uint64 end_time2 = 8; // simulation time (in ns)
+
+            // Antenna dimensions of the flattened CFR. Zero is reserved for
+            // legacy messages and is interpreted as one antenna.
+            uint32 num_rx_antennas = 9;
+            uint32 num_tx_antennas = 10;
         }
 
         TxNodeInfo tx_node = 3;
