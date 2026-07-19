@@ -4,7 +4,7 @@ Stand: 19. Juli 2026
 
 Arbeitszweig: feature/su-mimo-minimal
 
-Basis: ns-3.40, ns3sionna c896b858, Sionna 1.2.1
+Basis: ns-3.40, ns3sionna c896b858; Auftragsbasis 46d73fa; Sionna 1.2.1
 
 ## 1. Ziel und Abgrenzung
 
@@ -14,11 +14,12 @@ Post-Processing-SINR, Effective-SINR, MCS/PER und später die Auswahl von
 Precoding und MU-MIMO, wird ausschließlich in ns-3 ausgeführt.
 
 Die Entwicklung erfolgt in kleinen, einzeln testbaren Schritten. Der aktuelle
-Stand implementiert die Unterphasen 1.1 bis 1.3: numerischen SU-MIMO-Kern,
-konfigurierbare Sionna-Arrays und einen dimensionssicheren MIMO-Datenvertrag bis
-in den ns-3-Cache sowie eine explizit kalibrierbare 802.11ax-EESM-/PER-
-Abbildung über die bestehenden Wi-Fi-Fehlermodelle. Die Einkopplung in WifiPhy
-ist weiterhin nicht enthalten und beginnt erst mit Unterphase 1.4.
+Stand implementiert die Unterphasen 1.1 bis 1.4: numerischen SU-MIMO-Kern,
+konfigurierbare Sionna-Arrays, einen dimensionssicheren MIMO-Datenvertrag,
+explizit kalibrierbare 802.11ax-EESM-/PER-Abbildung und die schmale Einkopplung
+in den SpectrumWifiPhy-Empfangspfad. Ein reproduzierbares 1x1-/2x2-Beispiel
+deckt Vollrang- und Rang-1-Kanäle ab. Phase 2 und jede Form von Precoding oder
+Beamforming wurden nicht begonnen.
 
 ## 2. Reproduzierbare Ausgangsbasis
 
@@ -93,7 +94,7 @@ Abnahmekriterium: PER-vs-SNR-Kurven sind monoton, reproduzierbar und im
 SISO-Grenzfall deckungsgleich zur festgelegten Referenz. Alle Kriterien wurden
 mit den in Abschnitt 6 beschriebenen automatischen Tests erfüllt.
 
-#### Unterphase 1.4: WifiPhy-Integration und Beispiel
+#### Unterphase 1.4: WifiPhy-Integration und Beispiel (implementiert)
 
 - Nur den schmalsten notwendigen Empfangspfad in SpectrumWifiPhy anbinden.
 - NSS aus WifiTxVector verwenden und ungültige Antennenkonfigurationen früh
@@ -103,6 +104,7 @@ mit den in Abschnitt 6 beschriebenen automatischen Tests erfüllt.
 
 Abnahmekriterium: 2x2 gewinnt auf gut konditionierten Kanälen und kollabiert
 auf Rang-1-Kanälen nachvollziehbar gegen 1x1.
+Die automatisierten Ergebnisse in Abschnitt 6 erfüllen dieses Kriterium.
 
 ### Phase 2: High-Level-API
 
@@ -380,8 +382,9 @@ Eingabeparameter und nicht fest auf 290 K gesetzt.
 
 \(P_\mathrm{tx}\) ist die Gesamtleistung über alle Spatial Streams; die
 Aufteilung durch \(N_s\) erfolgt erst im MMSE-Modell. \(B\) ist die
-Empfänger-Rauschbandbreite. Externe Interferenz wird in Unterphase 1.3 nicht
-addiert. Ebenso wird kein zusätzlicher pauschaler RX-Diversity-Gewinn
+Empfänger-Rauschbandbreite. Link Budget und MMSE addieren selbst keine externe
+Interferenz; der SpectrumWifiPhy-Pfad bewertet sie anschließend skalar gemäß
+Abschnitt 5.8. Ein zusätzlicher pauschaler RX-Diversity-Gewinn wird nicht
 aufgeschlagen: Array- und Detektorgewinn sind bereits in \(\mathbf H[k]\) und
 den Post-MMSE-SINRs enthalten.
 
@@ -460,9 +463,104 @@ keinen SNR-Offset hinzu. Da sie Erfolgswahrscheinlichkeiten und keine
 Zufallsentscheidung ausgibt, ist die Berechnung bei identischen Eingaben
 deterministisch.
 
-## 6. Validierung der Unterphasen 1.1 bis 1.3
+### 5.8 Einkopplung in SpectrumWifiPhy
 
-Die native Suite sionna enthält nun 13 schnelle Fälle:
+Die Integration bleibt auf
+SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity beschränkt.
+Für einen HE-SU-PPDU liest sie \(N_s\) ausschließlich mit
+WifiTxVector::GetNss. Vor der Link-Abstraktion müssen
+\(N_s=N_\mathrm{tx}\), die physikalischen TX-/RX-Antennenzahlen gleich den
+CFR-Dimensionen, die maximal unterstützten Spatial Streams mindestens
+\(N_s\) und \(N_\mathrm{ant,rx}\geq N_s\) sein. Inkonsistenzen brechen damit
+vor MMSE, EESM und Paketempfang ab. \(N_s<N_\mathrm{tx}\), Streamauswahl und
+Precoding gehören weiterhin ausdrücklich nicht zu Phase 1.
+
+Der SpectrumChannel hat den skalaren Wideband-Pfadverlust bereits auf
+params->psd angewendet. Die MIMO-Integration verwendet daher
+
+\[
+  P_\mathrm{in} =
+  \int S_\mathrm{params}(f)\,\mathrm df \; G_\mathrm{rx}
+\]
+
+als bereits pfadverlustbehaftete Empfangsleistung. Der Wideband-Verlust aus
+dem Cache wird an dieser Stelle nur noch für den bestehenden Diagnose-Tag
+gelesen und nicht erneut multipliziert. Empfangsverstärkung,
+Rauschbandbreite, 290 K und Empfängerrauschzahl gehen genau einmal in das
+Link Budget ein. Weil ns-3.40 die Rauschzahl nicht lesbar als WifiPhy-Attribut
+bereitstellt, verlangt SetReceiverNoiseFigureDb einen expliziten Wert; er muss
+mit SpectrumWifiPhy::RxNoiseFigure identisch konfiguriert werden. Ein
+fehlender Wert bricht den MIMO-Pfad früh ab.
+
+MMSE und EESM liefern \(\gamma_\mathrm{eff}\). SpectrumWifiPhy erwartet
+dagegen weiterhin eine skalare PSD und wendet seine InterferenceHelper-
+Berechnung später selbst an. Für das AWGN-Fehlermodell ist dessen interner
+Diversity-Faktor
+
+\[
+  G_\mathrm{AWGN} =
+  \begin{cases}
+    N_\mathrm{ant,rx}/N_s, & N_\mathrm{ant,rx}>N_s,\\
+    1, & \text{sonst}.
+  \end{cases}
+\]
+
+Da der MMSE-Schritt den Arraygewinn bereits enthält, wird die äquivalente
+skalare Empfangsleistung auf
+
+\[
+  P_\mathrm{eq} =
+  \frac{\gamma_\mathrm{eff} P_N}{G_\mathrm{AWGN}},
+  \qquad P_N = kTB\,10^{NF/10}
+\]
+
+gesetzt. InterferenceHelper erhält damit bei zusätzlicher skalarer
+Interferenz \(I\)
+
+\[
+  \gamma_\mathrm{phy}
+  = \frac{P_\mathrm{eq}}{P_N+I}G_\mathrm{AWGN}
+  = \gamma_\mathrm{eff}\frac{P_N}{P_N+I}.
+\]
+
+Ohne Interferenz gilt exakt
+\(\gamma_\mathrm{phy}=\gamma_\mathrm{eff}\); Pfadverlust, thermisches
+Rauschen, Rauschzahl und Arraygewinn werden nicht doppelt angewendet.
+Zeitvariable Interferenz wirkt weiterhin über SpectrumWifiPhy, jedoch als
+skalare Nachbewertung und nicht als subcarrierabhängige
+Interferenzkovarianz im MMSE-Detektor.
+
+Der bisherige 1x1-Pfad bleibt unverändert skalar und benötigt kein EESM-Beta.
+Nicht-HE-Kontrollrahmen einer MIMO-PHY verwenden während Phase 1 das erste
+Antennenpaar, damit Beacon, Association und ACK ohne vorweggenommene
+Streamauswahl funktionieren. Der letzte Guard-Bin und das bestehende
+CFR-Tag-Format bleiben im 1x1-Fall kompatibel. Für automatisierte Beispiele
+kann eine normalisierte feste CFR den Sionna-Cache ersetzen; dieser
+deterministische Test-Hook ändert den Produktionspfad nicht. Der MimoRx-Trace
+meldet PPDU-UID, Knoten, Effective-SINR, PER und den kleinsten Kanalrang über
+alle Subcarrier.
+
+Das Beispiel ns3_wifi_sumimo_minimal.cc erzeugt drei flache, normierte Kanäle
+bei HE MCS 5 und 20 dB Referenz-SNR: 1x1 mit \(h=1\), gut konditioniertes 2x2
+mit \(\mathrm{diag}(\sqrt{2},\sqrt{2})\) und Rang-1-2x2 mit ausschließlich
+Einsen. Es misst realen UDP-Durchsatz über SpectrumWifiPhy und gibt zusätzlich
+PER, Stream-SINR, EESM-SINR und Mindestkanalrang aus. Der Aufruf muss ein
+positives --eesmBetaLinear liefern. Der im Regressionstest verwendete Wert
+2 ist nur ein expliziter Formel-Sentinel; bei diesen flachen Kanälen ist das
+Ergebnis betaunabhängig und stellt keine Produktionskalibrierung dar.
+
+Die deterministische Referenzausgabe lautet:
+
+- 1x1: Rang 1, Stream-/Effective-SINR 20,000 dB, PER 0,000016 und
+  68,1408 Mbit/s;
+- gut konditioniertes 2x2: Rang 2, beide Stream-SINRs und Effective-SINR
+  20,000 dB, PER 0,000016 und 134,3904 Mbit/s;
+- Rang-1-2x2: Rang 1, beide Stream-SINRs und Effective-SINR -0,043214 dB,
+  PER 1 und 0 Mbit/s.
+
+## 6. Validierung der Unterphasen 1.1 bis 1.4
+
+Die native Suite sionna enthält nun 15 schnelle Fälle:
 
 1. Layouttest eines 2 x 2 x 2-Tensors mit eindeutig nummerierten Koeffizienten.
 2. Reversible dB-/Linear-Umrechnung einschließlich 10 dB gleich Faktor zehn.
@@ -491,6 +589,10 @@ Die native Suite sionna enthält nun 13 schnelle Fälle:
     \(N_\mathrm{sc}\times1\times1\).
 13. Protocol-Buffer-Rundlauf einer synthetischen 2 x 2 x 2-CFR mit den
     komplexen Werten 1-j bis 8-8j und indexgenauer Prüfung.
+14. Mindestkanalrang eins beziehungsweise zwei für Rang-1- und orthogonale
+    2x2-Kanäle über alle Subcarrier.
+15. Spectrumadapter-Test für exaktes Rauschleistungs- und AWGN-Diversity-
+    Compensation-Mapping ohne doppelte Anwendung von Rauschen oder Arraygewinn.
 
 Die vier reinen Python-Vertragstests prüfen Standard- und explizite
 Arraykonfiguration, bytegleiche 1x1-Serialisierung, die sc/rx/tx-Reihenfolge
@@ -505,20 +607,30 @@ Werte und mittlere normierte Leistung eins. Die übrigen sieben Servertests
 decken den unveränderten 1x1-Pfad, Mobilität, Kohärenzzeit und Mehrnutzer-
 Anfragen ab.
 
+Die ExampleAsTest-Suite führt den vollständigen UDP-/SpectrumWifiPhy-Pfad für
+1x1, Vollrang-2x2 und Rang-1-2x2 aus und vergleicht alle ausgegebenen Metriken
+bytegenau mit der Referenzdatei. Ein separater Negativlauf bestätigt, dass das
+Beispiel ohne explizites EESM-Beta mit Status 2 abbricht.
+
 ### 6.1 Ausgeführte CPU-Validierung
 
-Am 19. Juli 2026 wurden nach Abschluss der Unterphase 1.3 folgende Prüfungen
+Am 19. Juli 2026 wurden nach Abschluss der Unterphase 1.4 folgende Prüfungen
 erfolgreich ausgeführt:
 
-- Build von sionna und sionna-test mit GCC 13.3
-- native ns-3-Suite sionna: 13 von 13 Fällen in 0,002 s bestanden
+- vollständiger Build mit Beispielen und Tests unter GCC 13.3
+- native ns-3-Suite sionna: 15 von 15 Fällen in 0,009 s bestanden
 - SISO-Paritätsmatrix: alle 108 Kombinationen stimmen innerhalb 1e-12 mit der
   direkt aufgerufenen ns-3-Fehlermodellschnittstelle überein
 - frequenzselektive Monotonitätsmatrix: alle 312 PER-Werte bestanden
 - Reproduzierbarkeit: 20 identische 2x2-Aufrufe mit exakt gleichen Ergebnissen
+- ExampleAsTest sionna-example-sumimo-minimal: ein von einem Fall bestanden;
+  Vollrang-2x2 erreicht 134,3904 statt 68,1408 Mbit/s bei 1x1, Rang-1-2x2
+  erreicht bei PER 1 erwartungsgemäß 0 Mbit/s
+- Negativlauf ohne --eesmBetaLinear: dokumentierter Abbruch mit Status 2 statt
+  eines impliziten Produktions-Betas
 - reine Python-Vertragssuite: vier von vier Fällen in 0,001 s bestanden
-- gesamte Sionna-CPU-Serversuite: acht von acht Fällen in 150,936 s bestanden;
-  der reale 2x2-Fall lief in 1,581 s, lieferte 2 x 2 x 256 und erfüllte die
+- gesamte Sionna-CPU-Serversuite: acht von acht Fällen in 170,587 s bestanden;
+  der reale 2x2-Fall lief in 1,574 s, lieferte 2 x 2 x 256 und erfüllte die
   Normalisierung innerhalb 1e-6
 - P2P-End-to-End-Test example-sionna-sensing im unveränderten 1x1-Modus:
   drei CFR-Antworten, zwei empfangene UDP-Pakete zu je 1024 Byte und
@@ -534,13 +646,15 @@ nicht betroffen. Eine Korrektur gehört in eine eigene kleine Baseline-Subphase.
 
 - Die Arraykonfiguration ist global für Sender und Empfänger. Knotenbezogene
   Geometrie und Orientierung gehören zur High-Level-API in Phase 2.
-- Der 2x2-Kanal liegt dimensionssicher im Cache, ist aber noch nicht in den
-  WifiPhy-Empfangspfad eingekoppelt. Der bestehende Spektrumpfad verwendet im
-  1x1-Fall weiterhin die flache Kompatibilitätsansicht; die Integration folgt
-  erst in Unterphase 1.4.
-- Das Link Budget enthält thermisches Empfängerrauschen, aber noch keine
-  zeitvariable externe Interferenz. Diese muss bei der späteren
-  WifiPhy-Integration konsistent als SINR eingebracht werden.
+- Der integrierte MIMO-Pfad unterstützt nur HE SU mit einem Open-Loop-Stream
+  je TX-Antenne. Nicht-HE-Kontrollrahmen verwenden das erste Antennenpaar;
+  MU-MIMO, Streamauswahl und Precoding bleiben außerhalb von Phase 1.
+- Zeitvariable externe Interferenz wird nach der MMSE-/EESM-Abstraktion durch
+  InterferenceHelper skalar berücksichtigt. Eine frequenz- und
+  antennenabhängige Interferenzkovarianz im MMSE-Detektor ist noch nicht
+  modelliert.
+- Die Rauschzahl muss am Adapter und an SpectrumWifiPhy explizit identisch
+  gesetzt werden, da ns-3.40 das gesetzte WifiPhy-Attribut nicht lesbar macht.
 - Es existiert absichtlich keine mitgelieferte HE-EESM-Beta-Tabelle.
   Frequenzselektive absolute PER-Prognosen benötigen vor der wissenschaftlichen
   Nutzung eine dokumentierte Link-Level-Kalibrierung. Ohne diese Konfiguration
@@ -556,8 +670,9 @@ nicht betroffen. Eine Korrektur gehört in eine eigene kleine Baseline-Subphase.
   nicht-reziprokes Precoding müssen Richtung und Konfiguration Teil des
   Schlüssels werden.
 
-Unterphase 1.3 ist abgeschlossen. Unterphase 1.4 und damit jede Änderung am
-WifiPhy-Empfangspfad wurden bewusst noch nicht begonnen.
+Unterphase 1.4 ist abgeschlossen; damit ist das abgegrenzte SU-MIMO-
+Minimalmodell der Phase 1 vollständig. Phase 2, Streamauswahl und Precoding
+wurden bewusst nicht begonnen.
 
 ## 8. Ausführung
 
@@ -566,13 +681,13 @@ Vom ns-3.40-Verzeichnis:
     ./ns3 configure --enable-examples --enable-tests
     ./ns3 build
     ./test.py -s sionna
+    ./test.py -s sionna-example-sumimo-minimal
+    ./ns3 run "ns3_wifi_sumimo_minimal --eesmBetaLinear=2"
 
 Python-Vertrag und Server vom Verzeichnis contrib/sionna/model/ns3sionna:
 
-    conda run -n sionna-venv python -m unittest
-      tests/test_mimo_data_contract.py -v
-    conda run -n sionna-venv python -m unittest
-      tests/unit_tests.py -v
+    conda run -n sionna-venv python -m unittest -v tests.test_mimo_data_contract
+    conda run -n sionna-venv python -m unittest -v tests.unit_tests
 
 PDF neu erzeugen:
 
