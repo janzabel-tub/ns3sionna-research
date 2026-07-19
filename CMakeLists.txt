@@ -81,7 +81,7 @@ set(HEADER_FILES
 set(examples_as_tests_sources)
 if(${ENABLE_EXAMPLES})
     set(examples_as_tests_sources
-            #test/sionna-examples-test-suite.cc
+            test/sionna-examples-test-suite.cc
     )
 endif()
 
@@ -100,6 +100,7 @@ build_lib(
         ${Protobuf_LIBRARIES}
         TEST_SOURCES
         test/sionna-test-suite.cc
+        ${examples_as_tests_sources}
 )
 
 # need protobuf_generate func to generate messages

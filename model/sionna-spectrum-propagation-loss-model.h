@@ -29,6 +29,7 @@
 #include <ns3/traced-callback.h>
 #include "cfr-tag.h"
 
+#include <limits>
 #include <map>
 
 namespace ns3
@@ -71,6 +72,18 @@ class SionnaSpectrumPropagationLossModel : public SpectrumPropagationLossModel
 
     void SetPropagationCache(Ptr<SionnaPropagationCache> propagationCache);
 
+    /**
+     * Bypass the Sionna cache with a deterministic normalized CFR. Intended
+     * for reproducible examples and end-to-end tests.
+     */
+    void SetFixedChannelMatrix(const MimoChannelMatrix& channel, double pathLossDb = 0.0);
+
+    /**
+     * Configure the noise figure used by the MIMO link budget. It must match
+     * the receiving SpectrumWifiPhy's RxNoiseFigure setting.
+     */
+    void SetReceiverNoiseFigureDb(double noiseFigureDb);
+
     /** Configure the explicit EESM beta for one HE MCS in linear units. */
     void SetEesmBeta(uint8_t mcs, double betaLinear);
 
@@ -105,6 +118,11 @@ class SionnaSpectrumPropagationLossModel : public SpectrumPropagationLossModel
 
     Ptr<SionnaPropagationCache> m_propagationCache;
     Ptr<HeSuMimoLinkAbstraction> m_linkAbstraction;
+    bool m_fixedChannelEnabled{false};
+    MimoChannelMatrix m_fixedChannel;
+    double m_fixedPathLossDb{0.0};
+    double m_receiverNoiseFigureDb{
+        std::numeric_limits<double>::quiet_NaN()};
 
     TracedCallback<uint64_t, uint32_t, uint32_t, double, double, uint32_t> m_mimoRxTrace;
 };

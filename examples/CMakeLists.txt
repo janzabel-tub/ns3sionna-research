@@ -5,6 +5,13 @@ build_lib_example(
 )
 
 build_lib_example(
+    NAME ns3_wifi_sumimo_minimal
+    SOURCE_FILES ns3_wifi_sumimo_minimal.cc
+    LIBRARIES_TO_LINK ${libsionna} ${libwifi} ${libinternet} ${libapplications}
+                      ${libmobility} ${libpropagation} ${libspectrum}
+)
+
+build_lib_example(
         NAME ns3sionna-example-sionna
         SOURCE_FILES example-sionna.cc
         LIBRARIES_TO_LINK ${libsionna} ${libwifi} ${libbuildings} ${libinternet} ${libapplications}

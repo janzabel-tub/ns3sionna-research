@@ -111,14 +111,6 @@ GetErrorRateModel(Ptr<SpectrumWifiPhy> phy)
     return helper->GetErrorRateModel();
 }
 
-double
-GetRxNoiseFigureDb(Ptr<SpectrumWifiPhy> phy)
-{
-    DoubleValue value;
-    phy->GetAttribute("RxNoiseFigure", value);
-    return value.Get();
-}
-
 } // namespace
 
 const HeSuMimoLinkResult&
@@ -165,6 +157,24 @@ void
 SionnaSpectrumPropagationLossModel::SetPropagationCache(Ptr<SionnaPropagationCache> propagationCache)
 {
     m_propagationCache = propagationCache;
+}
+
+void
+SionnaSpectrumPropagationLossModel::SetFixedChannelMatrix(const MimoChannelMatrix& channel,
+                                                          double pathLossDb)
+{
+    NS_ABORT_MSG_IF(!std::isfinite(pathLossDb), "Fixed path loss must be finite");
+    m_fixedChannel = channel;
+    m_fixedPathLossDb = pathLossDb;
+    m_fixedChannelEnabled = true;
+}
+
+void
+SionnaSpectrumPropagationLossModel::SetReceiverNoiseFigureDb(double noiseFigureDb)
+{
+    NS_ABORT_MSG_IF(!std::isfinite(noiseFigureDb) || noiseFigureDb < 0.0,
+                    "Receiver noise figure must be finite and non-negative");
+    m_receiverNoiseFigureDb = noiseFigureDb;
 }
 
 void
@@ -261,20 +271,29 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
 
     Ptr<SpectrumValue> rxPsd = Copy<SpectrumValue>(params->psd);
 
-    NS_ABORT_MSG_IF(!m_propagationCache,
-                    "SionnaSpectrumPropagationLossModel needs a propagation cache");
+    NS_ABORT_MSG_IF(!m_fixedChannelEnabled && !m_propagationCache,
+                    "SionnaSpectrumPropagationLossModel needs a propagation cache or fixed CFR");
 
     // The scalar SpectrumChannel loss model already applied this wideband path
     // loss to params->psd. Fetch it only for the diagnostic packet tag.
-    const double wbLoss = m_propagationCache->GetPropagationLoss(a, b);
+    const double wbLoss = m_fixedChannelEnabled
+                              ? m_fixedPathLossDb
+                              : m_propagationCache->GetPropagationLoss(a, b);
     const MimoChannelMatrix channel =
-        m_propagationCache->GetPropagationChannelMatrix(a, b);
+        m_fixedChannelEnabled ? m_fixedChannel
+                              : m_propagationCache->GetPropagationChannelMatrix(a, b);
     NS_ABORT_MSG_IF(channel.GetNumSubcarriers() + 1 != params->psd->GetValuesN(),
                     "PSD must contain exactly one more guard bin than the Sionna CFR");
 
     Ptr<const WifiSpectrumSignalParameters> wifiParams =
         DynamicCast<const WifiSpectrumSignalParameters>(params);
-    if (wifiParams && wifiParams->ppdu)
+    const bool isHeSu =
+        wifiParams && wifiParams->ppdu &&
+        wifiParams->ppdu->GetTxVector().GetModeInitialized() &&
+        wifiParams->ppdu->GetTxVector().GetMode().GetModulationClass() ==
+            WIFI_MOD_CLASS_HE &&
+        wifiParams->ppdu->GetTxVector().GetPreambleType() == WIFI_PREAMBLE_HE_SU;
+    if (isHeSu)
     {
         NS_ABORT_MSG_IF(wifiParams->ppdu->GetTxVector().GetNss() !=
                             channel.GetNumTxAntennas(),
@@ -283,10 +302,11 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
 
     const bool legacySiso = channel.GetNumRxAntennas() == 1 &&
                             channel.GetNumTxAntennas() == 1;
-    if (legacySiso)
+    const bool scalarCompatibilityPath = legacySiso || !isHeSu;
+    if (scalarCompatibilityPath)
     {
-        // Preserve the established 1x1 path, including its untouched trailing
-        // guard bin. No EESM beta is required for legacy operation.
+        // Preserve the established 1x1 path. Non-HE control frames on a MIMO
+        // PHY use the first antenna pair because Phase 1 models HE SU payloads only.
         auto value = rxPsd->ValuesBegin();
         for (uint32_t sc = 0; sc < channel.GetNumSubcarriers(); ++sc, ++value)
         {
@@ -310,6 +330,9 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
                         "Transmitter PHY does not support WifiTxVector NSS");
         NS_ABORT_MSG_IF(rxPhy->GetMaxSupportedRxSpatialStreams() < txVector.GetNss(),
                         "Receiver PHY does not support WifiTxVector NSS");
+        NS_ABORT_MSG_IF(!std::isfinite(m_receiverNoiseFigureDb),
+                        "Configure the MIMO receiver noise figure explicitly and consistently "
+                        "with SpectrumWifiPhy RxNoiseFigure");
 
         const double rxGainLinear = DbToRatio(rxPhy->GetRxGain());
         const double receivedPowerW = Integral(*params->psd) * rxGainLinear;
@@ -320,7 +343,7 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
                                             txPhy->GetNumberOfAntennas(),
                                             rxPhy->GetNumberOfAntennas(),
                                             txVector.GetChannelWidth() * 1e6,
-                                            GetRxNoiseFigureDb(rxPhy),
+                                            m_receiverNoiseFigureDb,
                                             GetErrorRateModel(rxPhy));
 
         const double equivalentPowerBeforeRxGain =
