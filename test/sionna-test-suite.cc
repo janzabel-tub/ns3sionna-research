@@ -4,11 +4,15 @@
  * Copyright (c) 2026
  */
 
+#include "ns3/error-rate-model.h"
+#include "ns3/he-phy.h"
+#include "ns3/he-su-mimo-link-abstraction.h"
 #include "ns3/mimo-channel-matrix.h"
 #include "ns3/sionna-propagation-cache.h"
 #include "ns3/su-mimo-link-model.h"
 #include "ns3/test.h"
 #include "ns3/wifi-link-budget.h"
+#include "ns3/wifi-tx-vector.h"
 
 #include <cmath>
 #include <complex>
@@ -17,6 +21,29 @@ using namespace ns3;
 
 namespace
 {
+
+WifiTxVector
+MakeHeTxVector(WifiMode mode, uint8_t nss)
+{
+    return WifiTxVector(mode,
+                        0,
+                        WIFI_PREAMBLE_HE_SU,
+                        800,
+                        nss,
+                        nss,
+                        0,
+                        20,
+                        false);
+}
+
+WifiLinkBudgetResult
+MakeReferenceSnrBudget(double referenceSnrLinear)
+{
+    constexpr double boltzmann = 1.3803e-23;
+    const double txPowerDbm =
+        WifiLinkBudget::LinearToDb(referenceSnrLinear * boltzmann) + 30.0;
+    return WifiLinkBudget::Calculate(txPowerDbm, 0.0, 1.0, 1.0, 0.0);
+}
 
 class MimoChannelMatrixLayoutTest : public TestCase
 {
@@ -129,6 +156,104 @@ class WifiLinkBudgetCalculationTest : public TestCase
                                   expectedSnr / 2.0,
                                   expectedSnr * 1e-12,
                                   "Doubling temperature must halve SNR");
+    }
+};
+
+class HeEesmFlatChannelTest : public TestCase
+{
+  public:
+    HeEesmFlatChannelTest()
+        : TestCase("HE EESM preserves a flat post-MMSE SINR across tones and streams")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        MimoChannelMatrix channel(4, 2, 2);
+        for (uint32_t sc = 0; sc < channel.GetNumSubcarriers(); ++sc)
+        {
+            channel.Set(sc, 0, 0, {std::sqrt(2.0), 0.0});
+            channel.Set(sc, 1, 1, {std::sqrt(2.0), 0.0});
+        }
+
+        const auto linkBudget = MakeReferenceSnrBudget(1.0);
+        const auto txVector = MakeHeTxVector(HePhy::GetHeMcs0(), 2);
+        auto abstraction = CreateObject<HeSuMimoLinkAbstraction>();
+        // Any positive beta gives the same answer for a flat channel.
+        abstraction->SetEesmBeta(0, 3.0);
+
+        const auto result = abstraction->Calculate(channel, linkBudget, txVector, 1000);
+        for (uint32_t sc = 0; sc < result.GetMimoResult().GetNumSubcarriers(); ++sc)
+        {
+            for (uint32_t stream = 0; stream < result.GetMimoResult().GetNumStreams(); ++stream)
+            {
+                NS_TEST_ASSERT_MSG_EQ_TOL(result.GetMimoResult().GetSinrLinear(sc, stream),
+                                          linkBudget.GetReferenceSnrLinear(),
+                                          1e-12,
+                                          "Flat-channel post-MMSE SINR changed");
+            }
+        }
+        NS_TEST_ASSERT_MSG_EQ_TOL(result.GetEffectiveSinrLinear(),
+                                  linkBudget.GetReferenceSnrLinear(),
+                                  1e-12,
+                                  "EESM must preserve equal SINR samples");
+
+        const double directSuccess =
+            abstraction->GetErrorRateModel()->GetChunkSuccessRate(HePhy::GetHeMcs0(),
+                                                                  txVector,
+                                                                  result.GetEffectiveSinrLinear(),
+                                                                  8000,
+                                                                  2);
+        NS_TEST_ASSERT_MSG_EQ_TOL(result.GetPacketSuccessRate(),
+                                  directSuccess,
+                                  1e-12,
+                                  "Packet success did not use the configured ErrorRateModel");
+    }
+};
+
+class HeEesmFrequencySelectiveTest : public TestCase
+{
+  public:
+    HeEesmFrequencySelectiveTest()
+        : TestCase("HE EESM follows the configured beta on a frequency-selective channel")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        MimoChannelMatrix channel(2, 1, 1);
+        channel.Set(0, 0, 0, {1.0, 0.0});
+        channel.Set(1, 0, 0, {3.0, 0.0});
+
+        const auto linkBudget = MakeReferenceSnrBudget(1.0);
+        const auto txVector = MakeHeTxVector(HePhy::GetHeMcs3(), 1);
+        auto abstraction = CreateObject<HeSuMimoLinkAbstraction>();
+        // Formula-only test value; it is not an HE MCS 3 calibration.
+        constexpr double beta = 2.0;
+        abstraction->SetEesmBeta(3, beta);
+
+        const auto result = abstraction->Calculate(channel, linkBudget, txVector, 1000);
+        const double firstSinr = linkBudget.GetReferenceSnrLinear();
+        const double secondSinr = 9.0 * linkBudget.GetReferenceSnrLinear();
+        const double expected =
+            -beta * std::log((std::exp(-firstSinr / beta) +
+                              std::exp(-secondSinr / beta)) /
+                             2.0);
+
+        NS_TEST_ASSERT_MSG_EQ_TOL(result.GetMimoResult().GetSinrLinear(0, 0),
+                                  firstSinr,
+                                  1e-12,
+                                  "First tone SINR is incorrect");
+        NS_TEST_ASSERT_MSG_EQ_TOL(result.GetMimoResult().GetSinrLinear(1, 0),
+                                  secondSinr,
+                                  1e-12,
+                                  "Second tone SINR is incorrect");
+        NS_TEST_ASSERT_MSG_EQ_TOL(result.GetEffectiveSinrLinear(),
+                                  expected,
+                                  1e-12,
+                                  "Frequency-selective EESM result is incorrect");
     }
 };
 
@@ -313,6 +438,8 @@ class SionnaTestSuite : public TestSuite
         AddTestCase(new MimoChannelMatrixLayoutTest, TestCase::QUICK);
         AddTestCase(new WifiLinkBudgetConversionTest, TestCase::QUICK);
         AddTestCase(new WifiLinkBudgetCalculationTest, TestCase::QUICK);
+        AddTestCase(new HeEesmFlatChannelTest, TestCase::QUICK);
+        AddTestCase(new HeEesmFrequencySelectiveTest, TestCase::QUICK);
         AddTestCase(new SuMimoSisoReductionTest, TestCase::QUICK);
         AddTestCase(new SuMimoOrthogonalChannelTest, TestCase::QUICK);
         AddTestCase(new SuMimoFrequencySelectiveTest, TestCase::QUICK);
