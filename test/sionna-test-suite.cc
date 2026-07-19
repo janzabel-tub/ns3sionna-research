@@ -11,6 +11,7 @@
 #include "ns3/sionna-propagation-cache.h"
 #include "ns3/su-mimo-link-model.h"
 #include "ns3/test.h"
+#include "ns3/table-based-error-rate-model.h"
 #include "ns3/wifi-link-budget.h"
 #include "ns3/wifi-tx-vector.h"
 
@@ -257,6 +258,200 @@ class HeEesmFrequencySelectiveTest : public TestCase
     }
 };
 
+class HeSisoErrorModelParityTest : public TestCase
+{
+  public:
+    HeSisoErrorModelParityTest()
+        : TestCase("flat SISO HE PER is identical to ns-3 across MCS, SNR and packet size")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        MimoChannelMatrix channel(8, 1, 1);
+        for (uint32_t sc = 0; sc < channel.GetNumSubcarriers(); ++sc)
+        {
+            channel.Set(sc, 0, 0, {1.0, 0.0});
+        }
+
+        const WifiMode modes[] = {HePhy::GetHeMcs0(),
+                                  HePhy::GetHeMcs3(),
+                                  HePhy::GetHeMcs7(),
+                                  HePhy::GetHeMcs11()};
+        const double snrPointsDb[] = {-5.0, 0.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0};
+        const uint32_t packetSizes[] = {32, 400, 1458};
+
+        auto referenceErrorModel = CreateObject<TableBasedErrorRateModel>();
+        auto abstraction = CreateObject<HeSuMimoLinkAbstraction>();
+        abstraction->SetErrorRateModel(referenceErrorModel);
+        for (const auto mode : modes)
+        {
+            // Beta cancels for flat SISO; 1.0 is a sentinel, not a calibration.
+            abstraction->SetEesmBeta(mode.GetMcsValue(), 1.0);
+        }
+
+        for (const auto mode : modes)
+        {
+            const auto txVector = MakeHeTxVector(mode, 1);
+            for (const double snrDb : snrPointsDb)
+            {
+                const auto linkBudget =
+                    MakeReferenceSnrBudget(WifiLinkBudget::DbToLinear(snrDb));
+                NS_TEST_ASSERT_MSG_EQ_TOL(
+                    WifiLinkBudget::LinearToDb(linkBudget.GetReferenceSnrLinear()),
+                    snrDb,
+                    1e-12,
+                    "Link budget did not reproduce the requested SNR point");
+
+                for (const uint32_t packetSize : packetSizes)
+                {
+                    const auto result =
+                        abstraction->Calculate(channel, linkBudget, txVector, packetSize);
+                    const double directSuccess =
+                        referenceErrorModel->GetChunkSuccessRate(
+                            mode,
+                            txVector,
+                            linkBudget.GetReferenceSnrLinear(),
+                            static_cast<uint64_t>(packetSize) * 8,
+                            1);
+
+                    NS_TEST_ASSERT_MSG_EQ_TOL(
+                        result.GetEffectiveSinrLinear(),
+                        linkBudget.GetReferenceSnrLinear(),
+                        1e-12,
+                        "Flat SISO EESM changed the reference SNR for MCS "
+                            << +mode.GetMcsValue() << " at " << snrDb << " dB");
+                    NS_TEST_ASSERT_MSG_EQ_TOL(
+                        result.GetPacketSuccessRate(),
+                        directSuccess,
+                        1e-12,
+                        "SISO parity failed for MCS " << +mode.GetMcsValue() << " at " << snrDb
+                                                     << " dB and " << packetSize << " bytes");
+                }
+            }
+        }
+    }
+};
+
+class HePerMonotonicityTest : public TestCase
+{
+  public:
+    HePerMonotonicityTest()
+        : TestCase("frequency-selective HE PER is monotonic with reference SNR")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        MimoChannelMatrix channel(4, 1, 1);
+        channel.Set(0, 0, 0, {std::sqrt(0.25), 0.0});
+        channel.Set(1, 0, 0, {std::sqrt(0.75), 0.0});
+        channel.Set(2, 0, 0, {std::sqrt(1.25), 0.0});
+        channel.Set(3, 0, 0, {std::sqrt(1.75), 0.0});
+
+        const WifiMode modes[] = {HePhy::GetHeMcs0(),
+                                  HePhy::GetHeMcs3(),
+                                  HePhy::GetHeMcs7(),
+                                  HePhy::GetHeMcs11()};
+        const uint32_t packetSizes[] = {32, 400, 1458};
+        auto abstraction = CreateObject<HeSuMimoLinkAbstraction>();
+        for (const auto mode : modes)
+        {
+            // Positive formula sentinel only; no calibrated EESM table is implied.
+            abstraction->SetEesmBeta(mode.GetMcsValue(), 1.0);
+        }
+
+        for (const auto mode : modes)
+        {
+            const auto txVector = MakeHeTxVector(mode, 1);
+            for (const uint32_t packetSize : packetSizes)
+            {
+                double previousPer = 1.0;
+                bool sawDecrease = false;
+                for (double snrDb = -10.0; snrDb <= 40.0; snrDb += 2.0)
+                {
+                    const auto linkBudget =
+                        MakeReferenceSnrBudget(WifiLinkBudget::DbToLinear(snrDb));
+                    const double per =
+                        abstraction->Calculate(channel, linkBudget, txVector, packetSize)
+                            .GetPacketErrorRate();
+                    NS_TEST_ASSERT_MSG_LT_OR_EQ(
+                        per,
+                        previousPer + 1e-12,
+                        "PER increased for MCS " << +mode.GetMcsValue() << " at " << snrDb
+                                                 << " dB and " << packetSize << " bytes");
+                    sawDecrease = sawDecrease || (per + 1e-12 < previousPer);
+                    previousPer = per;
+                }
+                NS_TEST_ASSERT_MSG_EQ(sawDecrease,
+                                      true,
+                                      "PER sweep never decreased for MCS "
+                                          << +mode.GetMcsValue() << " and " << packetSize
+                                          << " bytes");
+            }
+        }
+    }
+};
+
+class HeLinkReproducibilityTest : public TestCase
+{
+  public:
+    HeLinkReproducibilityTest()
+        : TestCase("HE MIMO effective SINR and PER are exactly reproducible")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        MimoChannelMatrix channel(3, 2, 2);
+        channel.Set(0, 0, 0, {1.0, 0.2});
+        channel.Set(0, 0, 1, {0.1, -0.1});
+        channel.Set(0, 1, 0, {-0.2, 0.3});
+        channel.Set(0, 1, 1, {1.1, 0.0});
+        channel.Set(1, 0, 0, {0.7, -0.4});
+        channel.Set(1, 0, 1, {0.2, 0.1});
+        channel.Set(1, 1, 0, {0.05, -0.2});
+        channel.Set(1, 1, 1, {1.3, 0.2});
+        channel.Set(2, 0, 0, {1.4, 0.0});
+        channel.Set(2, 0, 1, {-0.1, 0.2});
+        channel.Set(2, 1, 0, {0.3, 0.1});
+        channel.Set(2, 1, 1, {0.8, -0.3});
+
+        const auto linkBudget =
+            MakeReferenceSnrBudget(WifiLinkBudget::DbToLinear(18.0));
+        const auto txVector = MakeHeTxVector(HePhy::GetHeMcs7(), 2);
+        auto abstraction = CreateObject<HeSuMimoLinkAbstraction>();
+        // Formula-only sentinel for this deterministic regression test.
+        abstraction->SetEesmBeta(7, 2.0);
+
+        const auto reference = abstraction->Calculate(channel, linkBudget, txVector, 1458);
+        for (uint32_t repetition = 0; repetition < 20; ++repetition)
+        {
+            const auto repeated = abstraction->Calculate(channel, linkBudget, txVector, 1458);
+            NS_TEST_ASSERT_MSG_EQ(repeated.GetEffectiveSinrLinear(),
+                                  reference.GetEffectiveSinrLinear(),
+                                  "Effective SINR changed between identical calls");
+            NS_TEST_ASSERT_MSG_EQ(repeated.GetPacketErrorRate(),
+                                  reference.GetPacketErrorRate(),
+                                  "PER changed between identical calls");
+            for (uint32_t sc = 0; sc < reference.GetMimoResult().GetNumSubcarriers(); ++sc)
+            {
+                for (uint32_t stream = 0; stream < reference.GetMimoResult().GetNumStreams();
+                     ++stream)
+                {
+                    NS_TEST_ASSERT_MSG_EQ(
+                        repeated.GetMimoResult().GetSinrLinear(sc, stream),
+                        reference.GetMimoResult().GetSinrLinear(sc, stream),
+                        "Post-MMSE SINR changed between identical calls");
+                }
+            }
+        }
+    }
+};
+
 class SuMimoSisoReductionTest : public TestCase
 {
   public:
@@ -440,6 +635,9 @@ class SionnaTestSuite : public TestSuite
         AddTestCase(new WifiLinkBudgetCalculationTest, TestCase::QUICK);
         AddTestCase(new HeEesmFlatChannelTest, TestCase::QUICK);
         AddTestCase(new HeEesmFrequencySelectiveTest, TestCase::QUICK);
+        AddTestCase(new HeSisoErrorModelParityTest, TestCase::QUICK);
+        AddTestCase(new HePerMonotonicityTest, TestCase::QUICK);
+        AddTestCase(new HeLinkReproducibilityTest, TestCase::QUICK);
         AddTestCase(new SuMimoSisoReductionTest, TestCase::QUICK);
         AddTestCase(new SuMimoOrthogonalChannelTest, TestCase::QUICK);
         AddTestCase(new SuMimoFrequencySelectiveTest, TestCase::QUICK);
