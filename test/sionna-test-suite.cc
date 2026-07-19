@@ -8,6 +8,7 @@
 #include "ns3/sionna-propagation-cache.h"
 #include "ns3/su-mimo-link-model.h"
 #include "ns3/test.h"
+#include "ns3/wifi-link-budget.h"
 
 #include <cmath>
 #include <complex>
@@ -46,6 +47,88 @@ class MimoChannelMatrixLayoutTest : public TestCase
         NS_TEST_ASSERT_MSG_EQ(flat.at(0).real(), 1.0, "First coefficient is misplaced");
         NS_TEST_ASSERT_MSG_EQ(flat.at(5).real(), 6.0, "Subcarrier-major layout is wrong");
         NS_TEST_ASSERT_MSG_EQ(channel.Get(1, 1, 1).real(), 8.0, "Tensor lookup is wrong");
+    }
+};
+
+class WifiLinkBudgetConversionTest : public TestCase
+{
+  public:
+    WifiLinkBudgetConversionTest()
+        : TestCase("Wi-Fi link-budget dB and linear conversions are reversible")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        const double valuesDb[] = {-100.0, -3.0, 0.0, 10.0, 37.0};
+        for (const double valueDb : valuesDb)
+        {
+            const double valueLinear = WifiLinkBudget::DbToLinear(valueDb);
+            NS_TEST_ASSERT_MSG_EQ_TOL(WifiLinkBudget::LinearToDb(valueLinear),
+                                      valueDb,
+                                      1e-12,
+                                      "dB/linear round trip changed");
+        }
+        NS_TEST_ASSERT_MSG_EQ_TOL(WifiLinkBudget::DbToLinear(10.0),
+                                  10.0,
+                                  1e-12,
+                                  "10 dB must be a power ratio of ten");
+    }
+};
+
+class WifiLinkBudgetCalculationTest : public TestCase
+{
+  public:
+    WifiLinkBudgetCalculationTest()
+        : TestCase("reference SNR includes power, path loss, bandwidth, temperature and NF")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        constexpr double boltzmann = 1.3803e-23;
+        constexpr double bandwidthHz = 20e6;
+        constexpr double temperatureK = 290.0;
+        const auto result =
+            WifiLinkBudget::Calculate(20.0, 100.0, bandwidthHz, temperatureK, 7.0);
+
+        const double expectedReceivedPowerW = 1e-11; // -80 dBm
+        const double expectedThermalNoiseW = boltzmann * temperatureK * bandwidthHz;
+        const double expectedReceiverNoiseW =
+            expectedThermalNoiseW * std::pow(10.0, 7.0 / 10.0);
+        const double expectedSnr = expectedReceivedPowerW / expectedReceiverNoiseW;
+
+        NS_TEST_ASSERT_MSG_EQ_TOL(result.GetReceivedPowerW(),
+                                  expectedReceivedPowerW,
+                                  expectedReceivedPowerW * 1e-12,
+                                  "Received power does not include path loss correctly");
+        NS_TEST_ASSERT_MSG_EQ_TOL(result.GetThermalNoisePowerW(),
+                                  expectedThermalNoiseW,
+                                  expectedThermalNoiseW * 1e-12,
+                                  "Thermal noise is not k*T*B");
+        NS_TEST_ASSERT_MSG_EQ_TOL(result.GetReceiverNoisePowerW(),
+                                  expectedReceiverNoiseW,
+                                  expectedReceiverNoiseW * 1e-12,
+                                  "Receiver noise does not include noise figure");
+        NS_TEST_ASSERT_MSG_EQ_TOL(result.GetReferenceSnrLinear(),
+                                  expectedSnr,
+                                  expectedSnr * 1e-12,
+                                  "Reference SNR is incorrect");
+
+        const auto doubledBandwidth =
+            WifiLinkBudget::Calculate(20.0, 100.0, 2.0 * bandwidthHz, temperatureK, 7.0);
+        const auto doubledTemperature =
+            WifiLinkBudget::Calculate(20.0, 100.0, bandwidthHz, 2.0 * temperatureK, 7.0);
+        NS_TEST_ASSERT_MSG_EQ_TOL(doubledBandwidth.GetReferenceSnrLinear(),
+                                  expectedSnr / 2.0,
+                                  expectedSnr * 1e-12,
+                                  "Doubling bandwidth must halve SNR");
+        NS_TEST_ASSERT_MSG_EQ_TOL(doubledTemperature.GetReferenceSnrLinear(),
+                                  expectedSnr / 2.0,
+                                  expectedSnr * 1e-12,
+                                  "Doubling temperature must halve SNR");
     }
 };
 
@@ -228,6 +311,8 @@ class SionnaTestSuite : public TestSuite
         : TestSuite("sionna", UNIT)
     {
         AddTestCase(new MimoChannelMatrixLayoutTest, TestCase::QUICK);
+        AddTestCase(new WifiLinkBudgetConversionTest, TestCase::QUICK);
+        AddTestCase(new WifiLinkBudgetCalculationTest, TestCase::QUICK);
         AddTestCase(new SuMimoSisoReductionTest, TestCase::QUICK);
         AddTestCase(new SuMimoOrthogonalChannelTest, TestCase::QUICK);
         AddTestCase(new SuMimoFrequencySelectiveTest, TestCase::QUICK);

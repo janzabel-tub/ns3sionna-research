@@ -47,6 +47,7 @@ set(proto_source_files model/message.proto)
 set(SOURCE_FILES
         model/mimo-channel-matrix.cc
         model/su-mimo-link-model.cc
+        model/wifi-link-budget.cc
         model/sionna-mobility-model.cc
         model/sionna-propagation-cache.cc
         model/sionna-propagation-delay-model.cc
@@ -61,6 +62,7 @@ set(SOURCE_FILES
 set(HEADER_FILES
         model/mimo-channel-matrix.h
         model/su-mimo-link-model.h
+        model/wifi-link-budget.h
         model/sionna-mobility-model.h
         model/sionna-propagation-cache.h
         model/sionna-propagation-delay-model.h
