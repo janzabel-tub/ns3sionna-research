@@ -1,6 +1,6 @@
 # ns3sionna: MIMO-Abstraktionsmodell für IEEE 802.11ax/be
 
-Stand: 18. Juli 2026
+Stand: 19. Juli 2026
 
 Arbeitszweig: feature/su-mimo-minimal
 
@@ -14,10 +14,11 @@ Post-Processing-SINR, Effective-SINR, MCS/PER und später die Auswahl von
 Precoding und MU-MIMO, wird ausschließlich in ns-3 ausgeführt.
 
 Die Entwicklung erfolgt in kleinen, einzeln testbaren Schritten. Der aktuelle
-Stand implementiert die Unterphasen 1.1 und 1.2: numerischen SU-MIMO-Kern,
+Stand implementiert die Unterphasen 1.1 bis 1.3: numerischen SU-MIMO-Kern,
 konfigurierbare Sionna-Arrays und einen dimensionssicheren MIMO-Datenvertrag bis
-in den ns-3-Cache. Noch nicht enthalten sind eine 802.11ax-Codierungs-/PER-
-Abbildung und die Einkopplung in WifiPhy; dies beginnt erst mit Unterphase 1.3.
+in den ns-3-Cache sowie eine explizit kalibrierbare 802.11ax-EESM-/PER-
+Abbildung über die bestehenden Wi-Fi-Fehlermodelle. Die Einkopplung in WifiPhy
+ist weiterhin nicht enthalten und beginnt erst mit Unterphase 1.4.
 
 ## 2. Reproduzierbare Ausgangsbasis
 
@@ -79,17 +80,18 @@ reproduziert.
 Abnahmekriterium: 1x1 ist binär/funktional kompatibel; synthetische 2x2-Werte
 kommen indexgenau in ns-3 an.
 
-#### Unterphase 1.3: 802.11ax-Link-Abstraktion
+#### Unterphase 1.3: 802.11ax-Link-Abstraktion (implementiert)
 
 - Referenz-SNR aus Sendeleistung, Wideband-Verlust, Bandbreite,
   Rauschzahl und thermischem Rauschen berechnen.
-- Effektive SINR zunächst mit einer explizit kalibrierbaren EESM- oder
-  MIESM-Abbildung je MCS bestimmen.
+- Effektive SINR mit einer explizit kalibrierbaren EESM-Abbildung je MCS
+  bestimmen; ohne belegte Kalibrierung existieren bewusst keine Default-Betas.
 - Vorhandene ns-3 ErrorRateModel-Schnittstellen soweit möglich wiederverwenden.
 - SISO-Parität und AWGN-Kurven gegen ns-3 validieren.
 
 Abnahmekriterium: PER-vs-SNR-Kurven sind monoton, reproduzierbar und im
-SISO-Grenzfall deckungsgleich zur festgelegten Referenz.
+SISO-Grenzfall deckungsgleich zur festgelegten Referenz. Alle Kriterien wurden
+mit den in Abschnitt 6 beschriebenen automatischen Tests erfüllt.
 
 #### Unterphase 1.4: WifiPhy-Integration und Beispiel
 
@@ -329,47 +331,195 @@ Die mittlere ideale spektrale Effizienz über alle Streams ist
   \sum_k\sum_s \log_2(1+\gamma_s[k]).
 \]
 
-Diese Größe ist eine Validierungsmetrik, keine unmittelbare
-802.11-Datenrate. Coding, Pilot-/Guard-Overhead und PPDU-Dauer werden erst in
-den folgenden Unterphasen berücksichtigt.
+Diese MI-Größe bleibt eine Validierungsmetrik und ist keine unmittelbare
+802.11-Datenrate oder PER. Die HE-PER-Abbildung verwendet stattdessen die
+MCS-spezifische EESM-Kompression aus Abschnitt 5.6.
 
-## 6. Validierung der Unterphasen 1.1 und 1.2
+### 5.5 Referenz-SNR aus dem Link Budget
 
-Die native Suite sionna enthält sechs schnelle Fälle:
+Die skalare Wideband-Dämpfung \(L_\mathrm{wb}\) bleibt von der normalisierten
+Small-Scale-CFR getrennt. Aus der gesamten Sendeleistung \(P_\mathrm{tx,dBm}\)
+folgen Empfangsleistung und lineare Empfangsleistung
+
+\[
+  P_\mathrm{rx,dBm} = P_\mathrm{tx,dBm} - L_\mathrm{wb},
+  \qquad
+  P_\mathrm{rx} =
+  10^{(P_\mathrm{rx,dBm}-30)/10}\ \mathrm{W}.
+\]
+
+Mit Rauschbandbreite \(B\) in Hz, Temperatur \(T\) in Kelvin und
+Empfängerrauschzahl \(NF\) in dB gelten
+
+\[
+  N_\mathrm{th} = kTB,
+  \qquad
+  F = 10^{NF/10},
+  \qquad
+  N_\mathrm{rx} = FkTB,
+\]
+
+und damit
+
+\[
+  \rho =
+  \frac{P_\mathrm{rx}}{N_\mathrm{rx}}
+  =
+  \frac{10^{(P_\mathrm{tx,dBm}-L_\mathrm{wb}-30)/10}}
+       {kTB\,10^{NF/10}}.
+\]
+
+WifiLinkBudget gibt Empfangsleistung, thermisches Rauschen,
+Empfängerrauschen und \(\rho\) separat aus. dB-/Linear- und dBm-/Watt-
+Umrechnungen delegieren an DbToRatio, RatioToDb und DbmToW aus
+ns-3.40 wifi-utils. Für \(k=1{,}3803\cdot10^{-23}\ \mathrm{J/K}\) wird bewusst
+derselbe Zahlenwert wie in ns-3.40 InterferenceHelper verwendet. Das ist die
+Provenienz dieser physikalischen Konstante; es ist keine Fit-Konstante.
+Anders als InterferenceHelper ist \(T\) hier ein expliziter positiver
+Eingabeparameter und nicht fest auf 290 K gesetzt.
+
+\(P_\mathrm{tx}\) ist die Gesamtleistung über alle Spatial Streams; die
+Aufteilung durch \(N_s\) erfolgt erst im MMSE-Modell. \(B\) ist die
+Empfänger-Rauschbandbreite. Externe Interferenz wird in Unterphase 1.3 nicht
+addiert. Ebenso wird kein zusätzlicher pauschaler RX-Diversity-Gewinn
+aufgeschlagen: Array- und Detektorgewinn sind bereits in \(\mathbf H[k]\) und
+den Post-MMSE-SINRs enthalten.
+
+### 5.6 MCS-abhängige EESM-Kompression
+
+Für HE MCS \(m\) komprimiert EESM alle \(N_\mathrm{sc}N_s\)
+Post-MMSE-SINRs mit gleicher Gewichtung:
+
+\[
+  \gamma_{\mathrm{EESM},m}
+  =
+  -\beta_m \ln\left(
+    \frac{1}{N_\mathrm{sc}N_s}
+    \sum_{k=0}^{N_\mathrm{sc}-1}
+    \sum_{s=0}^{N_s-1}
+    \exp\left(-\frac{\gamma_s[k]}{\beta_m}\right)
+  \right).
+\]
+
+\(\beta_m>0\) hat wie \(\gamma\) lineare SINR-Einheiten und ist
+MCS-abhängig. SetEesmBeta erwartet den linearen Wert; SetEesmBetaDb ist die
+dB-Komfortfunktion. Zur Vermeidung numerischen Unterlaufs wird mit
+\(\gamma_\min=\min_{k,s}\gamma_s[k]\) äquivalent gerechnet:
+
+\[
+  \gamma_{\mathrm{EESM},m}
+  =
+  \gamma_\min
+  -\beta_m \ln\left(
+    \frac{1}{N_\mathrm{sc}N_s}
+    \sum_{k,s}
+    \exp\left(-\frac{\gamma_s[k]-\gamma_\min}{\beta_m}\right)
+  \right).
+\]
+
+Für einen flachen Kanal mit identischen SINRs ist das Ergebnis unabhängig von
+\(\beta_m\) exakt diese SINR. Das ermöglicht die SISO-AWGN-Paritätsprüfung.
+
+Es werden bewusst keine Default-Betas ausgeliefert. Jeder HE MCS von 0 bis 11
+muss vor der Nutzung explizit konfiguriert werden. Damit enthält der Code keine
+unbelegten Kalibrierkonstanten. Die in analytischen Tests verwendeten positiven
+Werte sind ausschließlich Formel-Sentinels und ausdrücklich keine
+802.11ax-Kalibrierung. Belastbare \(\beta_m\) müssen später aus dokumentierten
+Link-Level-Kurven gefittet und zusammen mit Datensatz, PHY-Konfiguration,
+Codeart und Paketlänge versioniert werden. Die bisherige MI-Kompression je
+Stream bleibt als modellunabhängige Diagnosemetrik erhalten und wird nicht als
+kalibrierte PER-Abbildung ausgegeben.
+
+### 5.7 Abbildung auf ns-3-PER
+
+HeSuMimoLinkAbstraction übernimmt WifiTxVector einschließlich HE-MCS, NSS und
+Codeart. NSS muss der Zahl der übertragenen Streams entsprechen. Nach EESM wird
+die vorhandene Schnittstelle unverändert verwendet:
+
+\[
+  P_\mathrm{succ} =
+  \mathrm{ErrorRateModel::GetChunkSuccessRate}
+  (m,\mathrm{TxVector},\gamma_{\mathrm{EESM},m},8L,N_\mathrm{rx}),
+  \qquad
+  PER = 1-P_\mathrm{succ},
+\]
+
+wobei \(L\) die Paketlänge in Byte ist. ErrorRateModel ist als ns-3-Attribut
+und über SetErrorRateModel konfigurierbar. Standard ist
+TableBasedErrorRateModel, also das ns-3.40-Defaultmodell für 802.11n/ac/ax.
+
+Die Kalibrierprovenienz bleibt vollständig bei ns-3: Laut
+src/wifi/doc/source/wifi-design.rst stammen die AWGN-PER-Tabellen aus
+End-to-End-Linksimulationen mit MATLAB WLAN Toolbox, wurden gegen IEEE-TGn-
+Ergebnisse validiert und verwenden die Paketlängenextrapolation aus
+IEEE P802.11 TGax 11-14/0803r1. BCC besitzt Referenztabellen für 32 und
+1458 Byte mit einer 400-Byte-Schwelle und MCS 0 bis 9; MCS 10/11 fällt auf
+YansErrorRateModel zurück. LDPC besitzt eine 1458-Byte-Referenz für MCS 0 bis
+11. Die neue Abstraktion kopiert oder verändert keine dieser Kurven und fügt
+keinen SNR-Offset hinzu. Da sie Erfolgswahrscheinlichkeiten und keine
+Zufallsentscheidung ausgibt, ist die Berechnung bei identischen Eingaben
+deterministisch.
+
+## 6. Validierung der Unterphasen 1.1 bis 1.3
+
+Die native Suite sionna enthält nun 13 schnelle Fälle:
 
 1. Layouttest eines 2 x 2 x 2-Tensors mit eindeutig nummerierten Koeffizienten.
-2. SISO-Test mit h = 2+j und rho=10; erwartet wird gamma=50.
-3. Orthogonaler 2x2-Kanal H=I und rho=20; jeder Stream erhält gamma=10 und
-   eta=2 log2(11).
-4. Zwei diagonale Subcarrier diag(1,2) und diag(2,1) bei rho=8; erwartet werden
-   die SINRs (4,16) und (16,4) sowie
-   gamma_eff=sqrt((1+4)(1+16))-1.
-5. Deserialisierung einer alten Nachricht ohne Dimensionsfelder als
-   N_sc x 1 x 1.
-6. Protocol-Buffer-Rundlauf einer synthetischen 2 x 2 x 2-CFR mit den komplexen
-   Werten 1-j bis 8-8j und indexgenauer Prüfung beider Subcarrier.
+2. Reversible dB-/Linear-Umrechnung einschließlich 10 dB gleich Faktor zehn.
+3. Link-Budget-Test für Sendeleistung, Pfadverlust, \(B\), \(T\) und \(NF\)
+   sowie die erwartete Halbierung der SNR bei Verdopplung von \(B\) oder \(T\).
+4. Flacher orthogonaler 2x2-Kanal: EESM erhält identische Tone-/Stream-SINRs
+   unabhängig vom positiven Test-Beta.
+5. Frequenzselektiver SISO-Kanal: EESM stimmt mit der analytischen
+   Zweitonformel für das konfigurierte Beta überein.
+6. SISO-Parität zur direkten ns-3.40-ErrorRateModel-Abfrage für HE MCS
+   0, 3, 7 und 11, neun SNR-Punkte von -5 bis 35 dB sowie 32, 400 und
+   1458 Byte. Das sind 108 Kombinationen; MCS 11 prüft auch den
+   TableBased-Fallback auf Yans.
+7. Monotone PER auf einem normierten frequenzselektiven Vier-Ton-Kanal für
+   dieselben vier MCS und drei Paketgrößen bei 26 SNR-Punkten von -10 bis
+   40 dB. Die 312 geprüften Werte bilden je Konfiguration eine nicht steigende
+   Folge mit einem echten PER-Abfall.
+8. Exakte Reproduzierbarkeit von Post-MMSE-SINR, EESM-SINR und PER über
+   20 Wiederholungen eines komplexen frequenzselektiven 2x2-Kanals.
+9. SISO-Test mit \(h=2+j\) und \(\rho=10\); erwartet wird \(\gamma=50\).
+10. Orthogonaler 2x2-Kanal \(\mathbf H=\mathbf I\) und \(\rho=20\); jeder
+    Stream erhält \(\gamma=10\) und \(\eta=2\log_2(11)\).
+11. Zwei diagonale Subcarrier diag(1,2) und diag(2,1) bei \(\rho=8\);
+    erwartet werden (4,16), (16,4) und die analytische MI-Kompression.
+12. Deserialisierung einer alten Nachricht ohne Dimensionsfelder als
+    \(N_\mathrm{sc}\times1\times1\).
+13. Protocol-Buffer-Rundlauf einer synthetischen 2 x 2 x 2-CFR mit den
+    komplexen Werten 1-j bis 8-8j und indexgenauer Prüfung.
 
 Die vier reinen Python-Vertragstests prüfen Standard- und explizite
 Arraykonfiguration, bytegleiche 1x1-Serialisierung, die sc/rx/tx-Reihenfolge
-einer synthetischen 2x2-CFR sowie die gemeinsame MIMO-Normalisierung. Diese zehn
-Tests benötigen weder Raytracing, ZMQ noch eine GPU. Die analytischen Vergleiche
-der Unterphase 1.1 verwenden weiterhin eine absolute Toleranz von 1e-10.
+einer synthetischen 2x2-CFR sowie die gemeinsame MIMO-Normalisierung. Diese
+Tests benötigen weder Raytracing, ZMQ noch eine GPU. Die analytischen
+Vergleiche des numerischen Kerns verwenden weiterhin eine absolute Toleranz
+von 1e-10; die neuen Link-Budget-/EESM-Vergleiche verwenden 1e-12.
 
-Ein zusätzlicher Server-Integrationstest konfiguriert reale 1x2-PlanarArrays an
-TX und RX, führt Sionna RT auf der CPU aus und prüft die resultierende Form
-2 x 2 x 256, 1024 komplexe Werte und mittlere normierte Leistung eins.
+Der reale Server-Integrationstest konfiguriert 1x2-PlanarArrays an TX und RX,
+führt Sionna RT auf der CPU aus und prüft die Form 2 x 2 x 256, 1024 komplexe
+Werte und mittlere normierte Leistung eins. Die übrigen sieben Servertests
+decken den unveränderten 1x1-Pfad, Mobilität, Kohärenzzeit und Mehrnutzer-
+Anfragen ab.
 
 ### 6.1 Ausgeführte CPU-Validierung
 
-Am 18. Juli 2026 wurden nach der Implementierung folgende Prüfungen erfolgreich
-ausgeführt:
+Am 19. Juli 2026 wurden nach Abschluss der Unterphase 1.3 folgende Prüfungen
+erfolgreich ausgeführt:
 
-- Build der Targets sionna und sionna-test mit GCC 13.3
-- native ns-3-Suite sionna: sechs von sechs Fällen bestanden
+- Build von sionna und sionna-test mit GCC 13.3
+- native ns-3-Suite sionna: 13 von 13 Fällen in 0,002 s bestanden
+- SISO-Paritätsmatrix: alle 108 Kombinationen stimmen innerhalb 1e-12 mit der
+  direkt aufgerufenen ns-3-Fehlermodellschnittstelle überein
+- frequenzselektive Monotonitätsmatrix: alle 312 PER-Werte bestanden
+- Reproduzierbarkeit: 20 identische 2x2-Aufrufe mit exakt gleichen Ergebnissen
 - reine Python-Vertragssuite: vier von vier Fällen in 0,001 s bestanden
-- sieben bestehende Servertests: sieben von sieben in 148,967 s bestanden
-- neuer realer Sionna-2x2-Test: ein von einem Fall in 5,026 s bestanden;
-  CFR-Form 2 x 2 x 256 und Normalisierung innerhalb 1e-6
+- gesamte Sionna-CPU-Serversuite: acht von acht Fällen in 150,936 s bestanden;
+  der reale 2x2-Fall lief in 1,581 s, lieferte 2 x 2 x 256 und erfüllte die
+  Normalisierung innerhalb 1e-6
 - P2P-End-to-End-Test example-sionna-sensing im unveränderten 1x1-Modus:
   drei CFR-Antworten, zwei empfangene UDP-Pakete zu je 1024 Byte und
   Cache-Hit-Rate 0,993056
@@ -388,17 +538,26 @@ nicht betroffen. Eine Korrektur gehört in eine eigene kleine Baseline-Subphase.
   WifiPhy-Empfangspfad eingekoppelt. Der bestehende Spektrumpfad verwendet im
   1x1-Fall weiterhin die flache Kompatibilitätsansicht; die Integration folgt
   erst in Unterphase 1.4.
-- Die MIMO-Normalisierung ist jetzt festgelegt. Ihre gemeinsame Kalibrierung mit
-  Sendeleistung, Rauschen und PER ist Gegenstand der Unterphase 1.3.
+- Das Link Budget enthält thermisches Empfängerrauschen, aber noch keine
+  zeitvariable externe Interferenz. Diese muss bei der späteren
+  WifiPhy-Integration konsistent als SINR eingebracht werden.
+- Es existiert absichtlich keine mitgelieferte HE-EESM-Beta-Tabelle.
+  Frequenzselektive absolute PER-Prognosen benötigen vor der wissenschaftlichen
+  Nutzung eine dokumentierte Link-Level-Kalibrierung. Ohne diese Konfiguration
+  bricht das Modell früh ab.
+- TableBasedErrorRateModel ist eine AWGN-Referenz. Seine SNR-/PER-Kurven und
+  Paketlängenextrapolation stammen aus ns-3; ihre Grenzen gelten unverändert.
 - Perfekte RX-CSI ist zunächst bewusst idealisiert.
-- Pro Antenne wird genau ein Stream angenommen; Streamauswahl und N_s < N_tx
-  gehören zur Precoding-Phase.
-- Die MI-Kompression ist noch keine kalibrierte HE/EHT-PER-Abbildung.
+- Pro Antenne wird genau ein Stream angenommen; Streamauswahl und
+  \(N_s<N_\mathrm{tx}\) gehören zur Precoding-Phase.
+- Die MI-Kompression bleibt eine Diagnosemetrik; nur die explizit konfigurierte
+  EESM-Ausgabe wird an ErrorRateModel übergeben.
 - Die bestehende Cache-Schlüsselbildung nimmt Reziprozität an. Für
   nicht-reziprokes Precoding müssen Richtung und Konfiguration Teil des
   Schlüssels werden.
 
-Unterphase 1.3 wurde bewusst nicht begonnen.
+Unterphase 1.3 ist abgeschlossen. Unterphase 1.4 und damit jede Änderung am
+WifiPhy-Empfangspfad wurden bewusst noch nicht begonnen.
 
 ## 8. Ausführung
 
