@@ -20,17 +20,39 @@
 #ifndef SIONNA_SPECTRUM_PROPAGATION_LOSS_H
 #define SIONNA_SPECTRUM_PROPAGATION_LOSS_H
 
+#include "he-su-mimo-link-abstraction.h"
 #include "ns3/spectrum-propagation-loss-model.h"
 #include "sionna-propagation-cache.h"
 #include "ns3/random-variable-stream.h"
 #include <ns3/nstime.h>
 #include <ns3/object.h>
+#include <ns3/traced-callback.h>
 #include "cfr-tag.h"
 
 #include <map>
 
 namespace ns3
 {
+
+class ErrorRateModel;
+class WifiTxVector;
+
+/**
+ * Result of mapping a dimensioned Sionna CFR to SpectrumWifiPhy's scalar
+ * receive signal representation.
+ */
+class SionnaMimoSpectrumRxResult
+{
+  public:
+    const HeSuMimoLinkResult& GetLinkResult() const;
+    double GetEquivalentReceivedPowerW() const;
+
+  private:
+    friend class SionnaSpectrumPropagationLossModel;
+
+    HeSuMimoLinkResult m_linkResult;
+    double m_equivalentReceivedPowerW{0.0};
+};
 
 /**
  * The fast fading loss model computed in Sionna. Note: it is normalized to 1.
@@ -49,6 +71,26 @@ class SionnaSpectrumPropagationLossModel : public SpectrumPropagationLossModel
 
     void SetPropagationCache(Ptr<SionnaPropagationCache> propagationCache);
 
+    /** Configure the explicit EESM beta for one HE MCS in linear units. */
+    void SetEesmBeta(uint8_t mcs, double betaLinear);
+
+    /** Configure the explicit EESM beta for one HE MCS in dB. */
+    void SetEesmBetaDb(uint8_t mcs, double betaDb);
+
+    /**
+     * Evaluate the SU-MIMO abstraction for an already path-loss-attenuated signal.
+     */
+    SionnaMimoSpectrumRxResult CalculateMimoRx(
+        const MimoChannelMatrix& channel,
+        double receivedPowerW,
+        const WifiTxVector& txVector,
+        uint32_t packetSizeBytes,
+        uint8_t txPhyAntennas,
+        uint8_t rxPhyAntennas,
+        double bandwidthHz,
+        double receiverNoiseFigureDb,
+        Ptr<ErrorRateModel> errorRateModel) const;
+
   private:
     /**
      * @param params the spectrum signal parameters.
@@ -62,6 +104,9 @@ class SionnaSpectrumPropagationLossModel : public SpectrumPropagationLossModel
                                                     Ptr<const MobilityModel> b) const override;
 
     Ptr<SionnaPropagationCache> m_propagationCache;
+    Ptr<HeSuMimoLinkAbstraction> m_linkAbstraction;
+
+    TracedCallback<uint64_t, uint32_t, uint32_t, double, double, uint32_t> m_mimoRxTrace;
 };
 
 } // namespace ns3

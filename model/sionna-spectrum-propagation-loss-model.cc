@@ -21,21 +21,30 @@
 //#include "sionna-utils.h"
 
 #include "ns3/socket.h"
+#include <ns3/abort.h>
 #include <ns3/double.h>
+#include <ns3/error-rate-model.h>
+#include <ns3/interference-helper.h>
 #include <ns3/log.h>
 #include <ns3/node.h>
 #include <ns3/object-factory.h>
 #include <ns3/pointer.h>
 #include <ns3/random-variable-stream.h>
+#include <ns3/spectrum-channel.h>
 #include <ns3/spectrum-signal-parameters.h>
 #include <ns3/string.h>
 #include <ns3/wifi-phy.h>
 #include <ns3/wifi-ppdu.h>
 #include <ns3/wifi-psdu.h>
+#include <ns3/wifi-net-device.h>
 #include <ns3/wifi-spectrum-phy-interface.h>
 #include <ns3/wifi-spectrum-signal-parameters.h>
+#include <ns3/wifi-spectrum-value-helper.h>
+#include <ns3/wifi-tx-vector.h>
+#include <ns3/wifi-utils.h>
 
 #include <algorithm>
+#include <cmath>
 
 namespace ns3
 {
@@ -44,7 +53,88 @@ NS_LOG_COMPONENT_DEFINE("SionnaSpectrumPropagationLossModel");
 
 NS_OBJECT_ENSURE_REGISTERED(SionnaSpectrumPropagationLossModel);
 
+namespace
+{
+
+constexpr double WIFI_NOISE_TEMPERATURE_K = 290.0;
+
+Ptr<SpectrumWifiPhy>
+GetSpectrumWifiPhy(Ptr<const MobilityModel> mobility, Ptr<Channel> peerChannel)
+{
+    Ptr<Node> node = mobility->GetObject<Node>();
+    NS_ABORT_MSG_IF(!node, "SpectrumWifiPhy mobility is not aggregated to a node");
+
+    Ptr<SpectrumWifiPhy> match;
+    for (uint32_t i = 0; i < node->GetNDevices(); ++i)
+    {
+        Ptr<WifiNetDevice> wifiDevice = DynamicCast<WifiNetDevice>(node->GetDevice(i));
+        if (!wifiDevice)
+        {
+            continue;
+        }
+        Ptr<SpectrumWifiPhy> candidate = DynamicCast<SpectrumWifiPhy>(wifiDevice->GetPhy());
+        if (!candidate || candidate->GetMobility() != mobility)
+        {
+            continue;
+        }
+        if (peerChannel && candidate->GetChannel() != peerChannel)
+        {
+            continue;
+        }
+        NS_ABORT_MSG_IF(match, "More than one matching SpectrumWifiPhy found on receiver node");
+        match = candidate;
+    }
+    NS_ABORT_MSG_IF(!match, "No matching SpectrumWifiPhy found on receiver node");
+    return match;
+}
+
+Ptr<SpectrumWifiPhy>
+GetTransmitterSpectrumWifiPhy(Ptr<const SpectrumSignalParameters> params)
+{
+    NS_ABORT_MSG_IF(!params->txPhy || !params->txPhy->GetDevice(),
+                    "MIMO Wi-Fi reception requires a transmitting SpectrumPhy device");
+    Ptr<WifiNetDevice> device = DynamicCast<WifiNetDevice>(params->txPhy->GetDevice());
+    NS_ABORT_MSG_IF(!device, "MIMO Wi-Fi transmitter is not a WifiNetDevice");
+    Ptr<SpectrumWifiPhy> phy = DynamicCast<SpectrumWifiPhy>(device->GetPhy());
+    NS_ABORT_MSG_IF(!phy, "MIMO Wi-Fi transmitter does not use SpectrumWifiPhy");
+    return phy;
+}
+
+Ptr<ErrorRateModel>
+GetErrorRateModel(Ptr<SpectrumWifiPhy> phy)
+{
+    PointerValue helperValue;
+    phy->GetAttribute("InterferenceHelper", helperValue);
+    Ptr<InterferenceHelper> helper = helperValue.Get<InterferenceHelper>();
+    NS_ABORT_MSG_IF(!helper || !helper->GetErrorRateModel(),
+                    "SpectrumWifiPhy ErrorRateModel is not configured");
+    return helper->GetErrorRateModel();
+}
+
+double
+GetRxNoiseFigureDb(Ptr<SpectrumWifiPhy> phy)
+{
+    DoubleValue value;
+    phy->GetAttribute("RxNoiseFigure", value);
+    return value.Get();
+}
+
+} // namespace
+
+const HeSuMimoLinkResult&
+SionnaMimoSpectrumRxResult::GetLinkResult() const
+{
+    return m_linkResult;
+}
+
+double
+SionnaMimoSpectrumRxResult::GetEquivalentReceivedPowerW() const
+{
+    return m_equivalentReceivedPowerW;
+}
+
 SionnaSpectrumPropagationLossModel::SionnaSpectrumPropagationLossModel()
+    : m_linkAbstraction(CreateObject<HeSuMimoLinkAbstraction>())
 {
     NS_LOG_FUNCTION(this);
 }
@@ -61,7 +151,13 @@ SionnaSpectrumPropagationLossModel::GetTypeId()
         TypeId("ns3::SionnaSpectrumPropagationLossModel")
             .SetParent<SpectrumPropagationLossModel>()
             .SetGroupName("Sionna")
-            .AddConstructor<SionnaSpectrumPropagationLossModel>();
+            .AddConstructor<SionnaSpectrumPropagationLossModel>()
+            .AddTraceSource("MimoRx",
+                            "SU-MIMO PPDU result: UID, TX node, RX node, effective SINR, PER, "
+                            "and minimum channel rank",
+                            MakeTraceSourceAccessor(
+                                &SionnaSpectrumPropagationLossModel::m_mimoRxTrace),
+                            "ns3::TracedCallback::Uint64Uint32Uint32DoubleDoubleUint32");
     return tid;
 }
 
@@ -70,6 +166,74 @@ SionnaSpectrumPropagationLossModel::SetPropagationCache(Ptr<SionnaPropagationCac
 {
     m_propagationCache = propagationCache;
 }
+
+void
+SionnaSpectrumPropagationLossModel::SetEesmBeta(uint8_t mcs, double betaLinear)
+{
+    m_linkAbstraction->SetEesmBeta(mcs, betaLinear);
+}
+
+void
+SionnaSpectrumPropagationLossModel::SetEesmBetaDb(uint8_t mcs, double betaDb)
+{
+    m_linkAbstraction->SetEesmBetaDb(mcs, betaDb);
+}
+
+SionnaMimoSpectrumRxResult
+SionnaSpectrumPropagationLossModel::CalculateMimoRx(
+    const MimoChannelMatrix& channel,
+    double receivedPowerW,
+    const WifiTxVector& txVector,
+    uint32_t packetSizeBytes,
+    uint8_t txPhyAntennas,
+    uint8_t rxPhyAntennas,
+    double bandwidthHz,
+    double receiverNoiseFigureDb,
+    Ptr<ErrorRateModel> errorRateModel) const
+{
+    NS_ABORT_MSG_IF(!std::isfinite(receivedPowerW) || receivedPowerW <= 0.0,
+                    "Received MIMO power must be finite and positive");
+    NS_ABORT_MSG_IF(txVector.GetPreambleType() != WIFI_PREAMBLE_HE_SU,
+                    "The minimal MIMO SpectrumWifiPhy path supports HE SU PPDUs only");
+
+    const uint8_t nss = txVector.GetNss();
+    NS_ABORT_MSG_IF(nss != channel.GetNumTxAntennas(),
+                    "WifiTxVector NSS must equal the Sionna TX dimension");
+    NS_ABORT_MSG_IF(txPhyAntennas != channel.GetNumTxAntennas(),
+                    "Transmitter PHY antennas must equal the Sionna TX dimension");
+    NS_ABORT_MSG_IF(rxPhyAntennas != channel.GetNumRxAntennas(),
+                    "Receiver PHY antennas must equal the Sionna RX dimension");
+    NS_ABORT_MSG_IF(rxPhyAntennas < nss,
+                    "Receiver PHY needs at least one antenna per spatial stream");
+    NS_ABORT_MSG_IF(!errorRateModel, "SpectrumWifiPhy ErrorRateModel must be configured");
+
+    const auto linkBudget =
+        WifiLinkBudget::Calculate(WToDbm(receivedPowerW),
+                                  0.0,
+                                  bandwidthHz,
+                                  WIFI_NOISE_TEMPERATURE_K,
+                                  receiverNoiseFigureDb);
+    m_linkAbstraction->SetErrorRateModel(errorRateModel);
+
+    SionnaMimoSpectrumRxResult result;
+    result.m_linkResult =
+        m_linkAbstraction->Calculate(channel, linkBudget, txVector, packetSizeBytes);
+
+    // InterferenceHelper applies N_rx/N_ss for AWGN models. MMSE already contains
+    // this array gain, so reduce the equivalent scalar signal by that exact factor.
+    const double diversityGain =
+        errorRateModel->IsAwgn() && rxPhyAntennas > nss
+            ? static_cast<double>(rxPhyAntennas) / nss
+            : 1.0;
+    result.m_equivalentReceivedPowerW =
+        result.m_linkResult.GetEffectiveSinrLinear() *
+        linkBudget.GetReceiverNoisePowerW() / diversityGain;
+    NS_ABORT_MSG_IF(!std::isfinite(result.m_equivalentReceivedPowerW) ||
+                        result.m_equivalentReceivedPowerW < 0.0,
+                    "MIMO abstraction produced invalid equivalent receive power");
+    return result;
+}
+
 
 
 Ptr<SpectrumValue>
@@ -97,24 +261,87 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
 
     Ptr<SpectrumValue> rxPsd = Copy<SpectrumValue>(params->psd);
 
-    // wideband pathloloss
-    double wb_loss = m_propagationCache->GetPropagationLoss(a, b);
+    NS_ABORT_MSG_IF(!m_propagationCache,
+                    "SionnaSpectrumPropagationLossModel needs a propagation cache");
 
-    // get small-scale fading matrix
-    std::vector<std::complex<double>> H_norm = m_propagationCache->GetPropagationCSI(a, b);
-    // add trailing 1 to have same size
-    H_norm.emplace_back(1.0, 0.0);
+    // The scalar SpectrumChannel loss model already applied this wideband path
+    // loss to params->psd. Fetch it only for the diagnostic packet tag.
+    const double wbLoss = m_propagationCache->GetPropagationLoss(a, b);
+    const MimoChannelMatrix channel =
+        m_propagationCache->GetPropagationChannelMatrix(a, b);
+    NS_ABORT_MSG_IF(channel.GetNumSubcarriers() + 1 != params->psd->GetValuesN(),
+                    "PSD must contain exactly one more guard bin than the Sionna CFR");
 
-    NS_ASSERT_MSG(H_norm.size() == params->psd->GetValuesN(), "PSD and CFR must have the same size");
-
-    // apply small-scale fading
-    auto vit = rxPsd->ValuesBegin(); // psd value iterator
-    size_t idx = 0;
-    while (vit != rxPsd->ValuesEnd())
+    Ptr<const WifiSpectrumSignalParameters> wifiParams =
+        DynamicCast<const WifiSpectrumSignalParameters>(params);
+    if (wifiParams && wifiParams->ppdu)
     {
-        // multiply PSD with |H|^2
-        *vit = *vit * std::norm(H_norm[idx]);
-        vit++; idx++;
+        NS_ABORT_MSG_IF(wifiParams->ppdu->GetTxVector().GetNss() !=
+                            channel.GetNumTxAntennas(),
+                        "WifiTxVector NSS must equal the Sionna TX dimension");
+    }
+
+    const bool legacySiso = channel.GetNumRxAntennas() == 1 &&
+                            channel.GetNumTxAntennas() == 1;
+    if (legacySiso)
+    {
+        // Preserve the established 1x1 path, including its untouched trailing
+        // guard bin. No EESM beta is required for legacy operation.
+        auto value = rxPsd->ValuesBegin();
+        for (uint32_t sc = 0; sc < channel.GetNumSubcarriers(); ++sc, ++value)
+        {
+            *value *= std::norm(channel.Get(sc, 0, 0));
+        }
+    }
+    else
+    {
+        NS_ABORT_MSG_IF(!wifiParams || !wifiParams->ppdu,
+                        "Dimensioned MIMO CFR requires Wi-Fi signal parameters");
+
+        Ptr<SpectrumWifiPhy> txPhy = GetTransmitterSpectrumWifiPhy(params);
+        Ptr<WifiSpectrumPhyInterface> txInterface =
+            DynamicCast<WifiSpectrumPhyInterface>(params->txPhy);
+        NS_ABORT_MSG_IF(!txInterface, "Wi-Fi transmitter has no spectrum PHY interface");
+        Ptr<SpectrumWifiPhy> rxPhy = GetSpectrumWifiPhy(b, txInterface->GetChannel());
+        const auto& txVector = wifiParams->ppdu->GetTxVector();
+        Ptr<const WifiPsdu> psdu = wifiParams->ppdu->GetPsdu();
+        NS_ABORT_MSG_IF(!psdu, "HE SU PPDU does not contain a PSDU");
+        NS_ABORT_MSG_IF(txPhy->GetMaxSupportedTxSpatialStreams() < txVector.GetNss(),
+                        "Transmitter PHY does not support WifiTxVector NSS");
+        NS_ABORT_MSG_IF(rxPhy->GetMaxSupportedRxSpatialStreams() < txVector.GetNss(),
+                        "Receiver PHY does not support WifiTxVector NSS");
+
+        const double rxGainLinear = DbToRatio(rxPhy->GetRxGain());
+        const double receivedPowerW = Integral(*params->psd) * rxGainLinear;
+        const auto mimoRx = CalculateMimoRx(channel,
+                                            receivedPowerW,
+                                            txVector,
+                                            psdu->GetSize(),
+                                            txPhy->GetNumberOfAntennas(),
+                                            rxPhy->GetNumberOfAntennas(),
+                                            txVector.GetChannelWidth() * 1e6,
+                                            GetRxNoiseFigureDb(rxPhy),
+                                            GetErrorRateModel(rxPhy));
+
+        const double equivalentPowerBeforeRxGain =
+            mimoRx.GetEquivalentReceivedPowerW() / rxGainLinear;
+        const double currentPowerBeforeRxGain = Integral(*rxPsd);
+        NS_ABORT_MSG_IF(currentPowerBeforeRxGain <= 0.0,
+                        "Path-loss-attenuated MIMO PSD has no power");
+        *rxPsd *= equivalentPowerBeforeRxGain / currentPowerBeforeRxGain;
+
+        m_mimoRxTrace(wifiParams->ppdu->GetUid(),
+                      aId,
+                      bId,
+                      mimoRx.GetLinkResult().GetEffectiveSinrLinear(),
+                      mimoRx.GetLinkResult().GetPacketErrorRate(),
+                      mimoRx.GetLinkResult().GetMimoResult().GetMinimumChannelRank());
+    }
+
+    auto tagCoefficients = channel.GetCoefficients();
+    if (legacySiso)
+    {
+        tagCoefficients.emplace_back(1.0, 0.0);
     }
 
     // tag the packet payload with CFR for later processing in application layer
@@ -131,13 +358,13 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
             if (p->PeekPacketTag(tag))
             {
                 //std::cout << "tag already exists; replace H" << std::endl;
-                tag.SetComplexes(H_norm);
-                tag.SetPathloss(wb_loss);
+                tag.SetComplexes(tagCoefficients);
+                tag.SetPathloss(wbLoss);
             } else
             {
                 //std::cout << "add new tag with H" << std::endl;
-                tag.SetComplexes(H_norm);
-                tag.SetPathloss(wb_loss);
+                tag.SetComplexes(tagCoefficients);
+                tag.SetPathloss(wbLoss);
                 p->AddPacketTag(tag);
             }
         }

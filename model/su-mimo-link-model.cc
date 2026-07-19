@@ -43,6 +43,12 @@ SuMimoLinkResult::GetEffectiveSinrLinear(uint32_t stream) const
     return m_effectiveSinrLinear.at(stream);
 }
 
+uint32_t
+SuMimoLinkResult::GetMinimumChannelRank() const
+{
+    return m_minimumChannelRank;
+}
+
 double
 SuMimoLinkResult::GetSpectralEfficiency() const
 {
@@ -67,6 +73,7 @@ SuMimoLinkModel::Calculate(const MimoChannelMatrix& channel, double referenceSnr
     result.m_numStreams = numStreams;
     result.m_sinrLinear.resize(static_cast<std::size_t>(numSubcarriers) * numStreams);
     result.m_effectiveSinrLinear.resize(numStreams);
+    result.m_minimumChannelRank = std::min(numRxAntennas, numStreams);
     std::vector<double> accumulatedMutualInformation(numStreams, 0.0);
 
     for (uint32_t sc = 0; sc < numSubcarriers; ++sc)
@@ -79,6 +86,11 @@ SuMimoLinkModel::Calculate(const MimoChannelMatrix& channel, double referenceSnr
                 h(rx, stream) = channel.Get(sc, rx, stream);
             }
         }
+
+        Eigen::FullPivLU<Eigen::MatrixXcd> rankDecomposition(h);
+        result.m_minimumChannelRank =
+            std::min(result.m_minimumChannelRank,
+                     static_cast<uint32_t>(rankDecomposition.rank()));
 
         const Eigen::MatrixXcd identity = Eigen::MatrixXcd::Identity(numStreams, numStreams);
         const Eigen::MatrixXcd mmseMatrix = identity + streamSnr * h.adjoint() * h;

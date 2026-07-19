@@ -27,6 +27,9 @@ class SuMimoLinkResult
     double GetSinrLinear(uint32_t subcarrier, uint32_t stream) const;
     double GetEffectiveSinrLinear(uint32_t stream) const;
 
+    /** Minimum numerical channel rank over all subcarriers. */
+    uint32_t GetMinimumChannelRank() const;
+
     /**
      * Average Gaussian spectral efficiency in bit/s/Hz, summed over streams.
      */
@@ -39,6 +42,7 @@ class SuMimoLinkResult
     uint32_t m_numStreams{0};
     std::vector<double> m_sinrLinear;
     std::vector<double> m_effectiveSinrLinear;
+    uint32_t m_minimumChannelRank{0};
     double m_spectralEfficiency{0.0};
 };
 

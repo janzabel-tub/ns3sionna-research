@@ -7,6 +7,7 @@
 #include "ns3/error-rate-model.h"
 #include "ns3/he-phy.h"
 #include "ns3/he-su-mimo-link-abstraction.h"
+#include "ns3/sionna-spectrum-propagation-loss-model.h"
 #include "ns3/mimo-channel-matrix.h"
 #include "ns3/sionna-propagation-cache.h"
 #include "ns3/su-mimo-link-model.h"
@@ -624,6 +625,113 @@ class MimoProtobufDeserializationTest : public TestCase
     }
 };
 
+class SuMimoChannelRankTest : public TestCase
+{
+  public:
+    SuMimoChannelRankTest()
+        : TestCase("SU-MIMO reports full-rank and rank-one channels")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        MimoChannelMatrix fullRank(2, 2, 2);
+        MimoChannelMatrix rankOne(2, 2, 2);
+        for (uint32_t sc = 0; sc < 2; ++sc)
+        {
+            fullRank.Set(sc, 0, 0, {std::sqrt(2.0), 0.0});
+            fullRank.Set(sc, 1, 1, {std::sqrt(2.0), 0.0});
+            for (uint32_t rx = 0; rx < 2; ++rx)
+            {
+                for (uint32_t tx = 0; tx < 2; ++tx)
+                {
+                    rankOne.Set(sc, rx, tx, {1.0, 0.0});
+                }
+            }
+        }
+
+        NS_TEST_ASSERT_MSG_EQ(SuMimoLinkModel::Calculate(fullRank, 10.0)
+                                  .GetMinimumChannelRank(),
+                              2,
+                              "Well-conditioned 2x2 channel did not report rank two");
+        NS_TEST_ASSERT_MSG_EQ(SuMimoLinkModel::Calculate(rankOne, 10.0)
+                                  .GetMinimumChannelRank(),
+                              1,
+                              "Rank-one 2x2 channel did not report rank one");
+    }
+};
+
+class SpectrumWifiPhyMimoAdapterTest : public TestCase
+{
+  public:
+    SpectrumWifiPhyMimoAdapterTest()
+        : TestCase("SpectrumWifiPhy MIMO adapter preserves effective SINR without double gains")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        constexpr double bandwidthHz = 20e6;
+        constexpr double noiseFigureDb = 7.0;
+        constexpr double referenceSnr = 10.0;
+        const auto noiseReference =
+            WifiLinkBudget::Calculate(0.0, 0.0, bandwidthHz, 290.0, noiseFigureDb);
+        const double noisePowerW = noiseReference.GetReceiverNoisePowerW();
+        const double receivedPowerW = referenceSnr * noisePowerW;
+        auto errorModel = CreateObject<TableBasedErrorRateModel>();
+        auto adapter = CreateObject<SionnaSpectrumPropagationLossModel>();
+        // Formula sentinel for this flat-channel test, not an HE calibration.
+        adapter->SetEesmBeta(0, 2.0);
+
+        MimoChannelMatrix channel(4, 2, 2);
+        for (uint32_t sc = 0; sc < channel.GetNumSubcarriers(); ++sc)
+        {
+            channel.Set(sc, 0, 0, {std::sqrt(2.0), 0.0});
+            channel.Set(sc, 1, 1, {std::sqrt(2.0), 0.0});
+        }
+        const auto result = adapter->CalculateMimoRx(channel,
+                                                     receivedPowerW,
+                                                     MakeHeTxVector(HePhy::GetHeMcs0(), 2),
+                                                     1000,
+                                                     2,
+                                                     2,
+                                                     bandwidthHz,
+                                                     noiseFigureDb,
+                                                     errorModel);
+        NS_TEST_ASSERT_MSG_EQ_TOL(result.GetLinkResult().GetEffectiveSinrLinear(),
+                                  referenceSnr,
+                                  1e-12,
+                                  "Well-conditioned 2x2 effective SINR is incorrect");
+        NS_TEST_ASSERT_MSG_EQ_TOL(result.GetEquivalentReceivedPowerW(),
+                                  referenceSnr * noisePowerW,
+                                  referenceSnr * noisePowerW * 1e-12,
+                                  "Equivalent SpectrumWifiPhy power applies noise twice");
+
+        MimoChannelMatrix extraRxChannel(1, 3, 2);
+        extraRxChannel.Set(0, 0, 0, {std::sqrt(3.0), 0.0});
+        extraRxChannel.Set(0, 1, 1, {std::sqrt(3.0), 0.0});
+        const auto extraRx = adapter->CalculateMimoRx(extraRxChannel,
+                                                      receivedPowerW,
+                                                      MakeHeTxVector(HePhy::GetHeMcs0(), 2),
+                                                      1000,
+                                                      2,
+                                                      3,
+                                                      bandwidthHz,
+                                                      noiseFigureDb,
+                                                      errorModel);
+        NS_TEST_ASSERT_MSG_EQ_TOL(extraRx.GetLinkResult().GetEffectiveSinrLinear(),
+                                  15.0,
+                                  1e-12,
+                                  "MMSE did not include the third-antenna array gain");
+        NS_TEST_ASSERT_MSG_EQ_TOL(extraRx.GetEquivalentReceivedPowerW(),
+                                  10.0 * noisePowerW,
+                                  10.0 * noisePowerW * 1e-12,
+                                  "AWGN diversity gain was not compensated exactly once");
+    }
+};
+
 class SionnaTestSuite : public TestSuite
 {
   public:
@@ -641,6 +749,8 @@ class SionnaTestSuite : public TestSuite
         AddTestCase(new SuMimoSisoReductionTest, TestCase::QUICK);
         AddTestCase(new SuMimoOrthogonalChannelTest, TestCase::QUICK);
         AddTestCase(new SuMimoFrequencySelectiveTest, TestCase::QUICK);
+        AddTestCase(new SuMimoChannelRankTest, TestCase::QUICK);
+        AddTestCase(new SpectrumWifiPhyMimoAdapterTest, TestCase::QUICK);
         AddTestCase(new LegacySisoDeserializationTest, TestCase::QUICK);
         AddTestCase(new MimoProtobufDeserializationTest, TestCase::QUICK);
     }
