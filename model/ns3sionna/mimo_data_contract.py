@@ -21,6 +21,33 @@ RX_ARRAY_DEFAULTS = {
     "polarization": "V",
 }
 
+LEGACY_RADIO_ORIENTATION_RAD = [0.0, -180.0, 0.0]
+
+
+def resolve_node_orientation(node_info):
+    """Return one node's Sionna Euler angles in radians."""
+    if not node_info.HasField("orientation"):
+        return LEGACY_RADIO_ORIENTATION_RAD.copy()
+
+    orientation = node_info.orientation
+    angles_degrees = np.asarray(
+        [
+            orientation.azimuth,
+            orientation.elevation,
+            orientation.roll,
+        ],
+        dtype=float,
+    )
+    if not np.all(np.isfinite(angles_degrees)):
+        raise ValueError("Node orientation must be finite")
+    if not (
+        -180.0 <= angles_degrees[0] <= 180.0
+        and -90.0 <= angles_degrees[1] <= 90.0
+        and -180.0 <= angles_degrees[2] <= 180.0
+    ):
+        raise ValueError("Node orientation is outside the supported degree range")
+    return np.deg2rad(angles_degrees).tolist()
+
 
 def resolve_array_config(config, defaults):
     """Return validated PlanarArray keyword arguments.

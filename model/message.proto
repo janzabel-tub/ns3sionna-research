@@ -85,6 +85,17 @@ message SimInitMessage {
             ConstantPositionModel constant_position_model = 2;
             RandomWalkModel random_walk_model = 3;
         }
+
+        // Optional node orientation. Angles are expressed in degrees and are
+        // converted to Sionna's Euler-angle convention by the server. An
+        // omitted message preserves the legacy server orientation.
+        message Orientation {
+            double azimuth = 1;
+            double elevation = 2;
+            double roll = 3;
+        }
+
+        Orientation orientation = 4;
     }
 
     repeated NodeInfo nodes = 11;

@@ -189,6 +189,36 @@ SionnaSpectrumPropagationLossModel::SetEesmBetaDb(uint8_t mcs, double betaDb)
     m_linkAbstraction->SetEesmBetaDb(mcs, betaDb);
 }
 
+void
+SionnaSpectrumPropagationLossModel::ConfigureEesmBetas(
+    const std::map<uint8_t, double>& betas)
+{
+    auto linkAbstraction = CreateObject<HeSuMimoLinkAbstraction>();
+    for (const auto& [mcs, betaLinear] : betas)
+    {
+        linkAbstraction->SetEesmBeta(mcs, betaLinear);
+    }
+    m_linkAbstraction = linkAbstraction;
+}
+
+double
+SionnaSpectrumPropagationLossModel::GetReceiverNoiseFigureDb() const
+{
+    return m_receiverNoiseFigureDb;
+}
+
+bool
+SionnaSpectrumPropagationLossModel::HasEesmBeta(uint8_t mcs) const
+{
+    return m_linkAbstraction->HasEesmBeta(mcs);
+}
+
+double
+SionnaSpectrumPropagationLossModel::GetEesmBeta(uint8_t mcs) const
+{
+    return m_linkAbstraction->GetEesmBeta(mcs);
+}
+
 SionnaMimoSpectrumRxResult
 SionnaSpectrumPropagationLossModel::CalculateMimoRx(
     const MimoChannelMatrix& channel,

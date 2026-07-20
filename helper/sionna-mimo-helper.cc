@@ -6,6 +6,12 @@
 
 #include "sionna-mimo-helper.h"
 
+#include "sionna-helper.h"
+#include "../model/sionna-spectrum-propagation-loss-model.h"
+#include "ns3/double.h"
+#include "ns3/spectrum-wifi-helper.h"
+#include "ns3/uinteger.h"
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -37,6 +43,38 @@ GetPolarizationCount(SionnaMimoPolarization polarization)
         return 1;
     case SionnaMimoPolarization::DUAL:
         return 2;
+    }
+    Reject("unknown antenna polarization");
+}
+
+std::string
+ToSionnaPattern(SionnaMimoAntennaPattern pattern)
+{
+    switch (pattern)
+    {
+    case SionnaMimoAntennaPattern::ISOTROPIC:
+        return "iso";
+    case SionnaMimoAntennaPattern::DIPOLE:
+        return "dipole";
+    case SionnaMimoAntennaPattern::HALF_WAVE_DIPOLE:
+        return "hw_dipole";
+    case SionnaMimoAntennaPattern::TR38901:
+        return "tr38901";
+    }
+    Reject("unknown antenna element pattern");
+}
+
+std::string
+ToSionnaPolarization(SionnaMimoPolarization polarization)
+{
+    switch (polarization)
+    {
+    case SionnaMimoPolarization::VERTICAL:
+        return "V";
+    case SionnaMimoPolarization::HORIZONTAL:
+        return "H";
+    case SionnaMimoPolarization::DUAL:
+        return "VH";
     }
     Reject("unknown antenna polarization");
 }
@@ -170,6 +208,58 @@ SionnaMimoHelper::SetConfiguration(const SionnaMimoConfiguration& configuration)
 {
     Validate(configuration);
     m_configuration = configuration;
+}
+
+void
+SionnaMimoHelper::Apply(
+    SionnaHelper& sionnaHelper,
+    SpectrumWifiPhyHelper& txPhyHelper,
+    SpectrumWifiPhyHelper& rxPhyHelper,
+    Ptr<SionnaSpectrumPropagationLossModel> spectrumModel) const
+{
+    Validate(m_configuration);
+    if (!spectrumModel)
+    {
+        Reject("SpectrumWifiPhy propagation model must not be null");
+    }
+
+    const auto& config = m_configuration;
+    sionnaHelper.ConfigureTransmitArray(
+        config.txArray.numRows,
+        config.txArray.numColumns,
+        config.txArray.verticalSpacing,
+        config.txArray.horizontalSpacing,
+        ToSionnaPattern(config.txArray.pattern),
+        ToSionnaPolarization(config.txArray.polarization));
+    sionnaHelper.ConfigureReceiveArray(
+        config.rxArray.numRows,
+        config.rxArray.numColumns,
+        config.rxArray.verticalSpacing,
+        config.rxArray.horizontalSpacing,
+        ToSionnaPattern(config.rxArray.pattern),
+        ToSionnaPolarization(config.rxArray.polarization));
+
+    sionnaHelper.ClearNodeOrientations();
+    for (const auto& [nodeId, orientation] : config.nodeOrientations)
+    {
+        sionnaHelper.ConfigureNodeOrientation(
+            nodeId,
+            orientation.azimuthDegrees,
+            orientation.elevationDegrees,
+            orientation.rollDegrees);
+    }
+
+    auto configurePhy = [&config](SpectrumWifiPhyHelper& phyHelper, uint32_t numAntennas) {
+        phyHelper.Set("Antennas", UintegerValue(numAntennas));
+        phyHelper.Set("MaxSupportedTxSpatialStreams", UintegerValue(config.maxNss));
+        phyHelper.Set("MaxSupportedRxSpatialStreams", UintegerValue(config.maxNss));
+        phyHelper.Set("RxNoiseFigure", DoubleValue(config.receiverNoiseFigureDb));
+    };
+    configurePhy(txPhyHelper, config.numTxAntennas);
+    configurePhy(rxPhyHelper, config.numRxAntennas);
+
+    spectrumModel->SetReceiverNoiseFigureDb(config.receiverNoiseFigureDb);
+    spectrumModel->ConfigureEesmBetas(config.eesmBetaLinear);
 }
 
 void

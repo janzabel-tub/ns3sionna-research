@@ -1,6 +1,6 @@
 # ns3sionna: MIMO-Abstraktionsmodell für IEEE 802.11ax/be
 
-Stand: 20. Juli 2026, Unterphase 2.1
+Stand: 20. Juli 2026, Unterphase 2.2
 
 Arbeitszweig: feature/su-mimo-minimal
 
@@ -14,14 +14,15 @@ Post-Processing-SINR, Effective-SINR, MCS/PER und später die Auswahl von
 Precoding und MU-MIMO, wird ausschließlich in ns-3 ausgeführt.
 
 Die Entwicklung erfolgt in kleinen, einzeln testbaren Schritten. Der aktuelle
-Stand implementiert die Unterphasen 1.1 bis 1.4 und 2.1: numerischen SU-MIMO-Kern,
-konfigurierbare Sionna-Arrays, einen dimensionssicheren MIMO-Datenvertrag,
-explizit kalibrierbare 802.11ax-EESM-/PER-Abbildung und die schmale Einkopplung
-in den SpectrumWifiPhy-Empfangspfad. Der simulationsunabhängige
-SionnaMimoHelper legt nun den High-Level-API-Vertrag und dessen zentrale
-Validierung fest. Ein reproduzierbares 1x1-/2x2-Beispiel deckt Vollrang- und
-Rang-1-Kanäle ab. Die Integration des neuen Helpers, Precoding und Beamforming
-wurden nicht begonnen.
+Stand implementiert die Unterphasen 1.1 bis 1.4 sowie 2.1 und 2.2: numerischen
+SU-MIMO-Kern, konfigurierbare Sionna-Arrays, einen dimensionssicheren
+MIMO-Datenvertrag, explizit kalibrierbare 802.11ax-EESM-/PER-Abbildung und die
+schmale Einkopplung in den SpectrumWifiPhy-Empfangspfad. SionnaMimoHelper legt
+den High-Level-API-Vertrag und dessen zentrale Validierung fest und wendet ihn
+nun konsistent auf Sionna-IPC, Phase-1-Linkabstraktion und SpectrumWifiPhy an.
+Ein reproduzierbares 1x1-/2x2-Beispiel deckt Vollrang- und Rang-1-Kanäle ab.
+Die Benutzbarkeitsarbeiten der Unterphase 2.3, Precoding und Beamforming wurden
+nicht begonnen.
 
 ## 2. Reproduzierbare Ausgangsbasis
 
@@ -147,7 +148,7 @@ Abnahmekriterium: Der API-Vertrag ist unabhängig von einer Simulation
 testbar, rückwärtskompatible Defaults sind festgeschrieben und kein Modus aus
 Phase 3 oder 4 erscheint fälschlich funktionsfähig.
 
-#### Unterphase 2.2: Integration
+#### Unterphase 2.2: Integration (implementiert)
 
 - SionnaMimoHelper mit den vorhandenen Phase-1-Komponenten für Kanal,
   Link Budget, MMSE, EESM und SpectrumWifiPhy verbinden.
@@ -652,8 +653,10 @@ Orientierung zusammen. Die festgeschriebenen Defaults sind:
   Polarisation;
 - RX-Array 1 x 1, Abstände 0,5 Wellenlängen, Dipolmuster, vertikale
   Polarisation;
-- keine knotenspezifische Orientierung, also für jeden nicht eingetragenen
-  Knoten 0 Grad Azimut, Elevation und Rollwinkel;
+- keine explizite knotenspezifische Orientierung; der API-Lesezugriff liefert
+  dafür neutrale Nullwinkel, während Apply kein IPC-Feld erzeugt und der
+  Server deshalb für alte und neue 1x1-Aufrufe exakt seine bisherige interne
+  Orientierung [0, -180, 0] beibehält;
 - linearer MMSE-Empfänger und gemeinsame Unit-Average-Power-Normalisierung
   über alle Subcarrier und Antennenpaare gemäß Abschnitt 4.3;
 - 7 dB Empfängerrauschzahl entsprechend dem ns-3.40-WifiPhy-Default;
@@ -705,17 +708,72 @@ Open-Loop-SU-MIMO muss das konkret verwendete MCS ein explizites Beta besitzen.
 SISO verlangt wegen des unveränderten skalaren Phase-1-Pfads weiterhin kein
 Beta. Damit werden keine unbelegten Kalibrierwerte eingeführt.
 
-### 6.4 Bewusste Grenze zu Unterphase 2.2
+### 6.4 Gemeinsamer Integrationsaufruf
 
-Keine bestehende PHY-, Kanal-, IPC- oder Serverdatei ruft SionnaMimoHelper auf.
-Die API kann daher kompiliert, konstruiert und vollständig validiert werden,
-ohne das bisherige PHY-Verhalten zu beeinflussen. Erst Unterphase 2.2 darf die
-gespeicherten Werte an SionnaHelper, SionnaSpectrumPropagationLossModel und
-WifiPhy weiterreichen oder Orientierungen in den Serververtrag aufnehmen.
+Apply erhält einen vorhandenen SionnaHelper, getrennte
+SpectrumWifiPhyHelper-Instanzen für Sender und Empfänger sowie den
+SionnaSpectrumPropagationLossModel-Adapter. Die Trennung der beiden
+PHY-Helper hält auch \(N_\mathrm{tx}\ne N_\mathrm{rx}\) darstellbar. Apply
+validiert zuerst erneut den vollständigen gespeicherten Vertrag und verändert
+danach ausschließlich die explizit übergebenen Objekte:
 
-## 7. Validierung der Unterphasen 1.1 bis 2.1
+    SionnaMimoHelper mimo(configuration);
+    mimo.Apply(sionna, txPhy, rxPhy, spectrumModel);
 
-Die native Suite sionna enthält nun 18 schnelle Fälle:
+Die Zuordnung ist eindeutig:
+
+- txArray und rxArray werden auf die bestehenden
+  ConfigureTransmitArray-/ConfigureReceiveArray-Aufrufe abgebildet;
+- numTxAntennas beziehungsweise numRxAntennas setzen das Antennenzahlattribut
+  des jeweiligen SpectrumWifiPhyHelper;
+- maxNss setzt auf beiden Endpunkten MaxSupportedTxSpatialStreams und
+  MaxSupportedRxSpatialStreams;
+- receiverNoiseFigureDb setzt sowohl WifiPhy::RxNoiseFigure als auch den
+  expliziten Rauschzahlwert des MIMO-Spectrumadapters;
+- die vollständige EESM-Map ersetzt atomar die bisherige Adapterkonfiguration,
+  sodass beim erneuten Anwenden keine veralteten MCS-Betas zurückbleiben.
+
+Linearer MMSE, gemeinsame Unit-Average-Pair-Power-Normalisierung und EESM
+benötigen keinen zusätzlichen Laufzeitselektor, weil Validate in Phase 2
+jeweils genau diese vorhandene Phase-1-Implementierung zulässt. Eine
+abweichende Empfänger-, Normalisierungs- oder Effective-SINR-Auswahl wird
+weiterhin vor Apply abgelehnt.
+
+### 6.5 Knotenorientierung im IPC- und Serverpfad
+
+NodeInfo besitzt das neue optionale Feld orientation mit Azimut, Elevation und
+Rollwinkel in Grad. SionnaHelper trägt nur explizit konfigurierte
+Knotenorientierungen ein. Der Python-Server prüft endliche Werte und dieselben
+Winkelgrenzen wie die High-Level-API, konvertiert Grad mit
+
+\[
+  \boldsymbol\theta_\mathrm{rad}
+  = \frac{\pi}{180}\boldsymbol\theta_\mathrm{deg}
+\]
+
+und verwendet die drei Eulerwinkel beim Anlegen jedes Transmitter- und
+Receiver-Objekts im klassischen sowie im Look-ahead-Pfad. Das ausgelagerte
+PopulateMimoConfiguration schreibt Array- und Orientierungsfelder sowohl für
+Start als auch für den bytegenauen Integrationstest.
+
+Fehlt orientation, verwendet der Server weiterhin exakt die bisherige
+Konstante [0, -180, 0]. Der Wert wird bewusst nicht als neue API-Orientierung
+interpretiert, sondern nur zur vollständigen Verhaltenskompatibilität alter
+Nachrichten beibehalten. Ein alter SionnaHelper-Aufruf konfiguriert weder Array-
+noch Orientierungsfelder und erzeugt deshalb weiterhin die bisherigen
+1x1-Arrays und die bisherige Serverausrichtung.
+
+### 6.6 Grenze zu Unterphase 2.3
+
+Unterphase 2.2 ergänzt keine ausschließlich über die High-Level-API aufgebauten
+Beispiele, keine integrationsnahen Laufzeit-Negativtests und keine neue
+End-to-End-Benutzerführung. Diese Arbeiten bleiben ausdrücklich Unterphase 2.3
+vorbehalten. Ebenso bleiben Streamauswahl, Precoding, Beamforming und MU-MIMO
+außerhalb dieses Integrationsschritts.
+
+## 7. Validierung der Unterphasen 1.1 bis 2.2
+
+Die native Suite sionna enthält nun 20 schnelle Fälle:
 
 1. API-Defaulttest für den vollständigen legacy-kompatiblen SISO-Vertrag,
    leere EESM-Kalibrierung und exakt zwei gemeldete Betriebsarten.
@@ -724,41 +782,47 @@ Die native Suite sionna enthält nun 18 schnelle Fälle:
 3. Zentrale Negativmatrix für nicht endliche, unvollständige,
    widersprüchliche oder nicht unterstützte API-Konfigurationen einschließlich
    Beamforming, MU-MIMO und fehlendem MCS-Beta.
-4. Layouttest eines 2 x 2 x 2-Tensors mit eindeutig nummerierten Koeffizienten.
-5. Reversible dB-/Linear-Umrechnung einschließlich 10 dB gleich Faktor zehn.
-6. Link-Budget-Test für Sendeleistung, Pfadverlust, \(B\), \(T\) und \(NF\)
+4. Manuell und über SionnaMimoHelper konfigurierte 1x1-Integration mit
+   bytegleicher Array-/Orientierungs-IPC-Nachricht, identischer installierter
+   SpectrumWifiPhy-Antennen-/NSS-Konfiguration, gleicher Rauschzahl und
+   EESM-Kalibrierung sowie exakt gleichen MMSE-, EESM- und PER-Ergebnissen.
+5. Derselbe Integrationsvergleich für eine vollständige 2x2-Konfiguration.
+6. Layouttest eines 2 x 2 x 2-Tensors mit eindeutig nummerierten Koeffizienten.
+7. Reversible dB-/Linear-Umrechnung einschließlich 10 dB gleich Faktor zehn.
+8. Link-Budget-Test für Sendeleistung, Pfadverlust, \(B\), \(T\) und \(NF\)
    sowie die erwartete Halbierung der SNR bei Verdopplung von \(B\) oder \(T\).
-7. Flacher orthogonaler 2x2-Kanal: EESM erhält identische Tone-/Stream-SINRs
+9. Flacher orthogonaler 2x2-Kanal: EESM erhält identische Tone-/Stream-SINRs
    unabhängig vom positiven Test-Beta.
-8. Frequenzselektiver SISO-Kanal: EESM stimmt mit der analytischen
+10. Frequenzselektiver SISO-Kanal: EESM stimmt mit der analytischen
    Zweitonformel für das konfigurierte Beta überein.
-9. SISO-Parität zur direkten ns-3.40-ErrorRateModel-Abfrage für HE MCS
+11. SISO-Parität zur direkten ns-3.40-ErrorRateModel-Abfrage für HE MCS
    0, 3, 7 und 11, neun SNR-Punkte von -5 bis 35 dB sowie 32, 400 und
    1458 Byte. Das sind 108 Kombinationen; MCS 11 prüft auch den
    TableBased-Fallback auf Yans.
-10. Monotone PER auf einem normierten frequenzselektiven Vier-Ton-Kanal für
+12. Monotone PER auf einem normierten frequenzselektiven Vier-Ton-Kanal für
    dieselben vier MCS und drei Paketgrößen bei 26 SNR-Punkten von -10 bis
    40 dB. Die 312 geprüften Werte bilden je Konfiguration eine nicht steigende
    Folge mit einem echten PER-Abfall.
-11. Exakte Reproduzierbarkeit von Post-MMSE-SINR, EESM-SINR und PER über
+13. Exakte Reproduzierbarkeit von Post-MMSE-SINR, EESM-SINR und PER über
    20 Wiederholungen eines komplexen frequenzselektiven 2x2-Kanals.
-12. SISO-Test mit \(h=2+j\) und \(\rho=10\); erwartet wird \(\gamma=50\).
-13. Orthogonaler 2x2-Kanal \(\mathbf H=\mathbf I\) und \(\rho=20\); jeder
+14. SISO-Test mit \(h=2+j\) und \(\rho=10\); erwartet wird \(\gamma=50\).
+15. Orthogonaler 2x2-Kanal \(\mathbf H=\mathbf I\) und \(\rho=20\); jeder
     Stream erhält \(\gamma=10\) und \(\eta=2\log_2(11)\).
-14. Zwei diagonale Subcarrier diag(1,2) und diag(2,1) bei \(\rho=8\);
+16. Zwei diagonale Subcarrier diag(1,2) und diag(2,1) bei \(\rho=8\);
     erwartet werden (4,16), (16,4) und die analytische MI-Kompression.
-15. Deserialisierung einer alten Nachricht ohne Dimensionsfelder als
+17. Deserialisierung einer alten Nachricht ohne Dimensionsfelder als
     \(N_\mathrm{sc}\times1\times1\).
-16. Protocol-Buffer-Rundlauf einer synthetischen 2 x 2 x 2-CFR mit den
+18. Protocol-Buffer-Rundlauf einer synthetischen 2 x 2 x 2-CFR mit den
     komplexen Werten 1-j bis 8-8j und indexgenauer Prüfung.
-17. Mindestkanalrang eins beziehungsweise zwei für Rang-1- und orthogonale
+19. Mindestkanalrang eins beziehungsweise zwei für Rang-1- und orthogonale
     2x2-Kanäle über alle Subcarrier.
-18. Spectrumadapter-Test für exaktes Rauschleistungs- und AWGN-Diversity-
+20. Spectrumadapter-Test für exaktes Rauschleistungs- und AWGN-Diversity-
     Compensation-Mapping ohne doppelte Anwendung von Rauschen oder Arraygewinn.
 
-Die vier reinen Python-Vertragstests prüfen Standard- und explizite
+Die fünf reinen Python-Vertragstests prüfen Standard- und explizite
 Arraykonfiguration, bytegleiche 1x1-Serialisierung, die sc/rx/tx-Reihenfolge
-einer synthetischen 2x2-CFR sowie die gemeinsame MIMO-Normalisierung. Diese
+einer synthetischen 2x2-CFR, die gemeinsame MIMO-Normalisierung sowie die
+legacy-kompatible und explizite Knotenorientierung. Diese
 Tests benötigen weder Raytracing, ZMQ noch eine GPU. Die analytischen
 Vergleiche des numerischen Kerns verwenden weiterhin eine absolute Toleranz
 von 1e-10; die neuen Link-Budget-/EESM-Vergleiche verwenden 1e-12.
@@ -776,12 +840,14 @@ Beispiel ohne explizites EESM-Beta mit Status 2 abbricht.
 
 ### 7.1 Ausgeführte CPU-Validierung
 
-Am 20. Juli 2026 wurden nach Abschluss der Unterphase 2.1 folgende Prüfungen
+Am 20. Juli 2026 wurden nach Abschluss der Unterphase 2.2 folgende Prüfungen
 erfolgreich ausgeführt:
 
 - vollständiger Build mit Beispielen und Tests unter GCC 13.3
-- native ns-3-Suite sionna: 18 von 18 Fällen bestanden; die drei neuen Fälle
-  benötigen weder eine Simulation noch ZMQ oder Sionna
+- native ns-3-Suite sionna: 20 von 20 Fällen bestanden; die beiden neuen
+  Integrationsfälle vergleichen manuelle und helperbasierte 1x1-/2x2-IPC-,
+  SpectrumWifiPhy- und Phase-1-Konfigurationen ohne einen laufenden
+  ZMQ-/Sionna-Server
 - SISO-Paritätsmatrix: alle 108 Kombinationen stimmen innerhalb 1e-12 mit der
   direkt aufgerufenen ns-3-Fehlermodellschnittstelle überein
 - frequenzselektive Monotonitätsmatrix: alle 312 PER-Werte bestanden
@@ -791,9 +857,9 @@ erfolgreich ausgeführt:
   erreicht bei PER 1 erwartungsgemäß 0 Mbit/s
 - Negativlauf ohne --eesmBetaLinear: dokumentierter Abbruch mit Status 2 statt
   eines impliziten Produktions-Betas
-- reine Python-Vertragssuite: vier von vier Fällen in 0,001 s bestanden
-- gesamte Sionna-CPU-Serversuite: acht von acht Fällen in 170,587 s bestanden;
-  der reale 2x2-Fall lief in 1,574 s, lieferte 2 x 2 x 256 und erfüllte die
+- reine Python-Vertragssuite: fünf von fünf Fällen in 0,001 s bestanden
+- gesamte Sionna-CPU-Serversuite: acht von acht Fällen in 150,134 s bestanden;
+  der reale 2x2-Fall lief in 1,578 s, lieferte 2 x 2 x 256 und erfüllte die
   Normalisierung innerhalb 1e-6
 - P2P-End-to-End-Test example-sionna-sensing im unveränderten 1x1-Modus:
   drei CFR-Antworten, zwei empfangene UDP-Pakete zu je 1024 Byte und
@@ -807,10 +873,13 @@ nicht betroffen. Eine Korrektur gehört in eine eigene kleine Baseline-Subphase.
 
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 
-- Der neue SionnaMimoHelper speichert Arraykonfiguration und knotenbezogene
-  Orientierung ausschließlich als validierten Vertrag. Der bestehende
-  SionnaHelper verwendet bis Unterphase 2.2 weiterhin globale TX-/RX-Arrays;
-  keine Orientierung wird bereits an Sionna übertragen.
+- SionnaMimoHelper überträgt eine gemeinsame TX- und RX-Geometrie für die
+  jeweilige integrierte Verbindung. Knoten können unterschiedliche
+  Orientierungen besitzen; heterogene Arraygeometrien pro Knoten sind im
+  aktuellen Vertrag nicht repräsentiert.
+- Nicht explizit orientierte Knoten behalten die alte Serverorientierung
+  [0, -180, 0]. Explizite Winkel werden in beiden Servermodi an Sionna
+  übertragen.
 - Der integrierte MIMO-Pfad unterstützt nur HE SU mit einem Open-Loop-Stream
   je TX-Antenne. Nicht-HE-Kontrollrahmen verwenden das erste Antennenpaar;
   MU-MIMO, Streamauswahl und Precoding bleiben außerhalb von Phase 1.
@@ -835,9 +904,9 @@ nicht betroffen. Eine Korrektur gehört in eine eigene kleine Baseline-Subphase.
   nicht-reziprokes Precoding müssen Richtung und Konfiguration Teil des
   Schlüssels werden.
 
-Unterphase 2.1 ist abgeschlossen. Der API-Vertrag ist unabhängig von einer
-Simulation testbar, aber noch nicht mit den Phase-1-Komponenten verbunden.
-Unterphase 2.2, Streamauswahl und Precoding wurden bewusst nicht begonnen.
+Unterphase 2.2 ist abgeschlossen und der API-Vertrag mit Sionna, Phase 1 und
+SpectrumWifiPhy verbunden. Unterphase 2.3, Streamauswahl und Precoding wurden
+bewusst nicht begonnen.
 
 ## 9. Ausführung
 

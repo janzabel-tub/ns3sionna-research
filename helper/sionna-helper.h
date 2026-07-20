@@ -22,6 +22,7 @@
 
 #include "../model/message.pb.h"
 #include "sionna-utils.h"
+#include <map>
 #include <zmq.hpp>
 
 namespace ns3
@@ -91,6 +92,26 @@ public:
                                const std::string& polarization = "V");
 
     /**
+     * Configure one node's Sionna orientation in degrees.
+     *
+     * Nodes without an explicit orientation retain the legacy server
+     * orientation. This method only affects the next Start() message.
+     */
+    void ConfigureNodeOrientation(uint32_t nodeId,
+                                  double azimuthDegrees,
+                                  double elevationDegrees,
+                                  double rollDegrees);
+
+    /** Remove all explicit node-orientation overrides. */
+    void ClearNodeOrientations();
+    /**
+     * Populate array and explicit node-orientation fields in an IPC message.
+     *
+     * Existing node entries are matched by ns-3 node ID.
+     */
+    void PopulateMimoConfiguration(ns3sionna::SimInitMessage& simulationInfo) const;
+
+    /**
      * Connect ns3 to Sionna.
      */
     void Start();
@@ -127,6 +148,13 @@ private:
         std::string polarization;
     };
 
+    struct NodeOrientation
+    {
+        double azimuthDegrees{0.0};
+        double elevationDegrees{0.0};
+        double rollDegrees{0.0};
+    };
+
     static void ConfigureArray(AntennaArrayConfiguration& config,
                                uint32_t numRows,
                                uint32_t numColumns,
@@ -154,6 +182,7 @@ private:
     double m_noiseDbm;
     AntennaArrayConfiguration m_txArray;
     AntennaArrayConfiguration m_rxArray;
+    std::map<uint32_t, NodeOrientation> m_nodeOrientations;
     std::string m_time_evo_model; // position or doppler based
 
 public:

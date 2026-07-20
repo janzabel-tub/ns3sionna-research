@@ -90,6 +90,18 @@ class SionnaSpectrumPropagationLossModel : public SpectrumPropagationLossModel
     /** Configure the explicit EESM beta for one HE MCS in dB. */
     void SetEesmBetaDb(uint8_t mcs, double betaDb);
 
+    /** Atomically replace all configured linear EESM betas. */
+    void ConfigureEesmBetas(const std::map<uint8_t, double>& betas);
+
+    /** Return the receiver noise figure configured for the integrated path. */
+    double GetReceiverNoiseFigureDb() const;
+
+    /** Return whether an explicit EESM beta is configured for an HE MCS. */
+    bool HasEesmBeta(uint8_t mcs) const;
+
+    /** Return the configured linear EESM beta for an HE MCS. */
+    double GetEesmBeta(uint8_t mcs) const;
+
     /**
      * Evaluate the SU-MIMO abstraction for an already path-loss-attenuated signal.
      */

@@ -7,12 +7,17 @@
 #ifndef SIONNA_MIMO_HELPER_H
 #define SIONNA_MIMO_HELPER_H
 
+#include "ns3/ptr.h"
+
 #include <array>
 #include <cstdint>
 #include <map>
 
 namespace ns3
 {
+class SionnaHelper;
+class SionnaSpectrumPropagationLossModel;
+class SpectrumWifiPhyHelper;
 
 /** Operating modes represented by the high-level MIMO API. */
 enum class SionnaMimoMode
@@ -119,11 +124,11 @@ struct SionnaMimoConfiguration
 };
 
 /**
- * High-level, simulation-independent ns3sionna MIMO configuration API.
+ * High-level ns3sionna MIMO configuration API.
  *
- * Subphase 2.1 deliberately stores and validates the contract only. It does
- * not configure Sionna, WifiPhy, or the Phase-1 link abstraction; that wiring
- * belongs to Subphase 2.2.
+ * The value-based contract remains simulation-independent. Apply() forwards a
+ * validated configuration to Sionna, the Phase-1 abstraction, and separate
+ * transmit/receive SpectrumWifiPhy helpers.
  */
 class SionnaMimoHelper
 {
@@ -144,6 +149,24 @@ class SionnaMimoHelper
 
     /** Validate and atomically replace the stored configuration. */
     void SetConfiguration(const SionnaMimoConfiguration& configuration);
+
+    /**
+     * Apply the complete configuration to the Phase-1 integration objects.
+     *
+     * The PHY helpers are separate so asymmetric TX/RX antenna counts remain
+     * representable. Existing SionnaHelper users are unaffected unless this
+     * method is called.
+     *
+     * \param sionnaHelper existing Sionna IPC helper
+     * \param txPhyHelper SpectrumWifiPhy helper for the transmitting endpoint
+     * \param rxPhyHelper SpectrumWifiPhy helper for the receiving endpoint
+     * \param spectrumModel Sionna SpectrumWifiPhy propagation adapter
+     * \throws std::invalid_argument if the stored configuration or model is invalid
+     */
+    void Apply(SionnaHelper& sionnaHelper,
+               SpectrumWifiPhyHelper& txPhyHelper,
+               SpectrumWifiPhyHelper& rxPhyHelper,
+               Ptr<SionnaSpectrumPropagationLossModel> spectrumModel) const;
 
     /** Validate and set the orientation of one ns-3 node ID. */
     void SetNodeOrientation(uint32_t nodeId, const SionnaMimoOrientation& orientation);

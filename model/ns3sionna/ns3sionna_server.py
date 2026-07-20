@@ -21,7 +21,8 @@ from millify import millify
 
 from mimo_data_contract import (RX_ARRAY_DEFAULTS, TX_ARRAY_DEFAULTS,
                                 append_cfr_to_message, extract_link_cfr,
-                                normalize_link_cfr, resolve_array_config)
+                                normalize_link_cfr, resolve_array_config,
+                                resolve_node_orientation)
 
 from ns3sionna_utils import subcarrier_frequencies, compute_coherence_time, SECOND, MILLISECOND, coherence_from_velocities, \
     MAX_COHERENCE_TIME
@@ -406,7 +407,8 @@ class SionnaEnv:
         # Create transmitter
         tx_pos = self.node_info[tx_node].pos
         tx_node_name = "tx"
-        tx = Transmitter(name=tx_node_name, position=tx_pos, orientation=[0, -180, 0], display_radius=self.disp_r)
+        tx = Transmitter(name=tx_node_name, position=tx_pos,
+                         orientation=self.node_orientations[tx_node], display_radius=self.disp_r)
         self.scene.add(tx)
         self.placed_radio_node_names.append(tx_node_name)
 
@@ -415,7 +417,8 @@ class SionnaEnv:
             for rx_node_i in rx_nodes:
                 rx_node_name = "rx" + str(rx_node_i) + "." + str(lah_time_idx)
                 rx_pos = self.node_info[rx_node_i].get_pos_at(lah_time)
-                rx = Receiver(name=rx_node_name, position=rx_pos, orientation=[0, -180, 0], display_radius=self.disp_r)
+                rx = Receiver(name=rx_node_name, position=rx_pos,
+                              orientation=self.node_orientations[rx_node_i], display_radius=self.disp_r)
                 self.scene.add(rx)
                 self.placed_radio_node_names.append(rx_node_name)
 
@@ -565,7 +568,8 @@ class SionnaEnv:
         # Create transmitter
         tx_pos = self.node_info[tx_node].pos
         tx_node_name = "tx"
-        tx = Transmitter(name=tx_node_name, position=tx_pos, orientation=[0, -180, 0], display_radius=self.disp_r)
+        tx = Transmitter(name=tx_node_name, position=tx_pos,
+                         orientation=self.node_orientations[tx_node], display_radius=self.disp_r)
         self.scene.add(tx)
         self.placed_radio_node_names.append(tx_node_name)
 
@@ -573,7 +577,8 @@ class SionnaEnv:
         for rx_node_i in rx_nodes:
             rx_node_name = "rx" + str(rx_node_i)
             rx_pos = self.node_info[rx_node_i].pos
-            rx = Receiver(name=rx_node_name, position=rx_pos, orientation=[0, -180, 0], display_radius=self.disp_r)
+            rx = Receiver(name=rx_node_name, position=rx_pos,
+                          orientation=self.node_orientations[rx_node_i], display_radius=self.disp_r)
             self.scene.add(rx)
             self.placed_radio_node_names.append(rx_node_name)
 
@@ -671,7 +676,9 @@ class SionnaEnv:
 
     def _init_mobility(self, sim_init_msg):
         # Store information about each node: ID, mobility model
+        self.node_orientations = {}
         for node_info in sim_init_msg.nodes:
+            self.node_orientations[node_info.id] = resolve_node_orientation(node_info)
             if (node_info.HasField("constant_position_model")):
                 # fixed position; no mobility
                 pos = node_info.constant_position_model.position

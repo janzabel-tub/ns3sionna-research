@@ -4,17 +4,27 @@
  * Copyright (c) 2026
  */
 
+#include "ns3/double.h"
 #include "ns3/error-rate-model.h"
 #include "ns3/he-phy.h"
 #include "ns3/he-su-mimo-link-abstraction.h"
 #include "ns3/mimo-channel-matrix.h"
+#include "ns3/multi-model-spectrum-channel.h"
+#include "ns3/simulator.h"
+#include "ns3/sionna-helper.h"
 #include "ns3/sionna-mimo-helper.h"
 #include "ns3/sionna-propagation-cache.h"
 #include "ns3/sionna-spectrum-propagation-loss-model.h"
+#include "ns3/spectrum-wifi-helper.h"
+#include "ns3/spectrum-wifi-phy.h"
 #include "ns3/su-mimo-link-model.h"
-#include "ns3/test.h"
 #include "ns3/table-based-error-rate-model.h"
+#include "ns3/test.h"
+#include "ns3/uinteger.h"
+#include "ns3/wifi-helper.h"
 #include "ns3/wifi-link-budget.h"
+#include "ns3/wifi-mac-helper.h"
+#include "ns3/wifi-net-device.h"
 #include "ns3/wifi-tx-vector.h"
 
 #include <cmath>
@@ -383,6 +393,247 @@ class SionnaMimoHelperInvalidConfigurationTest : public TestCase
             static_cast<int>(SionnaMimoMode::SISO),
             "A rejected replacement partially changed the helper's stored configuration");
     }
+};
+
+void
+ConfigureManualPhy(SpectrumWifiPhyHelper& phyHelper,
+                   uint32_t numAntennas,
+                   uint32_t maxNss,
+                   double noiseFigureDb)
+{
+    phyHelper.Set("Antennas", UintegerValue(numAntennas));
+    phyHelper.Set("MaxSupportedTxSpatialStreams", UintegerValue(maxNss));
+    phyHelper.Set("MaxSupportedRxSpatialStreams", UintegerValue(maxNss));
+    phyHelper.Set("RxNoiseFigure", DoubleValue(noiseFigureDb));
+}
+
+Ptr<SpectrumWifiPhy>
+InstallConfiguredPhy(SpectrumWifiPhyHelper& phyHelper)
+{
+    phyHelper.SetChannel(CreateObject<MultiModelSpectrumChannel>());
+
+    NodeContainer node;
+    node.Create(1);
+
+    WifiHelper wifi;
+    wifi.SetStandard(WIFI_STANDARD_80211ax);
+    WifiMacHelper mac;
+    mac.SetType("ns3::AdhocWifiMac");
+
+    NetDeviceContainer devices = wifi.Install(phyHelper, mac, node);
+    Ptr<WifiNetDevice> device = DynamicCast<WifiNetDevice>(devices.Get(0));
+    return DynamicCast<SpectrumWifiPhy>(device->GetPhy());
+}
+
+class SionnaMimoHelperIntegrationTest : public TestCase
+{
+  public:
+    explicit SionnaMimoHelperIntegrationTest(bool useMimo)
+        : TestCase(useMimo
+                       ? "manual and SionnaMimoHelper 2x2 integrations are equivalent"
+                       : "manual and SionnaMimoHelper 1x1 integrations are equivalent"),
+          m_useMimo(useMimo)
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        constexpr uint8_t mcs = 3;
+        constexpr uint8_t staleMcs = 4;
+        constexpr double betaLinear = 1.75;
+        constexpr double noiseFigureDb = 5.5;
+        constexpr double bandwidthHz = 20e6;
+
+        SionnaMimoConfiguration configuration =
+            m_useMimo ? MakeOpenLoop2x2Configuration() : SionnaMimoConfiguration{};
+        configuration.receiverNoiseFigureDb = noiseFigureDb;
+        configuration.eesmBetaLinear.emplace(mcs, betaLinear);
+        configuration.nodeOrientations.emplace(
+            7,
+            SionnaMimoOrientation{30.0, -15.0, 5.0});
+
+        SionnaHelper manualSionna("", "inproc://sionna-mimo-manual");
+        manualSionna.ConfigureTransmitArray(
+            configuration.txArray.numRows,
+            configuration.txArray.numColumns,
+            configuration.txArray.verticalSpacing,
+            configuration.txArray.horizontalSpacing,
+            "tr38901",
+            m_useMimo ? "VH" : "V");
+        manualSionna.ConfigureReceiveArray(
+            configuration.rxArray.numRows,
+            configuration.rxArray.numColumns,
+            configuration.rxArray.verticalSpacing,
+            configuration.rxArray.horizontalSpacing,
+            "dipole",
+            "V");
+        manualSionna.ConfigureNodeOrientation(7, 30.0, -15.0, 5.0);
+
+        SpectrumWifiPhyHelper manualTxPhyHelper;
+        SpectrumWifiPhyHelper manualRxPhyHelper;
+        ConfigureManualPhy(manualTxPhyHelper,
+                           configuration.numTxAntennas,
+                           configuration.maxNss,
+                           noiseFigureDb);
+        ConfigureManualPhy(manualRxPhyHelper,
+                           configuration.numRxAntennas,
+                           configuration.maxNss,
+                           noiseFigureDb);
+        auto manualModel = CreateObject<SionnaSpectrumPropagationLossModel>();
+        manualModel->SetReceiverNoiseFigureDb(noiseFigureDb);
+        manualModel->SetEesmBeta(mcs, betaLinear);
+
+        SionnaHelper highLevelSionna("", "inproc://sionna-mimo-high-level");
+        SpectrumWifiPhyHelper highLevelTxPhyHelper;
+        SpectrumWifiPhyHelper highLevelRxPhyHelper;
+        auto highLevelModel = CreateObject<SionnaSpectrumPropagationLossModel>();
+        highLevelSionna.ConfigureNodeOrientation(8, 1.0, 2.0, 3.0);
+        highLevelModel->SetEesmBeta(staleMcs, 2.0);
+        SionnaMimoHelper(configuration).Apply(highLevelSionna,
+                                              highLevelTxPhyHelper,
+                                              highLevelRxPhyHelper,
+                                              highLevelModel);
+        ns3sionna::SimInitMessage manualMessage;
+        ns3sionna::SimInitMessage highLevelMessage;
+        manualMessage.add_nodes()->set_id(7);
+        manualMessage.add_nodes()->set_id(8);
+        highLevelMessage.add_nodes()->set_id(7);
+        highLevelMessage.add_nodes()->set_id(8);
+        manualSionna.PopulateMimoConfiguration(manualMessage);
+        highLevelSionna.PopulateMimoConfiguration(highLevelMessage);
+        NS_TEST_ASSERT_MSG_EQ(
+            highLevelMessage.SerializeAsString(),
+            manualMessage.SerializeAsString(),
+            "Helper/manual Sionna array or orientation IPC configuration differs");
+
+        NS_TEST_ASSERT_MSG_EQ_TOL(
+            highLevelModel->GetReceiverNoiseFigureDb(),
+            manualModel->GetReceiverNoiseFigureDb(),
+            1e-12,
+            "Helper and manual adapter noise figures differ");
+        NS_TEST_ASSERT_MSG_EQ(highLevelModel->HasEesmBeta(mcs),
+                              true,
+                              "Helper did not configure the requested EESM beta");
+        NS_TEST_ASSERT_MSG_EQ(highLevelModel->HasEesmBeta(staleMcs),
+                              false,
+                              "Helper retained an EESM beta absent from the replacement "
+                              "configuration");
+        NS_TEST_ASSERT_MSG_EQ_TOL(highLevelModel->GetEesmBeta(mcs),
+                                  manualModel->GetEesmBeta(mcs),
+                                  1e-12,
+                                  "Helper and manual EESM betas differ");
+
+        Ptr<SpectrumWifiPhy> manualTxPhy = InstallConfiguredPhy(manualTxPhyHelper);
+        Ptr<SpectrumWifiPhy> manualRxPhy = InstallConfiguredPhy(manualRxPhyHelper);
+        Ptr<SpectrumWifiPhy> highLevelTxPhy = InstallConfiguredPhy(highLevelTxPhyHelper);
+        Ptr<SpectrumWifiPhy> highLevelRxPhy = InstallConfiguredPhy(highLevelRxPhyHelper);
+
+        auto comparePhy = [this, &configuration](Ptr<SpectrumWifiPhy> manual,
+                                                 Ptr<SpectrumWifiPhy> highLevel,
+                                                 uint8_t expectedAntennas,
+                                                 const std::string& role) {
+            NS_TEST_ASSERT_MSG_EQ(highLevel->GetNumberOfAntennas(),
+                                  manual->GetNumberOfAntennas(),
+                                  role << " helper/manual antenna counts differ");
+            NS_TEST_ASSERT_MSG_EQ(highLevel->GetNumberOfAntennas(),
+                                  expectedAntennas,
+                                  role << " antenna count was not applied");
+            NS_TEST_ASSERT_MSG_EQ(highLevel->GetMaxSupportedTxSpatialStreams(),
+                                  manual->GetMaxSupportedTxSpatialStreams(),
+                                  role << " helper/manual TX NSS limits differ");
+            NS_TEST_ASSERT_MSG_EQ(highLevel->GetMaxSupportedRxSpatialStreams(),
+                                  manual->GetMaxSupportedRxSpatialStreams(),
+                                  role << " helper/manual RX NSS limits differ");
+            NS_TEST_ASSERT_MSG_EQ(highLevel->GetMaxSupportedTxSpatialStreams(),
+                                  configuration.maxNss,
+                                  role << " TX NSS limit was not applied");
+            NS_TEST_ASSERT_MSG_EQ(highLevel->GetMaxSupportedRxSpatialStreams(),
+                                  configuration.maxNss,
+                                  role << " RX NSS limit was not applied");
+        };
+        comparePhy(manualTxPhy,
+                   highLevelTxPhy,
+                   static_cast<uint8_t>(configuration.numTxAntennas),
+                   "TX");
+        comparePhy(manualRxPhy,
+                   highLevelRxPhy,
+                   static_cast<uint8_t>(configuration.numRxAntennas),
+                   "RX");
+
+        MimoChannelMatrix channel(2,
+                                  configuration.numRxAntennas,
+                                  configuration.numTxAntennas);
+        if (m_useMimo)
+        {
+            for (uint32_t sc = 0; sc < channel.GetNumSubcarriers(); ++sc)
+            {
+                channel.Set(sc, 0, 0, {std::sqrt(2.0), 0.0});
+                channel.Set(sc, 1, 1, {std::sqrt(2.0), 0.0});
+            }
+        }
+        else
+        {
+            channel.Set(0, 0, 0, {std::sqrt(0.5), 0.0});
+            channel.Set(1, 0, 0, {std::sqrt(1.5), 0.0});
+        }
+
+        const auto noiseBudget =
+            WifiLinkBudget::Calculate(0.0, 0.0, bandwidthHz, 290.0, noiseFigureDb);
+        const double receivedPowerW = 12.0 * noiseBudget.GetReceiverNoisePowerW();
+        const auto txVector = MakeHeTxVector(HePhy::GetHeMcs(mcs),
+                                             static_cast<uint8_t>(configuration.maxNss));
+        const auto manualResult = manualModel->CalculateMimoRx(
+            channel,
+            receivedPowerW,
+            txVector,
+            1200,
+            static_cast<uint8_t>(configuration.numTxAntennas),
+            static_cast<uint8_t>(configuration.numRxAntennas),
+            bandwidthHz,
+            noiseFigureDb,
+            CreateObject<TableBasedErrorRateModel>());
+        const auto highLevelResult = highLevelModel->CalculateMimoRx(
+            channel,
+            receivedPowerW,
+            txVector,
+            1200,
+            static_cast<uint8_t>(configuration.numTxAntennas),
+            static_cast<uint8_t>(configuration.numRxAntennas),
+            bandwidthHz,
+            noiseFigureDb,
+            CreateObject<TableBasedErrorRateModel>());
+
+        const auto& manualLink = manualResult.GetLinkResult();
+        const auto& highLevelLink = highLevelResult.GetLinkResult();
+        NS_TEST_ASSERT_MSG_EQ(highLevelLink.GetEffectiveSinrLinear(),
+                              manualLink.GetEffectiveSinrLinear(),
+                              "Helper/manual effective SINR differs");
+        NS_TEST_ASSERT_MSG_EQ(highLevelLink.GetPacketErrorRate(),
+                              manualLink.GetPacketErrorRate(),
+                              "Helper/manual PER differs");
+        NS_TEST_ASSERT_MSG_EQ(highLevelLink.GetMimoResult().GetMinimumChannelRank(),
+                              manualLink.GetMimoResult().GetMinimumChannelRank(),
+                              "Helper/manual channel rank differs");
+        for (uint32_t sc = 0;
+             sc < manualLink.GetMimoResult().GetNumSubcarriers();
+             ++sc)
+        {
+            for (uint32_t stream = 0;
+                 stream < manualLink.GetMimoResult().GetNumStreams();
+                 ++stream)
+            {
+                NS_TEST_ASSERT_MSG_EQ(
+                    highLevelLink.GetMimoResult().GetSinrLinear(sc, stream),
+                    manualLink.GetMimoResult().GetSinrLinear(sc, stream),
+                    "Helper/manual post-MMSE SINR differs");
+            }
+        }
+
+        Simulator::Destroy();
+    }
+
+    bool m_useMimo;
 };
 
 class MimoChannelMatrixLayoutTest : public TestCase
@@ -1079,6 +1330,10 @@ class SionnaTestSuite : public TestSuite
         AddTestCase(new SionnaMimoHelperDefaultsTest, TestCase::QUICK);
         AddTestCase(new SionnaMimoHelperValidConfigurationTest, TestCase::QUICK);
         AddTestCase(new SionnaMimoHelperInvalidConfigurationTest, TestCase::QUICK);
+        AddTestCase(new SionnaMimoHelperIntegrationTest(false),
+                    TestCase::QUICK);
+        AddTestCase(new SionnaMimoHelperIntegrationTest(true),
+                    TestCase::QUICK);
         AddTestCase(new MimoChannelMatrixLayoutTest, TestCase::QUICK);
         AddTestCase(new WifiLinkBudgetConversionTest, TestCase::QUICK);
         AddTestCase(new WifiLinkBudgetCalculationTest, TestCase::QUICK);

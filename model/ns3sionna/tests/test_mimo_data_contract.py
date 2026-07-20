@@ -4,12 +4,14 @@ import numpy as np
 
 from common import message_pb2
 from mimo_data_contract import (
+    LEGACY_RADIO_ORIENTATION_RAD,
     RX_ARRAY_DEFAULTS,
     TX_ARRAY_DEFAULTS,
     append_cfr_to_message,
     extract_link_cfr,
     normalize_link_cfr,
     resolve_array_config,
+    resolve_node_orientation,
 )
 
 
@@ -37,6 +39,23 @@ class MimoDataContractTest(unittest.TestCase):
                 "pattern": "dipole",
                 "polarization": "VH",
             },
+        )
+
+    def test_node_orientation_preserves_legacy_default_and_converts_degrees(self):
+        node = message_pb2.SimInitMessage.NodeInfo()
+        self.assertEqual(
+            resolve_node_orientation(node),
+            LEGACY_RADIO_ORIENTATION_RAD,
+        )
+
+        node.orientation.azimuth = 90.0
+        node.orientation.elevation = -45.0
+        node.orientation.roll = 180.0
+        self.assertTrue(
+            np.allclose(
+                resolve_node_orientation(node),
+                [np.pi / 2.0, -np.pi / 4.0, np.pi],
+            )
         )
 
     def test_siso_wire_representation_stays_legacy_compatible(self):

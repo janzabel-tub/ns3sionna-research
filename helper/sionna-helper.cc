@@ -13,6 +13,8 @@
 #include "../model/sionna-mobility-model.h"
 #include "sionna-utils.h"
 
+#include <cmath>
+
 namespace ns3
 {
 
@@ -178,6 +180,58 @@ SionnaHelper::ConfigureReceiveArray(uint32_t numRows,
                    polarization);
 }
 
+void
+SionnaHelper::ConfigureNodeOrientation(uint32_t nodeId,
+                                       double azimuthDegrees,
+                                       double elevationDegrees,
+                                       double rollDegrees)
+{
+    NS_ASSERT_MSG(std::isfinite(azimuthDegrees) && std::isfinite(elevationDegrees) &&
+                      std::isfinite(rollDegrees),
+                  "Node orientation must be finite");
+    m_nodeOrientations[nodeId] = {azimuthDegrees, elevationDegrees, rollDegrees};
+}
+
+void
+SionnaHelper::ClearNodeOrientations()
+{
+    m_nodeOrientations.clear();
+}
+
+void
+SionnaHelper::PopulateMimoConfiguration(ns3sionna::SimInitMessage& simulationInfo) const
+{
+    auto writeArrayConfig = [](const AntennaArrayConfiguration& source,
+                               ns3sionna::AntennaArrayConfig* target) {
+        target->set_num_rows(source.numRows);
+        target->set_num_cols(source.numColumns);
+        target->set_vertical_spacing(source.verticalSpacing);
+        target->set_horizontal_spacing(source.horizontalSpacing);
+        target->set_pattern(source.pattern);
+        target->set_polarization(source.polarization);
+    };
+    if (m_txArray.configured)
+    {
+        writeArrayConfig(m_txArray, simulationInfo.mutable_tx_array());
+    }
+    if (m_rxArray.configured)
+    {
+        writeArrayConfig(m_rxArray, simulationInfo.mutable_rx_array());
+    }
+
+    for (auto& nodeInfo : *simulationInfo.mutable_nodes())
+    {
+        const auto orientation = m_nodeOrientations.find(nodeInfo.id());
+        if (orientation != m_nodeOrientations.end())
+        {
+            auto* orientationMessage = nodeInfo.mutable_orientation();
+            orientationMessage->set_azimuth(orientation->second.azimuthDegrees);
+            orientationMessage->set_elevation(orientation->second.elevationDegrees);
+            orientationMessage->set_roll(orientation->second.rollDegrees);
+        }
+    }
+}
+
 double
 SionnaHelper::GetNoiseFloor()
 {
@@ -238,24 +292,6 @@ SionnaHelper::Start()
     simulation_info->set_mode(m_mode);
     simulation_info->set_sub_mode(m_sub_mode);
 
-    auto writeArrayConfig = [](const AntennaArrayConfiguration& source,
-                               ns3sionna::AntennaArrayConfig* target) {
-        target->set_num_rows(source.numRows);
-        target->set_num_cols(source.numColumns);
-        target->set_vertical_spacing(source.verticalSpacing);
-        target->set_horizontal_spacing(source.horizontalSpacing);
-        target->set_pattern(source.pattern);
-        target->set_polarization(source.polarization);
-    };
-    if (m_txArray.configured)
-    {
-        writeArrayConfig(m_txArray, simulation_info->mutable_tx_array());
-    }
-    if (m_rxArray.configured)
-    {
-        writeArrayConfig(m_rxArray, simulation_info->mutable_rx_array());
-    }
-
     NodeContainer c = NodeContainer::GetGlobal();
     for (auto iter = c.Begin(); iter != c.End(); ++iter)
     {
@@ -315,6 +351,7 @@ SionnaHelper::Start()
             }
         }
     }
+    PopulateMimoConfiguration(*simulation_info);
 
     // Serialize the information message
     std::string serialized_message;
