@@ -7,9 +7,10 @@
 #include "ns3/error-rate-model.h"
 #include "ns3/he-phy.h"
 #include "ns3/he-su-mimo-link-abstraction.h"
-#include "ns3/sionna-spectrum-propagation-loss-model.h"
 #include "ns3/mimo-channel-matrix.h"
+#include "ns3/sionna-mimo-helper.h"
 #include "ns3/sionna-propagation-cache.h"
+#include "ns3/sionna-spectrum-propagation-loss-model.h"
 #include "ns3/su-mimo-link-model.h"
 #include "ns3/test.h"
 #include "ns3/table-based-error-rate-model.h"
@@ -18,6 +19,9 @@
 
 #include <cmath>
 #include <complex>
+#include <limits>
+#include <stdexcept>
+#include <string>
 
 using namespace ns3;
 
@@ -46,6 +50,340 @@ MakeReferenceSnrBudget(double referenceSnrLinear)
         WifiLinkBudget::LinearToDb(referenceSnrLinear * boltzmann) + 30.0;
     return WifiLinkBudget::Calculate(txPowerDbm, 0.0, 1.0, 1.0, 0.0);
 }
+
+SionnaMimoConfiguration
+MakeOpenLoop2x2Configuration()
+{
+    SionnaMimoConfiguration configuration;
+    configuration.mode = SionnaMimoMode::SU_MIMO_SPATIAL_MULTIPLEXING;
+    configuration.txArray.polarization = SionnaMimoPolarization::DUAL;
+    configuration.rxArray.numColumns = 2;
+    configuration.numTxAntennas = 2;
+    configuration.numRxAntennas = 2;
+    configuration.maxNss = 2;
+    return configuration;
+}
+
+class SionnaMimoHelperDefaultsTest : public TestCase
+{
+  public:
+    SionnaMimoHelperDefaultsTest()
+        : TestCase("SionnaMimoHelper defaults preserve the legacy SISO configuration")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        SionnaMimoHelper helper;
+        const auto& configuration = helper.GetConfiguration();
+
+        NS_TEST_ASSERT_MSG_EQ(static_cast<int>(configuration.mode),
+                              static_cast<int>(SionnaMimoMode::SISO),
+                              "The default mode is not SISO");
+        NS_TEST_ASSERT_MSG_EQ(configuration.txArray.numRows, 1, "TX rows changed");
+        NS_TEST_ASSERT_MSG_EQ(configuration.txArray.numColumns, 1, "TX columns changed");
+        NS_TEST_ASSERT_MSG_EQ(configuration.rxArray.numRows, 1, "RX rows changed");
+        NS_TEST_ASSERT_MSG_EQ(configuration.rxArray.numColumns, 1, "RX columns changed");
+        NS_TEST_ASSERT_MSG_EQ_TOL(configuration.txArray.verticalSpacing,
+                                  0.5,
+                                  1e-12,
+                                  "TX vertical spacing changed");
+        NS_TEST_ASSERT_MSG_EQ_TOL(configuration.txArray.horizontalSpacing,
+                                  0.5,
+                                  1e-12,
+                                  "TX horizontal spacing changed");
+        NS_TEST_ASSERT_MSG_EQ_TOL(configuration.rxArray.verticalSpacing,
+                                  0.5,
+                                  1e-12,
+                                  "RX vertical spacing changed");
+        NS_TEST_ASSERT_MSG_EQ_TOL(configuration.rxArray.horizontalSpacing,
+                                  0.5,
+                                  1e-12,
+                                  "RX horizontal spacing changed");
+        NS_TEST_ASSERT_MSG_EQ(
+            static_cast<int>(configuration.txArray.pattern),
+            static_cast<int>(SionnaMimoAntennaPattern::TR38901),
+            "The default TX element pattern is not the legacy tr38901 pattern");
+        NS_TEST_ASSERT_MSG_EQ(
+            static_cast<int>(configuration.rxArray.pattern),
+            static_cast<int>(SionnaMimoAntennaPattern::DIPOLE),
+            "The default RX element pattern is not the legacy dipole pattern");
+        NS_TEST_ASSERT_MSG_EQ(configuration.txArray.GetNumAntennas(),
+                              1,
+                              "The default TX array is not 1x1");
+        NS_TEST_ASSERT_MSG_EQ(configuration.rxArray.GetNumAntennas(),
+                              1,
+                              "The default RX array is not 1x1");
+        NS_TEST_ASSERT_MSG_EQ(configuration.numTxAntennas, 1, "Default TX antennas changed");
+        NS_TEST_ASSERT_MSG_EQ(configuration.numRxAntennas, 1, "Default RX antennas changed");
+        NS_TEST_ASSERT_MSG_EQ(configuration.maxNss, 1, "Default maximum NSS changed");
+        NS_TEST_ASSERT_MSG_EQ(
+            static_cast<int>(configuration.receiverType),
+            static_cast<int>(SionnaMimoReceiverType::LINEAR_MMSE),
+            "The default receiver is not linear MMSE");
+        NS_TEST_ASSERT_MSG_EQ(
+            static_cast<int>(configuration.channelNormalization),
+            static_cast<int>(SionnaMimoChannelNormalization::UNIT_AVERAGE_PAIR_POWER),
+            "The default CFR normalization changed");
+        NS_TEST_ASSERT_MSG_EQ_TOL(configuration.receiverNoiseFigureDb,
+                                  7.0,
+                                  1e-12,
+                                  "The default no longer matches WifiPhy's 7 dB noise figure");
+        NS_TEST_ASSERT_MSG_EQ(
+            static_cast<int>(configuration.effectiveSinrModel),
+            static_cast<int>(SionnaMimoEffectiveSinrModel::EESM),
+            "The default effective-SINR model is not EESM");
+        NS_TEST_ASSERT_MSG_EQ(configuration.eesmBetaLinear.empty(),
+                              true,
+                              "The API must not invent EESM calibration values");
+        NS_TEST_ASSERT_MSG_EQ(configuration.nodeOrientations.empty(),
+                              true,
+                              "Default nodes must not receive an implicit orientation override");
+
+        const auto defaultOrientation = helper.GetNodeOrientation(17);
+        NS_TEST_ASSERT_MSG_EQ_TOL(defaultOrientation.azimuthDegrees,
+                                  0.0,
+                                  1e-12,
+                                  "Default azimuth is not zero");
+        NS_TEST_ASSERT_MSG_EQ_TOL(defaultOrientation.elevationDegrees,
+                                  0.0,
+                                  1e-12,
+                                  "Default elevation is not zero");
+        NS_TEST_ASSERT_MSG_EQ_TOL(defaultOrientation.rollDegrees,
+                                  0.0,
+                                  1e-12,
+                                  "Default roll is not zero");
+
+        const auto& supportedModes = SionnaMimoHelper::GetSupportedModes();
+        NS_TEST_ASSERT_MSG_EQ(supportedModes.size(), 2, "Unexpected number of supported modes");
+        NS_TEST_ASSERT_MSG_EQ(SionnaMimoHelper::IsModeSupported(SionnaMimoMode::SISO),
+                              true,
+                              "SISO is not reported as supported");
+        NS_TEST_ASSERT_MSG_EQ(
+            SionnaMimoHelper::IsModeSupported(
+                SionnaMimoMode::SU_MIMO_SPATIAL_MULTIPLEXING),
+            true,
+            "Open-loop SU-MIMO is not reported as supported");
+        NS_TEST_ASSERT_MSG_EQ(
+            SionnaMimoHelper::IsModeSupported(SionnaMimoMode::SU_BEAMFORMING),
+            false,
+            "Beamforming is falsely reported as supported");
+        NS_TEST_ASSERT_MSG_EQ(SionnaMimoHelper::IsModeSupported(SionnaMimoMode::MU_MIMO),
+                              false,
+                              "MU-MIMO is falsely reported as supported");
+    }
+};
+
+class SionnaMimoHelperValidConfigurationTest : public TestCase
+{
+  public:
+    SionnaMimoHelperValidConfigurationTest()
+        : TestCase("SionnaMimoHelper accepts a complete open-loop 2x2 contract")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        auto configuration = MakeOpenLoop2x2Configuration();
+        configuration.nodeOrientations.emplace(7, SionnaMimoOrientation{45.0, -10.0, 5.0});
+        configuration.eesmBetaLinear.emplace(5, 2.0);
+
+        SionnaMimoHelper::Validate(configuration);
+        SionnaMimoHelper::ValidateForHeMcs(configuration, 5);
+        SionnaMimoHelper helper(configuration);
+
+        NS_TEST_ASSERT_MSG_EQ(helper.GetConfiguration().txArray.GetNumAntennas(),
+                              2,
+                              "Dual-polarized TX element did not create two antenna ports");
+        NS_TEST_ASSERT_MSG_EQ(helper.GetConfiguration().rxArray.GetNumAntennas(),
+                              2,
+                              "Two-column RX array did not create two antenna ports");
+        NS_TEST_ASSERT_MSG_EQ(helper.HasNodeOrientation(7),
+                              true,
+                              "Explicit node orientation was lost");
+        NS_TEST_ASSERT_MSG_EQ_TOL(helper.GetNodeOrientation(7).azimuthDegrees,
+                                  45.0,
+                                  1e-12,
+                                  "Node azimuth changed");
+        NS_TEST_ASSERT_MSG_EQ_TOL(helper.GetEesmBeta(5),
+                                  2.0,
+                                  1e-12,
+                                  "Configured EESM beta changed");
+
+        helper.SetNodeOrientation(8, {-180.0, 90.0, 180.0});
+        NS_TEST_ASSERT_MSG_EQ(helper.HasNodeOrientation(8),
+                              true,
+                              "Boundary orientation was rejected");
+        helper.ClearNodeOrientation(8);
+        NS_TEST_ASSERT_MSG_EQ(helper.HasNodeOrientation(8),
+                              false,
+                              "Cleared orientation is still present");
+        helper.SetEesmBeta(11, 3.5);
+        NS_TEST_ASSERT_MSG_EQ_TOL(helper.GetEesmBeta(11),
+                                  3.5,
+                                  1e-12,
+                                  "Setter did not retain the EESM beta");
+    }
+};
+
+class SionnaMimoHelperInvalidConfigurationTest : public TestCase
+{
+  public:
+    SionnaMimoHelperInvalidConfigurationTest()
+        : TestCase("SionnaMimoHelper centrally rejects invalid and unsupported contracts")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        auto expectRejected = [this](const SionnaMimoConfiguration& configuration,
+                                     const std::string& description) {
+            bool rejected = false;
+            try
+            {
+                SionnaMimoHelper::Validate(configuration);
+            }
+            catch (const std::invalid_argument& exception)
+            {
+                rejected = std::string(exception.what()).find("SionnaMimoHelper: ") == 0;
+            }
+            NS_TEST_ASSERT_MSG_EQ(rejected, true, description);
+        };
+
+        SionnaMimoConfiguration configuration;
+        configuration.txArray.numRows = 0;
+        expectRejected(configuration, "A zero-row TX array was accepted");
+
+        configuration = {};
+        configuration.rxArray.horizontalSpacing =
+            std::numeric_limits<double>::quiet_NaN();
+        expectRejected(configuration, "A non-finite array spacing was accepted");
+
+        configuration = {};
+        configuration.txArray.pattern = static_cast<SionnaMimoAntennaPattern>(99);
+        expectRejected(configuration, "An unknown Sionna element pattern was accepted");
+
+        configuration = {};
+        configuration.txArray.polarization = static_cast<SionnaMimoPolarization>(99);
+        expectRejected(configuration, "An unknown Sionna polarization was accepted");
+
+        configuration = {};
+        configuration.txArray.numRows = 3;
+        configuration.txArray.numColumns = 3;
+        expectRejected(configuration, "An array exceeding ns-3's eight-antenna limit was accepted");
+
+        configuration = {};
+        configuration.numTxAntennas = 2;
+        expectRejected(configuration, "An antenna count inconsistent with the array was accepted");
+
+        configuration = {};
+        configuration.maxNss = 0;
+        expectRejected(configuration, "Maximum NSS zero was accepted");
+
+        configuration = MakeOpenLoop2x2Configuration();
+        configuration.maxNss = 1;
+        expectRejected(configuration,
+                       "Open-loop MIMO with fewer streams than TX antennas was accepted");
+
+        configuration = MakeOpenLoop2x2Configuration();
+        configuration.rxArray.numColumns = 1;
+        configuration.numRxAntennas = 1;
+        expectRejected(configuration, "Overloaded open-loop MIMO was accepted");
+
+        configuration = {};
+        configuration.mode = SionnaMimoMode::SU_MIMO_SPATIAL_MULTIPLEXING;
+        expectRejected(configuration, "One-antenna spatial multiplexing was accepted");
+
+        configuration = MakeOpenLoop2x2Configuration();
+        configuration.mode = SionnaMimoMode::SISO;
+        expectRejected(configuration, "A multi-antenna SISO contract was accepted");
+
+        configuration = {};
+        configuration.mode = SionnaMimoMode::SU_BEAMFORMING;
+        expectRejected(configuration, "Phase-3 beamforming was accepted");
+
+        configuration = {};
+        configuration.mode = SionnaMimoMode::MU_MIMO;
+        expectRejected(configuration, "Phase-4 MU-MIMO was accepted");
+
+        configuration = {};
+        configuration.receiverType = SionnaMimoReceiverType::ZERO_FORCING;
+        expectRejected(configuration, "An unimplemented receiver was accepted");
+
+        configuration = {};
+        configuration.channelNormalization = SionnaMimoChannelNormalization::NONE;
+        expectRejected(configuration, "An unimplemented normalization was accepted");
+
+        configuration = {};
+        configuration.effectiveSinrModel = SionnaMimoEffectiveSinrModel::MUTUAL_INFORMATION;
+        expectRejected(configuration, "MI was accepted as a calibrated HE PER mapping");
+
+        configuration = {};
+        configuration.receiverNoiseFigureDb = -1.0;
+        expectRejected(configuration, "A negative receiver noise figure was accepted");
+
+        configuration = {};
+        configuration.receiverNoiseFigureDb =
+            std::numeric_limits<double>::infinity();
+        expectRejected(configuration, "A non-finite receiver noise figure was accepted");
+
+        configuration = {};
+        configuration.nodeOrientations.emplace(4, SionnaMimoOrientation{0.0, 91.0, 0.0});
+        expectRejected(configuration, "An out-of-range node elevation was accepted");
+
+        configuration = {};
+        configuration.eesmBetaLinear.emplace(12, 1.0);
+        expectRejected(configuration, "An EESM beta for an invalid HE MCS was accepted");
+
+        configuration = {};
+        configuration.eesmBetaLinear.emplace(5, 0.0);
+        expectRejected(configuration, "A non-positive EESM beta was accepted");
+
+        configuration = MakeOpenLoop2x2Configuration();
+        bool missingBetaRejected = false;
+        try
+        {
+            SionnaMimoHelper::ValidateForHeMcs(configuration, 5);
+        }
+        catch (const std::invalid_argument&)
+        {
+            missingBetaRejected = true;
+        }
+        NS_TEST_ASSERT_MSG_EQ(missingBetaRejected,
+                              true,
+                              "Open-loop MIMO without an MCS-specific EESM beta was accepted");
+
+        configuration = {};
+        bool invalidMcsRejected = false;
+        try
+        {
+            SionnaMimoHelper::ValidateForHeMcs(configuration, 12);
+        }
+        catch (const std::invalid_argument&)
+        {
+            invalidMcsRejected = true;
+        }
+        NS_TEST_ASSERT_MSG_EQ(invalidMcsRejected, true, "HE MCS 12 was accepted");
+
+        SionnaMimoHelper helper;
+        configuration = MakeOpenLoop2x2Configuration();
+        configuration.maxNss = 1;
+        try
+        {
+            helper.SetConfiguration(configuration);
+        }
+        catch (const std::invalid_argument&)
+        {
+        }
+        NS_TEST_ASSERT_MSG_EQ(
+            static_cast<int>(helper.GetConfiguration().mode),
+            static_cast<int>(SionnaMimoMode::SISO),
+            "A rejected replacement partially changed the helper's stored configuration");
+    }
+};
 
 class MimoChannelMatrixLayoutTest : public TestCase
 {
@@ -738,6 +1076,9 @@ class SionnaTestSuite : public TestSuite
     SionnaTestSuite()
         : TestSuite("sionna", UNIT)
     {
+        AddTestCase(new SionnaMimoHelperDefaultsTest, TestCase::QUICK);
+        AddTestCase(new SionnaMimoHelperValidConfigurationTest, TestCase::QUICK);
+        AddTestCase(new SionnaMimoHelperInvalidConfigurationTest, TestCase::QUICK);
         AddTestCase(new MimoChannelMatrixLayoutTest, TestCase::QUICK);
         AddTestCase(new WifiLinkBudgetConversionTest, TestCase::QUICK);
         AddTestCase(new WifiLinkBudgetCalculationTest, TestCase::QUICK);

@@ -56,6 +56,7 @@ set(SOURCE_FILES
         model/sionna-spectrum-propagation-loss-model.cc
         model/sionna-phased-array-spectrum-propagation-loss-model.cc
         model/cfr-tag.cc
+        helper/sionna-mimo-helper.cc
         helper/sionna-helper.cc
         ${proto_source_files}
 )
@@ -72,6 +73,7 @@ set(HEADER_FILES
         model/sionna-spectrum-propagation-loss-model.h
         model/sionna-phased-array-spectrum-propagation-loss-model.h
         model/cfr-tag.h
+        helper/sionna-mimo-helper.h
         helper/sionna-helper.h
         helper/sionna-utils.h
         #        ${PROTO_HDR}        # protobuf-generated header

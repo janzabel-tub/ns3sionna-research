@@ -1,6 +1,6 @@
 # ns3sionna: MIMO-Abstraktionsmodell für IEEE 802.11ax/be
 
-Stand: 19. Juli 2026
+Stand: 20. Juli 2026, Unterphase 2.1
 
 Arbeitszweig: feature/su-mimo-minimal
 
@@ -14,12 +14,14 @@ Post-Processing-SINR, Effective-SINR, MCS/PER und später die Auswahl von
 Precoding und MU-MIMO, wird ausschließlich in ns-3 ausgeführt.
 
 Die Entwicklung erfolgt in kleinen, einzeln testbaren Schritten. Der aktuelle
-Stand implementiert die Unterphasen 1.1 bis 1.4: numerischen SU-MIMO-Kern,
+Stand implementiert die Unterphasen 1.1 bis 1.4 und 2.1: numerischen SU-MIMO-Kern,
 konfigurierbare Sionna-Arrays, einen dimensionssicheren MIMO-Datenvertrag,
 explizit kalibrierbare 802.11ax-EESM-/PER-Abbildung und die schmale Einkopplung
-in den SpectrumWifiPhy-Empfangspfad. Ein reproduzierbares 1x1-/2x2-Beispiel
-deckt Vollrang- und Rang-1-Kanäle ab. Phase 2 und jede Form von Precoding oder
-Beamforming wurden nicht begonnen.
+in den SpectrumWifiPhy-Empfangspfad. Der simulationsunabhängige
+SionnaMimoHelper legt nun den High-Level-API-Vertrag und dessen zentrale
+Validierung fest. Ein reproduzierbares 1x1-/2x2-Beispiel deckt Vollrang- und
+Rang-1-Kanäle ab. Die Integration des neuen Helpers, Precoding und Beamforming
+wurden nicht begonnen.
 
 ## 2. Reproduzierbare Ausgangsbasis
 
@@ -92,7 +94,7 @@ kommen indexgenau in ns-3 an.
 
 Abnahmekriterium: PER-vs-SNR-Kurven sind monoton, reproduzierbar und im
 SISO-Grenzfall deckungsgleich zur festgelegten Referenz. Alle Kriterien wurden
-mit den in Abschnitt 6 beschriebenen automatischen Tests erfüllt.
+mit den in Abschnitt 7 beschriebenen automatischen Tests erfüllt.
 
 #### Unterphase 1.4: WifiPhy-Integration und Beispiel (implementiert)
 
@@ -104,7 +106,7 @@ mit den in Abschnitt 6 beschriebenen automatischen Tests erfüllt.
 
 Abnahmekriterium: 2x2 gewinnt auf gut konditionierten Kanälen und kollabiert
 auf Rang-1-Kanälen nachvollziehbar gegen 1x1.
-Die automatisierten Ergebnisse in Abschnitt 6 erfüllen dieses Kriterium.
+Die automatisierten Ergebnisse in Abschnitt 7 erfüllen dieses Kriterium.
 
 ### Phase 2: High-Level-API
 
@@ -119,6 +121,64 @@ konfiguriert:
 
 Die API validiert Wi-Fi-, Sionna- und Abstraktionsparameter zentral, sodass
 Beispiele keine internen Objekte manuell verdrahten müssen.
+
+Phase 2 wird in drei Unterphasen nach API-Vertrag, interner Integration und
+Benutzbarkeit getrennt. Damit bleiben API-Entscheidungen ohne Änderung des
+PHY-Verhaltens prüfbar, während Kompatibilitäts- und End-to-End-Regressionen
+den nachfolgenden Integrationsschritten eindeutig zugeordnet werden können.
+
+#### Unterphase 2.1: API-Vertrag (implementiert)
+
+- SionnaMimoHelper sowie Konfigurationstypen, dokumentierte Defaults und
+  unterstützte Betriebsarten definieren.
+- Arraygeometrie, knotenspezifische Ausrichtung, TX-/RX-Antennenzahlen,
+  maximale NSS, Empfängertyp, Kanalnormalisierung, Rauschzahl und
+  Effective-SINR-Modell in einem konsistenten Vertrag zusammenführen.
+- Zentrale Validierung für vollständige, endliche und untereinander
+  konsistente Parameter bereitstellen.
+- In Phase 2 nur SISO und SU-MIMO Spatial Multiplexing als funktionale Modi
+  unterstützen. Beamforming und MU-MIMO werden entweder noch nicht angeboten
+  oder brechen, falls sie für API-Stabilität bereits repräsentiert werden,
+  eindeutig als nicht unterstützt ab.
+- Reine API-Unit-Tests für Defaults sowie gültige und ungültige
+  Konfigurationen hinzufügen, ohne das bestehende PHY-Verhalten zu ändern.
+
+Abnahmekriterium: Der API-Vertrag ist unabhängig von einer Simulation
+testbar, rückwärtskompatible Defaults sind festgeschrieben und kein Modus aus
+Phase 3 oder 4 erscheint fälschlich funktionsfähig.
+
+#### Unterphase 2.2: Integration
+
+- SionnaMimoHelper mit den vorhandenen Phase-1-Komponenten für Kanal,
+  Link Budget, MMSE, EESM und SpectrumWifiPhy verbinden.
+- Knotenbezogene Arraygeometrie und Ausrichtung über den Sionna-IPC- und
+  Serverpfad anwenden.
+- Antennenzahlen, maximale Spatial Streams, Rauschzahl, Empfängertyp,
+  Normalisierung und Effective-SINR-Konfiguration konsistent an die
+  beteiligten ns-3-Objekte weiterreichen.
+- Den bisherigen SionnaHelper-Pfad und die globalen 1x1-Defaults unverändert
+  nutzbar halten.
+- Integrationstests ergänzen, welche manuelle Phase-1-Konfiguration und
+  Helper-Konfiguration für 1x1 und 2x2 vergleichen.
+
+Abnahmekriterium: Äquivalente manuelle und High-Level-Konfigurationen liefern
+dieselben Phase-1-Ergebnisse; bestehende 1x1-Beispiele und Tests bleiben
+unverändert erfolgreich.
+
+#### Unterphase 2.3: Benutzbarkeit und Validierung
+
+- Minimale 1x1- und 2x2-Beispiele ausschließlich über die High-Level-API
+  anlegen.
+- Integrationsnahe Negativtests für widersprüchliche Laufzeitparameter und
+  Fehlerweitergabe vom Helper bis zum PHY ergänzen.
+- End-to-End-Tests vom Helper über Sionna beziehungsweise den
+  deterministischen Kanalpfad bis SpectrumWifiPhy ausführen.
+- API, Defaults, unterstützte Modi, Fehlermeldungen und Migration von der
+  manuellen Konfiguration dokumentieren.
+
+Abnahmekriterium: Die 1x1-/2x2-Beispiele laufen ohne manuelle Verdrahtung
+interner Objekte, ungültige Konfigurationen brechen früh und eindeutig ab und
+Dokumentation sowie PDF beschreiben den abgeschlossenen Stand von Phase 2.
 
 ### Phase 3: SU-MIMO mit Precoding und Beamforming
 
@@ -558,40 +618,142 @@ Die deterministische Referenzausgabe lautet:
 - Rang-1-2x2: Rang 1, beide Stream-SINRs und Effective-SINR -0,043214 dB,
   PER 1 und 0 Mbit/s.
 
-## 6. Validierung der Unterphasen 1.1 bis 1.4
+## 6. High-Level-API-Vertrag der Unterphase 2.1
 
-Die native Suite sionna enthält nun 15 schnelle Fälle:
+### 6.1 Typen, Besitz und Defaults
 
-1. Layouttest eines 2 x 2 x 2-Tensors mit eindeutig nummerierten Koeffizienten.
-2. Reversible dB-/Linear-Umrechnung einschließlich 10 dB gleich Faktor zehn.
-3. Link-Budget-Test für Sendeleistung, Pfadverlust, \(B\), \(T\) und \(NF\)
+SionnaMimoHelper ist ein wertbasierter, simulationsunabhängiger
+Konfigurationshalter. Sein Konstruktor erzeugt einen gültigen SISO-Vertrag;
+der Konstruktor mit SionnaMimoConfiguration und SetConfiguration prüfen eine
+vollständige Kopie, bevor sie den gespeicherten Zustand ersetzen. Eine
+fehlgeschlagene Änderung lässt den bisherigen Zustand damit unverändert. Alle
+Validierungsfehler sind std::invalid_argument mit einem SionnaMimoHelper-
+Präfix und benötigen weder Simulator, Node noch eine ZMQ-Verbindung.
+
+SionnaMimoArrayConfiguration enthält Zeilen, Spalten, vertikalen und
+horizontalen Abstand in Wellenlängen, Elementmuster und Polarisation. Die
+repräsentierten Sionna-Muster sind isotrop, dipole, half-wave dipole und
+TR 38.901. Vertikale und horizontale Polarisation erzeugen je Element einen,
+duale Polarisation zwei Antennenports. Für Zeilenzahl \(R\), Spaltenzahl \(C\)
+und Polarisationsfaktor \(p\in\{1,2\}\) gilt deshalb
+
+\[
+  N_\mathrm{array} = R C p.
+\]
+
+SionnaMimoOrientation speichert Azimut, Elevation und Rollwinkel in Grad. Die
+SionnaMimoConfiguration führt beide Arrays, den Modus, TX-/RX-Antennenzahl,
+maximale NSS, Empfänger, Normalisierung, Empfängerrauschzahl,
+Effective-SINR-Modell, explizite EESM-Betas und eine Map von ns-3-Node-ID auf
+Orientierung zusammen. Die festgeschriebenen Defaults sind:
+
+- Modus SISO, eine TX-Antenne, eine RX-Antenne und maximale NSS eins;
+- TX-Array 1 x 1, Abstände 0,5 Wellenlängen, TR-38.901-Muster, vertikale
+  Polarisation;
+- RX-Array 1 x 1, Abstände 0,5 Wellenlängen, Dipolmuster, vertikale
+  Polarisation;
+- keine knotenspezifische Orientierung, also für jeden nicht eingetragenen
+  Knoten 0 Grad Azimut, Elevation und Rollwinkel;
+- linearer MMSE-Empfänger und gemeinsame Unit-Average-Power-Normalisierung
+  über alle Subcarrier und Antennenpaare gemäß Abschnitt 4.3;
+- 7 dB Empfängerrauschzahl entsprechend dem ns-3.40-WifiPhy-Default;
+- EESM als HE-Effective-SINR-Modell, aber weiterhin keine impliziten
+  MCS-Betas.
+
+SetNodeOrientation, ClearNodeOrientation und GetNodeOrientation verwalten die
+knotenbezogenen Winkel. SetEesmBeta, HasEesmBeta und GetEesmBeta verwalten
+explizite lineare Betas für HE MCS 0 bis 11. Diese Methoden ändern in
+Unterphase 2.1 noch kein Sionna-, WifiPhy- oder Link-Abstraktionsobjekt.
+
+### 6.2 Unterstützte Betriebsarten
+
+GetSupportedModes und IsModeSupported melden genau zwei akzeptierte Modi:
+
+1. SISO mit genau einer TX- und einer RX-Antenne sowie NSS eins;
+2. SU_MIMO_SPATIAL_MULTIPLEXING ohne Precoding, mit genau einem Stream je
+   TX-Antenne und linearem MMSE-Empfänger.
+
+SU_BEAMFORMING und MU_MIMO sind im Enum ausschließlich als stabile Namen für
+zukünftige Phasen repräsentiert. Validate weist beide eindeutig zurück. Ebenso
+werden der repräsentierte Zero-Forcing-Empfänger, eine unnormalisierte CFR und
+Mutual Information als PER-wirksames Effective-SINR-Modell abgelehnt. Die
+MI-Kompression aus Abschnitt 5.4 bleibt eine Diagnosemetrik und wird nicht
+fälschlich als kalibrierte PER-Abbildung angeboten.
+
+### 6.3 Zentrale Konsistenzprüfung
+
+Validate erzwingt gemeinsam die Grenzen von Sionna, ns-3-Wi-Fi und dem
+Phase-1-Abstraktionsmodell:
+
+- Arraydimensionen und Abstände sind endlich und positiv; die abgeleitete
+  Portzahl stimmt exakt mit numTxAntennas beziehungsweise numRxAntennas
+  überein;
+- TX-/RX-Antennenzahlen und maxNss liegen im ns-3.40-Bereich 1 bis 8;
+- SISO besitzt exakt die Dimensionen 1 x 1 und maxNss eins;
+- Open-Loop-SU-MIMO erfüllt
+  \(2\leq N_\mathrm{tx}\leq N_\mathrm{rx}\leq8\) und
+  \(N_\mathrm{ss,max}=N_\mathrm{tx}\). Damit bleibt Streamauswahl
+  \(N_s<N_\mathrm{tx}\) außerhalb des Vertrags;
+- Azimut und Rollwinkel liegen endlich in [-180, 180] Grad, Elevation endlich
+  in [-90, 90] Grad;
+- die Rauschzahl ist endlich und nicht negativ;
+- jedes vorhandene EESM-Beta gehört zu HE MCS 0 bis 11 und ist endlich und
+  positiv.
+
+ValidateForHeMcs ergänzt die nutzungsbezogene Vollständigkeitsprüfung: Für
+Open-Loop-SU-MIMO muss das konkret verwendete MCS ein explizites Beta besitzen.
+SISO verlangt wegen des unveränderten skalaren Phase-1-Pfads weiterhin kein
+Beta. Damit werden keine unbelegten Kalibrierwerte eingeführt.
+
+### 6.4 Bewusste Grenze zu Unterphase 2.2
+
+Keine bestehende PHY-, Kanal-, IPC- oder Serverdatei ruft SionnaMimoHelper auf.
+Die API kann daher kompiliert, konstruiert und vollständig validiert werden,
+ohne das bisherige PHY-Verhalten zu beeinflussen. Erst Unterphase 2.2 darf die
+gespeicherten Werte an SionnaHelper, SionnaSpectrumPropagationLossModel und
+WifiPhy weiterreichen oder Orientierungen in den Serververtrag aufnehmen.
+
+## 7. Validierung der Unterphasen 1.1 bis 2.1
+
+Die native Suite sionna enthält nun 18 schnelle Fälle:
+
+1. API-Defaulttest für den vollständigen legacy-kompatiblen SISO-Vertrag,
+   leere EESM-Kalibrierung und exakt zwei gemeldete Betriebsarten.
+2. Gültiger 2x2-Vertrag mit dual polarisiertem TX-Element, knotenspezifischer
+   Orientierung, explizitem Beta und MCS-bezogener Vollständigkeitsprüfung.
+3. Zentrale Negativmatrix für nicht endliche, unvollständige,
+   widersprüchliche oder nicht unterstützte API-Konfigurationen einschließlich
+   Beamforming, MU-MIMO und fehlendem MCS-Beta.
+4. Layouttest eines 2 x 2 x 2-Tensors mit eindeutig nummerierten Koeffizienten.
+5. Reversible dB-/Linear-Umrechnung einschließlich 10 dB gleich Faktor zehn.
+6. Link-Budget-Test für Sendeleistung, Pfadverlust, \(B\), \(T\) und \(NF\)
    sowie die erwartete Halbierung der SNR bei Verdopplung von \(B\) oder \(T\).
-4. Flacher orthogonaler 2x2-Kanal: EESM erhält identische Tone-/Stream-SINRs
+7. Flacher orthogonaler 2x2-Kanal: EESM erhält identische Tone-/Stream-SINRs
    unabhängig vom positiven Test-Beta.
-5. Frequenzselektiver SISO-Kanal: EESM stimmt mit der analytischen
+8. Frequenzselektiver SISO-Kanal: EESM stimmt mit der analytischen
    Zweitonformel für das konfigurierte Beta überein.
-6. SISO-Parität zur direkten ns-3.40-ErrorRateModel-Abfrage für HE MCS
+9. SISO-Parität zur direkten ns-3.40-ErrorRateModel-Abfrage für HE MCS
    0, 3, 7 und 11, neun SNR-Punkte von -5 bis 35 dB sowie 32, 400 und
    1458 Byte. Das sind 108 Kombinationen; MCS 11 prüft auch den
    TableBased-Fallback auf Yans.
-7. Monotone PER auf einem normierten frequenzselektiven Vier-Ton-Kanal für
+10. Monotone PER auf einem normierten frequenzselektiven Vier-Ton-Kanal für
    dieselben vier MCS und drei Paketgrößen bei 26 SNR-Punkten von -10 bis
    40 dB. Die 312 geprüften Werte bilden je Konfiguration eine nicht steigende
    Folge mit einem echten PER-Abfall.
-8. Exakte Reproduzierbarkeit von Post-MMSE-SINR, EESM-SINR und PER über
+11. Exakte Reproduzierbarkeit von Post-MMSE-SINR, EESM-SINR und PER über
    20 Wiederholungen eines komplexen frequenzselektiven 2x2-Kanals.
-9. SISO-Test mit \(h=2+j\) und \(\rho=10\); erwartet wird \(\gamma=50\).
-10. Orthogonaler 2x2-Kanal \(\mathbf H=\mathbf I\) und \(\rho=20\); jeder
+12. SISO-Test mit \(h=2+j\) und \(\rho=10\); erwartet wird \(\gamma=50\).
+13. Orthogonaler 2x2-Kanal \(\mathbf H=\mathbf I\) und \(\rho=20\); jeder
     Stream erhält \(\gamma=10\) und \(\eta=2\log_2(11)\).
-11. Zwei diagonale Subcarrier diag(1,2) und diag(2,1) bei \(\rho=8\);
+14. Zwei diagonale Subcarrier diag(1,2) und diag(2,1) bei \(\rho=8\);
     erwartet werden (4,16), (16,4) und die analytische MI-Kompression.
-12. Deserialisierung einer alten Nachricht ohne Dimensionsfelder als
+15. Deserialisierung einer alten Nachricht ohne Dimensionsfelder als
     \(N_\mathrm{sc}\times1\times1\).
-13. Protocol-Buffer-Rundlauf einer synthetischen 2 x 2 x 2-CFR mit den
+16. Protocol-Buffer-Rundlauf einer synthetischen 2 x 2 x 2-CFR mit den
     komplexen Werten 1-j bis 8-8j und indexgenauer Prüfung.
-14. Mindestkanalrang eins beziehungsweise zwei für Rang-1- und orthogonale
+17. Mindestkanalrang eins beziehungsweise zwei für Rang-1- und orthogonale
     2x2-Kanäle über alle Subcarrier.
-15. Spectrumadapter-Test für exaktes Rauschleistungs- und AWGN-Diversity-
+18. Spectrumadapter-Test für exaktes Rauschleistungs- und AWGN-Diversity-
     Compensation-Mapping ohne doppelte Anwendung von Rauschen oder Arraygewinn.
 
 Die vier reinen Python-Vertragstests prüfen Standard- und explizite
@@ -612,13 +774,14 @@ Die ExampleAsTest-Suite führt den vollständigen UDP-/SpectrumWifiPhy-Pfad für
 bytegenau mit der Referenzdatei. Ein separater Negativlauf bestätigt, dass das
 Beispiel ohne explizites EESM-Beta mit Status 2 abbricht.
 
-### 6.1 Ausgeführte CPU-Validierung
+### 7.1 Ausgeführte CPU-Validierung
 
-Am 19. Juli 2026 wurden nach Abschluss der Unterphase 1.4 folgende Prüfungen
+Am 20. Juli 2026 wurden nach Abschluss der Unterphase 2.1 folgende Prüfungen
 erfolgreich ausgeführt:
 
 - vollständiger Build mit Beispielen und Tests unter GCC 13.3
-- native ns-3-Suite sionna: 15 von 15 Fällen in 0,009 s bestanden
+- native ns-3-Suite sionna: 18 von 18 Fällen bestanden; die drei neuen Fälle
+  benötigen weder eine Simulation noch ZMQ oder Sionna
 - SISO-Paritätsmatrix: alle 108 Kombinationen stimmen innerhalb 1e-12 mit der
   direkt aufgerufenen ns-3-Fehlermodellschnittstelle überein
 - frequenzselektive Monotonitätsmatrix: alle 312 PER-Werte bestanden
@@ -642,10 +805,12 @@ Look-ahead-Zeitpunkt. Dadurch wird kein Receiver angelegt und Sionna meldet
 ValueError: Scene has no receivers. Der explizite P2P-Beispielpfad ist davon
 nicht betroffen. Eine Korrektur gehört in eine eigene kleine Baseline-Subphase.
 
-## 7. Bekannte Grenzen und nächste Entscheidungspunkte
+## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 
-- Die Arraykonfiguration ist global für Sender und Empfänger. Knotenbezogene
-  Geometrie und Orientierung gehören zur High-Level-API in Phase 2.
+- Der neue SionnaMimoHelper speichert Arraykonfiguration und knotenbezogene
+  Orientierung ausschließlich als validierten Vertrag. Der bestehende
+  SionnaHelper verwendet bis Unterphase 2.2 weiterhin globale TX-/RX-Arrays;
+  keine Orientierung wird bereits an Sionna übertragen.
 - Der integrierte MIMO-Pfad unterstützt nur HE SU mit einem Open-Loop-Stream
   je TX-Antenne. Nicht-HE-Kontrollrahmen verwenden das erste Antennenpaar;
   MU-MIMO, Streamauswahl und Precoding bleiben außerhalb von Phase 1.
@@ -670,11 +835,11 @@ nicht betroffen. Eine Korrektur gehört in eine eigene kleine Baseline-Subphase.
   nicht-reziprokes Precoding müssen Richtung und Konfiguration Teil des
   Schlüssels werden.
 
-Unterphase 1.4 ist abgeschlossen; damit ist das abgegrenzte SU-MIMO-
-Minimalmodell der Phase 1 vollständig. Phase 2, Streamauswahl und Precoding
-wurden bewusst nicht begonnen.
+Unterphase 2.1 ist abgeschlossen. Der API-Vertrag ist unabhängig von einer
+Simulation testbar, aber noch nicht mit den Phase-1-Komponenten verbunden.
+Unterphase 2.2, Streamauswahl und Precoding wurden bewusst nicht begonnen.
 
-## 8. Ausführung
+## 9. Ausführung
 
 Vom ns-3.40-Verzeichnis:
 
