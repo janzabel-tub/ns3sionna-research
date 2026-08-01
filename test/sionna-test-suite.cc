@@ -490,10 +490,11 @@ class SionnaMimoHelperIntegrationTest : public TestCase
         auto highLevelModel = CreateObject<SionnaSpectrumPropagationLossModel>();
         highLevelSionna.ConfigureNodeOrientation(8, 1.0, 2.0, 3.0);
         highLevelModel->SetEesmBeta(staleMcs, 2.0);
-        SionnaMimoHelper(configuration).Apply(highLevelSionna,
-                                              highLevelTxPhyHelper,
-                                              highLevelRxPhyHelper,
-                                              highLevelModel);
+        SionnaMimoHelper(configuration).ApplyForHeMcs(mcs,
+                                                      highLevelSionna,
+                                                      highLevelTxPhyHelper,
+                                                      highLevelRxPhyHelper,
+                                                      highLevelModel);
         ns3sionna::SimInitMessage manualMessage;
         ns3sionna::SimInitMessage highLevelMessage;
         manualMessage.add_nodes()->set_id(7);

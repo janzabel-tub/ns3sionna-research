@@ -1,6 +1,6 @@
 # ns3sionna: MIMO-Abstraktionsmodell für IEEE 802.11ax/be
 
-Stand: 20. Juli 2026, Unterphase 2.2
+Stand: 1. August 2026, Unterphase 2.3
 
 Arbeitszweig: feature/su-mimo-minimal
 
@@ -14,15 +14,20 @@ Post-Processing-SINR, Effective-SINR, MCS/PER und später die Auswahl von
 Precoding und MU-MIMO, wird ausschließlich in ns-3 ausgeführt.
 
 Die Entwicklung erfolgt in kleinen, einzeln testbaren Schritten. Der aktuelle
-Stand implementiert die Unterphasen 1.1 bis 1.4 sowie 2.1 und 2.2: numerischen
-SU-MIMO-Kern, konfigurierbare Sionna-Arrays, einen dimensionssicheren
-MIMO-Datenvertrag, explizit kalibrierbare 802.11ax-EESM-/PER-Abbildung und die
+Stand umfasst die Unterphasen 1.1 bis 1.4 sowie die vollständige Phase 2:
+den numerischen SU-MIMO-Kern, konfigurierbare Sionna-Arrays, einen
+dimensionssicheren MIMO-Datenvertrag, explizit kalibrierbare
+802.11ax-EESM-/PER-Abbildung und die
 schmale Einkopplung in den SpectrumWifiPhy-Empfangspfad. SionnaMimoHelper legt
 den High-Level-API-Vertrag und dessen zentrale Validierung fest und wendet ihn
 nun konsistent auf Sionna-IPC, Phase-1-Linkabstraktion und SpectrumWifiPhy an.
-Ein reproduzierbares 1x1-/2x2-Beispiel deckt Vollrang- und Rang-1-Kanäle ab.
-Die Benutzbarkeitsarbeiten der Unterphase 2.3, Precoding und Beamforming wurden
-nicht begonnen.
+Der MCS-bezogene ApplyForHeMcs-Aufruf prüft eine für SU-MIMO erforderliche
+EESM-Kalibrierung vor jeder Zustandsänderung. Das reproduzierbare Beispiel
+konfiguriert 1x1 und Vollrang-2x2 ausschließlich über SionnaMimoHelper und
+deckt mit dem deterministischen Kanalpfad SpectrumWifiPhy end-to-end ab.
+Integrationsnahe Negativläufe prüfen widersprüchliche NSS, nicht unterstützte
+Modi und eine CFR-/PHY-Dimensionsverletzung. Streamauswahl, Precoding,
+Beamforming und MU-MIMO wurden nicht begonnen.
 
 ## 2. Reproduzierbare Ausgangsbasis
 
@@ -166,7 +171,7 @@ Abnahmekriterium: Äquivalente manuelle und High-Level-Konfigurationen liefern
 dieselben Phase-1-Ergebnisse; bestehende 1x1-Beispiele und Tests bleiben
 unverändert erfolgreich.
 
-#### Unterphase 2.3: Benutzbarkeit und Validierung
+#### Unterphase 2.3: Benutzbarkeit und Validierung (implementiert)
 
 - Minimale 1x1- und 2x2-Beispiele ausschließlich über die High-Level-API
   anlegen.
@@ -180,6 +185,8 @@ unverändert erfolgreich.
 Abnahmekriterium: Die 1x1-/2x2-Beispiele laufen ohne manuelle Verdrahtung
 interner Objekte, ungültige Konfigurationen brechen früh und eindeutig ab und
 Dokumentation sowie PDF beschreiben den abgeschlossenen Stand von Phase 2.
+Die helperbasierten End-to-End- und Laufzeit-Negativtests in Abschnitt 7
+erfüllen dieses Kriterium.
 
 ### Phase 3: SU-MIMO mit Precoding und Beamforming
 
@@ -763,15 +770,81 @@ Nachrichten beibehalten. Ein alter SionnaHelper-Aufruf konfiguriert weder Array-
 noch Orientierungsfelder und erzeugt deshalb weiterhin die bisherigen
 1x1-Arrays und die bisherige Serverausrichtung.
 
-### 6.6 Grenze zu Unterphase 2.3
+### 6.6 Benutzbarkeit, Beispiele und Migration
 
-Unterphase 2.2 ergänzt keine ausschließlich über die High-Level-API aufgebauten
-Beispiele, keine integrationsnahen Laufzeit-Negativtests und keine neue
-End-to-End-Benutzerführung. Diese Arbeiten bleiben ausdrücklich Unterphase 2.3
-vorbehalten. Ebenso bleiben Streamauswahl, Precoding, Beamforming und MU-MIMO
-außerhalb dieses Integrationsschritts.
+Für eine 1x1-Verbindung reicht der Defaultvertrag. Er behält SISO, je eine
+TX-/RX-Antenne, NSS eins, 7 dB Rauschzahl, die bisherigen Arraymuster und den
+skalaren Legacy-Empfangspfad bei. Deshalb ist für diesen Pfad kein EESM-Beta
+erforderlich:
 
-## 7. Validierung der Unterphasen 1.1 bis 2.2
+    SionnaMimoConfiguration configuration;
+    SionnaMimoHelper mimo(configuration);
+    mimo.ApplyForHeMcs(mcs, sionna, txPhy, rxPhy, spectrumModel);
+
+Das kleinste Vollrang-2x2-Beispiel verwendet zwei vertikale Elemente je Array,
+zwei offene Spatial Streams und ein vom Anwender kalibriertes Beta für den
+gewählten HE-MCS:
+
+    SionnaMimoConfiguration configuration;
+    configuration.mode = SionnaMimoMode::SU_MIMO_SPATIAL_MULTIPLEXING;
+    configuration.txArray.numColumns = 2;
+    configuration.rxArray.numColumns = 2;
+    configuration.numTxAntennas = 2;
+    configuration.numRxAntennas = 2;
+    configuration.maxNss = 2;
+    configuration.eesmBetaLinear.emplace(mcs, betaFromCalibration);
+
+    SionnaMimoHelper mimo(configuration);
+    mimo.ApplyForHeMcs(mcs, sionna, txPhy, rxPhy, spectrumModel);
+
+ApplyForHeMcs führt zuerst ValidateForHeMcs aus. Ein ungültiger MCS oder ein
+fehlendes SU-MIMO-Beta bricht daher mit std::invalid_argument und einem
+SionnaMimoHelper-Präfix ab, bevor SionnaHelper, die beiden PHY-Helper oder der
+Spectrumadapter verändert werden. Apply bleibt für vorhandenen Code erhalten,
+wenn der verwendete MCS an dieser Stelle noch nicht bekannt ist.
+
+Das Programm ns3_wifi_sumimo_minimal.cc enthält die vollständigen
+helperkonfigurierten 1x1- und Vollrang-2x2-Szenarien. Es verbindet sie über
+eine feste normalisierte CFR mit dem echten UDP-/SpectrumWifiPhy-Pfad und
+behält zusätzlich den Phase-1-Rang-1-Vergleich:
+
+    ./ns3 run "ns3_wifi_sumimo_minimal \
+      --mcs=5 --referenceSnrDb=20 --packetSize=1200 \
+      --eesmBetaLinear=<kalibrierter-linearer-Wert>"
+
+Der feste Kanal ersetzt in diesem reproduzierbaren Beispiel nur die
+Kanalquelle. Array, Antennenzahlen, NSS, Rauschzahl und EESM werden nicht am
+Adapter oder PHY gesetzt, sondern ausschließlich mit SionnaMimoHelper.
+
+Für die Migration eines bestehenden Programms werden die manuellen Aufrufe
+ConfigureTransmitArray, ConfigureReceiveArray, die PHY-Attribute Antennas,
+MaxSupportedTxSpatialStreams, MaxSupportedRxSpatialStreams und RxNoiseFigure
+sowie SetReceiverNoiseFigureDb/SetEesmBeta am Spectrumadapter durch genau eine
+SionnaMimoConfiguration und ApplyForHeMcs ersetzt. SionnaHelper::Configure,
+SetMode, Start und Destroy, der PropagationCache sowie die normale
+SpectrumChannel-Verdrahtung bleiben unverändert. Ein Programm, das weiterhin
+nur SionnaHelper verwendet, nimmt damit unverändert den bisherigen
+1x1-Defaultpfad.
+
+Funktional unterstützt Phase 2 ausschließlich SISO und Open-Loop-SU-MIMO mit
+einem Stream je TX-Antenne, N_rx >= N_tx, linearem MMSE, gemeinsamer
+Unit-Average-Pair-Power-Normalisierung und EESM. Typische eindeutige Fehler
+sind:
+
+- SionnaMimoHelper: open-loop SU-MIMO uses one stream per TX antenna bei
+  widersprüchlichem maxNss;
+- SionnaMimoHelper: only SISO and open-loop SU-MIMO spatial multiplexing are
+  supported für Beamforming oder MU-MIMO;
+- SionnaMimoHelper: open-loop SU-MIMO requires an explicit EESM beta for HE
+  MCS ... bei fehlender Kalibrierung;
+- WifiTxVector NSS must equal the Sionna TX dimension, falls eine zur
+  helperkonfigurierten PHY widersprüchliche CFR erst am Laufzeitpfad ankommt.
+
+Die Enumwerte für Beamforming und MU-MIMO bleiben ausschließlich reservierte
+API-Namen. Unterphase 2.3 implementiert weder Streamauswahl noch Precoding,
+Beamforming oder MU-MIMO.
+
+## 7. Validierung der Unterphasen 1.1 bis 2.3
 
 Die native Suite sionna enthält nun 20 schnelle Fälle:
 
@@ -833,21 +906,25 @@ Werte und mittlere normierte Leistung eins. Die übrigen sieben Servertests
 decken den unveränderten 1x1-Pfad, Mobilität, Kohärenzzeit und Mehrnutzer-
 Anfragen ab.
 
-Die ExampleAsTest-Suite führt den vollständigen UDP-/SpectrumWifiPhy-Pfad für
-1x1, Vollrang-2x2 und Rang-1-2x2 aus und vergleicht alle ausgegebenen Metriken
-bytegenau mit der Referenzdatei. Ein separater Negativlauf bestätigt, dass das
-Beispiel ohne explizites EESM-Beta mit Status 2 abbricht.
+Die ExampleAsTest-Suites enthalten fünf Integrationsprozesse. Der Positivlauf
+führt 1x1, Vollrang-2x2 und Rang-1-2x2 über UDP/SpectrumWifiPhy aus und
+vergleicht alle Metriken bytegenau. Drei frühe Negativläufe prüfen
+widersprüchliches NSS, ein fehlendes MCS-Beta im MCS-bezogenen Apply-Aufruf
+und den reservierten Beamforming-Modus. Ein weiterer Negativlauf installiert
+die 2x2-Konfiguration über SionnaMimoHelper, liefert aber eine 1x1-CFR und
+erreicht nachweislich den Dimensionsguard im SpectrumWifiPhy-Adapter.
 
 ### 7.1 Ausgeführte CPU-Validierung
 
-Am 20. Juli 2026 wurden nach Abschluss der Unterphase 2.2 folgende Prüfungen
-erfolgreich ausgeführt:
+Am 1. August 2026 wurden nach Abschluss der Unterphase 2.3 folgende Prüfungen
+auf einem CPU-System erfolgreich ausgeführt:
 
-- vollständiger Build mit Beispielen und Tests unter GCC 13.3
+- inkrementeller Build der geänderten Bibliotheks-, nativen Test- und
+  Beispielziele unter GCC 13.3
 - native ns-3-Suite sionna: 20 von 20 Fällen bestanden; die beiden neuen
-  Integrationsfälle vergleichen manuelle und helperbasierte 1x1-/2x2-IPC-,
-  SpectrumWifiPhy- und Phase-1-Konfigurationen ohne einen laufenden
-  ZMQ-/Sionna-Server
+  Integrationsfälle verwenden ApplyForHeMcs und vergleichen manuelle und
+  helperbasierte 1x1-/2x2-IPC-, SpectrumWifiPhy- und Phase-1-Konfigurationen
+  ohne einen laufenden ZMQ-/Sionna-Server
 - SISO-Paritätsmatrix: alle 108 Kombinationen stimmen innerhalb 1e-12 mit der
   direkt aufgerufenen ns-3-Fehlermodellschnittstelle überein
 - frequenzselektive Monotonitätsmatrix: alle 312 PER-Werte bestanden
@@ -855,11 +932,17 @@ erfolgreich ausgeführt:
 - ExampleAsTest sionna-example-sumimo-minimal: ein von einem Fall bestanden;
   Vollrang-2x2 erreicht 134,3904 statt 68,1408 Mbit/s bei 1x1, Rang-1-2x2
   erreicht bei PER 1 erwartungsgemäß 0 Mbit/s
-- Negativlauf ohne --eesmBetaLinear: dokumentierter Abbruch mit Status 2 statt
-  eines impliziten Produktions-Betas
-- reine Python-Vertragssuite: fünf von fünf Fällen in 0,001 s bestanden
-- gesamte Sionna-CPU-Serversuite: acht von acht Fällen in 150,134 s bestanden;
-  der reale 2x2-Fall lief in 1,578 s, lieferte 2 x 2 x 256 und erfüllte die
+- ExampleAsTest sionna-example-mimo-helper-configuration-negative: drei von
+  drei Fällen bestanden; ungültiges NSS, reservierter Beamforming-Modus und
+  fehlendes MCS-Beta brechen jeweils früh mit Status 2 und eindeutiger Meldung
+  ab
+- ExampleAsTest sionna-example-mimo-helper-runtime-negative: ein von einem
+  Fall bestanden; eine helperkonfigurierte 2x2-PHY mit 1x1-CFR erreicht den
+  erwarteten Dimensionsguard im echten SpectrumWifiPhy-Laufzeitpfad
+- reine Python-Vertrags- und Import-Suite: fünf von fünf Fällen in 0,001 s
+  bestanden
+- gesamte Sionna-CPU-Serversuite: acht von acht Fällen in 159,800 s bestanden;
+  der reale 2x2-Fall lief in 1,5773 s, lieferte 2 x 2 x 256 und erfüllte die
   Normalisierung innerhalb 1e-6
 - P2P-End-to-End-Test example-sionna-sensing im unveränderten 1x1-Modus:
   drei CFR-Antworten, zwei empfangene UDP-Pakete zu je 1024 Byte und
@@ -887,8 +970,10 @@ nicht betroffen. Eine Korrektur gehört in eine eigene kleine Baseline-Subphase.
   InterferenceHelper skalar berücksichtigt. Eine frequenz- und
   antennenabhängige Interferenzkovarianz im MMSE-Detektor ist noch nicht
   modelliert.
-- Die Rauschzahl muss am Adapter und an SpectrumWifiPhy explizit identisch
-  gesetzt werden, da ns-3.40 das gesetzte WifiPhy-Attribut nicht lesbar macht.
+- SionnaMimoHelper übernimmt die Rauschzahl einmalig und setzt sie identisch am
+  Adapter sowie an beiden PHY-Helpern. Code ohne High-Level-API muss beide
+  Werte weiterhin manuell konsistent halten, da ns-3.40 das PHY-Attribut nicht
+  lesbar macht.
 - Es existiert absichtlich keine mitgelieferte HE-EESM-Beta-Tabelle.
   Frequenzselektive absolute PER-Prognosen benötigen vor der wissenschaftlichen
   Nutzung eine dokumentierte Link-Level-Kalibrierung. Ohne diese Konfiguration
@@ -904,9 +989,9 @@ nicht betroffen. Eine Korrektur gehört in eine eigene kleine Baseline-Subphase.
   nicht-reziprokes Precoding müssen Richtung und Konfiguration Teil des
   Schlüssels werden.
 
-Unterphase 2.2 ist abgeschlossen und der API-Vertrag mit Sionna, Phase 1 und
-SpectrumWifiPhy verbunden. Unterphase 2.3, Streamauswahl und Precoding wurden
-bewusst nicht begonnen.
+Phase 2 ist abgeschlossen: API-Vertrag, Integration, helperbasierte Beispiele,
+Laufzeit-Negativtests und Benutzerführung sind vorhanden. Streamauswahl,
+Precoding, Beamforming und MU-MIMO wurden bewusst nicht begonnen.
 
 ## 9. Ausführung
 
@@ -916,6 +1001,8 @@ Vom ns-3.40-Verzeichnis:
     ./ns3 build
     ./test.py -s sionna
     ./test.py -s sionna-example-sumimo-minimal
+    ./test.py -s sionna-example-mimo-helper-configuration-negative
+    ./test.py -s sionna-example-mimo-helper-runtime-negative
     ./ns3 run "ns3_wifi_sumimo_minimal --eesmBetaLinear=2"
 
 Python-Vertrag und Server vom Verzeichnis contrib/sionna/model/ns3sionna:

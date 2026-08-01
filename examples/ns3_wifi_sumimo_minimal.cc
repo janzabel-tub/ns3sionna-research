@@ -12,6 +12,8 @@
 #include "ns3/mobility-module.h"
 #include "ns3/network-module.h"
 #include "ns3/propagation-module.h"
+#include "ns3/sionna-helper.h"
+#include "ns3/sionna-mimo-helper.h"
 #include "ns3/sionna-spectrum-propagation-loss-model.h"
 #include "ns3/spectrum-module.h"
 #include "ns3/spectrum-wifi-helper.h"
@@ -24,6 +26,7 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <stdexcept>
 #include <string>
 
 using namespace ns3;
@@ -93,6 +96,32 @@ MakeRankOneChannel(uint32_t numSubcarriers)
     return channel;
 }
 
+SionnaMimoConfiguration
+MakeMimoConfiguration(uint8_t antennas,
+                      uint8_t mcs,
+                      double eesmBetaLinear,
+                      double receiverNoiseFigureDb)
+{
+    SionnaMimoConfiguration configuration;
+
+    if (antennas == 2)
+    {
+        configuration.receiverNoiseFigureDb = receiverNoiseFigureDb;
+        configuration.eesmBetaLinear.emplace(mcs, eesmBetaLinear);
+        configuration.mode = SionnaMimoMode::SU_MIMO_SPATIAL_MULTIPLEXING;
+        configuration.txArray.numColumns = 2;
+        configuration.rxArray.numColumns = 2;
+        configuration.numTxAntennas = 2;
+        configuration.numRxAntennas = 2;
+        configuration.maxNss = 2;
+    }
+    else if (antennas != 1)
+    {
+        throw std::invalid_argument("The example supports only 1x1 and 2x2 configurations");
+    }
+    return configuration;
+}
+
 ScenarioResult
 Evaluate(const std::string& name,
          const MimoChannelMatrix& channel,
@@ -126,11 +155,9 @@ Evaluate(const std::string& name,
 
 double
 RunNetworkScenario(const MimoChannelMatrix& channel,
-                   uint8_t antennas,
+                   const SionnaMimoConfiguration& configuration,
                    uint8_t mcs,
                    uint32_t packetSizeBytes,
-                   double eesmBetaLinear,
-                   double receiverNoiseFigureDb,
                    double receivedPowerDbm)
 {
     NodeContainer nodes;
@@ -143,24 +170,29 @@ RunNetworkScenario(const MimoChannelMatrix& channel,
     fixedRss->SetRss(receivedPowerDbm);
     spectrumChannel->AddPropagationLossModel(fixedRss);
 
+    SionnaHelper sionnaHelper("", "inproc://ns3sionna-mimo-helper-example");
+    SpectrumWifiPhyHelper txPhy;
+    SpectrumWifiPhyHelper rxPhy;
     auto mimoLoss = CreateObject<SionnaSpectrumPropagationLossModel>();
+    SionnaMimoHelper(configuration).ApplyForHeMcs(mcs,
+                                                  sionnaHelper,
+                                                  txPhy,
+                                                  rxPhy,
+                                                  mimoLoss);
     mimoLoss->SetFixedChannelMatrix(channel, -receivedPowerDbm);
-    mimoLoss->SetReceiverNoiseFigureDb(receiverNoiseFigureDb);
-    mimoLoss->SetEesmBeta(mcs, eesmBetaLinear);
     spectrumChannel->AddSpectrumPropagationLossModel(mimoLoss);
     spectrumChannel->SetPropagationDelayModel(
         CreateObject<ConstantSpeedPropagationDelayModel>());
 
-    SpectrumWifiPhyHelper phy;
-    phy.SetChannel(spectrumChannel);
-    phy.SetErrorRateModel("ns3::TableBasedErrorRateModel");
-    phy.Set("ChannelSettings", StringValue("{36, 20, BAND_5GHZ, 0}"));
-    phy.Set("TxPowerStart", DoubleValue(0.0));
-    phy.Set("TxPowerEnd", DoubleValue(0.0));
-    phy.Set("RxNoiseFigure", DoubleValue(receiverNoiseFigureDb));
-    phy.Set("Antennas", UintegerValue(antennas));
-    phy.Set("MaxSupportedTxSpatialStreams", UintegerValue(antennas));
-    phy.Set("MaxSupportedRxSpatialStreams", UintegerValue(antennas));
+    auto configurePhy = [&spectrumChannel](SpectrumWifiPhyHelper& phy) {
+        phy.SetChannel(spectrumChannel);
+        phy.SetErrorRateModel("ns3::TableBasedErrorRateModel");
+        phy.Set("ChannelSettings", StringValue("{36, 20, BAND_5GHZ, 0}"));
+        phy.Set("TxPowerStart", DoubleValue(0.0));
+        phy.Set("TxPowerEnd", DoubleValue(0.0));
+    };
+    configurePhy(txPhy);
+    configurePhy(rxPhy);
 
     WifiHelper wifi;
     wifi.SetStandard(WIFI_STANDARD_80211ax);
@@ -178,9 +210,9 @@ RunNetworkScenario(const MimoChannelMatrix& channel,
                 SsidValue(ssid),
                 "ActiveProbing",
                 BooleanValue(false));
-    NetDeviceContainer staDevices = wifi.Install(phy, mac, staNode);
+    NetDeviceContainer staDevices = wifi.Install(txPhy, mac, staNode);
     mac.SetType("ns3::ApWifiMac", "Ssid", SsidValue(ssid));
-    NetDeviceContainer apDevices = wifi.Install(phy, mac, apNode);
+    NetDeviceContainer apDevices = wifi.Install(rxPhy, mac, apNode);
 
     MobilityHelper mobility;
     mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
@@ -250,6 +282,7 @@ main(int argc, char* argv[])
     uint32_t packetSizeBytes = 1200;
     double referenceSnrDb = 20.0;
     double eesmBetaLinear = std::numeric_limits<double>::quiet_NaN();
+    std::string failureCase{"none"};
 
     CommandLine cmd(__FILE__);
     cmd.AddValue("mcs", "HE MCS (0 through 11)", mcs);
@@ -258,6 +291,10 @@ main(int argc, char* argv[])
     cmd.AddValue("eesmBetaLinear",
                  "Required EESM beta in linear SINR units; no default is supplied",
                  eesmBetaLinear);
+    cmd.AddValue("failureCase",
+                 "Integration-negative case: none, invalid-nss, unsupported-mode, "
+                 "missing-beta, or phy-cfr-mismatch",
+                 failureCase);
     cmd.Parse(argc, argv);
 
     if (mcs > 11 || packetSizeBytes == 0 || !std::isfinite(eesmBetaLinear) ||
@@ -266,6 +303,14 @@ main(int argc, char* argv[])
         std::cerr << "Provide --eesmBetaLinear=<positive value>; the example intentionally has "
                      "no production beta default"
                   << std::endl;
+        return 2;
+    }
+
+    if (failureCase != "none" && failureCase != "invalid-nss" &&
+        failureCase != "unsupported-mode" && failureCase != "missing-beta" &&
+        failureCase != "phy-cfr-mismatch")
+    {
+        std::cerr << "Unknown --failureCase=" << failureCase << std::endl;
         return 2;
     }
 
@@ -282,9 +327,6 @@ main(int argc, char* argv[])
         WifiLinkBudget::DbToLinear(referenceSnrDb) *
         noiseReference.GetReceiverNoisePowerW();
 
-    auto receiver = CreateObject<SionnaSpectrumPropagationLossModel>();
-    receiver->SetEesmBeta(mcs, eesmBetaLinear);
-    auto errorRateModel = CreateObject<TableBasedErrorRateModel>();
     const WifiMode mode = HePhy::GetHeMcs(mcs);
 
     constexpr uint32_t numSubcarriers = 768; // 20 MHz plus SpectrumWifiPhy guard bands
@@ -292,6 +334,84 @@ main(int argc, char* argv[])
     const MimoChannelMatrix wellConditionedChannel =
         MakeWellConditionedChannel(numSubcarriers);
     const MimoChannelMatrix rankOneChannel = MakeRankOneChannel(numSubcarriers);
+    const SionnaMimoConfiguration sisoConfiguration =
+        MakeMimoConfiguration(1, mcs, eesmBetaLinear, noiseFigureDb);
+    const SionnaMimoConfiguration mimoConfiguration =
+        MakeMimoConfiguration(2, mcs, eesmBetaLinear, noiseFigureDb);
+    const double receivedPowerDbm = WToDbm(receivedPowerW);
+
+    if (failureCase == "phy-cfr-mismatch")
+    {
+        RunNetworkScenario(sisoChannel,
+                           mimoConfiguration,
+                           mcs,
+                           packetSizeBytes,
+                           receivedPowerDbm);
+        std::cerr << "The PHY/CFR mismatch was not rejected" << std::endl;
+        return 1;
+    }
+    if (failureCase == "missing-beta")
+    {
+        SionnaMimoConfiguration missingBetaConfiguration = mimoConfiguration;
+        missingBetaConfiguration.eesmBetaLinear.clear();
+        SionnaHelper negativeSionna("", "inproc://ns3sionna-mimo-helper-missing-beta");
+        SpectrumWifiPhyHelper negativeTxPhy;
+        SpectrumWifiPhyHelper negativeRxPhy;
+        auto negativeModel = CreateObject<SionnaSpectrumPropagationLossModel>();
+        try
+        {
+            SionnaMimoHelper(missingBetaConfiguration)
+                .ApplyForHeMcs(mcs,
+                               negativeSionna,
+                               negativeTxPhy,
+                               negativeRxPhy,
+                               negativeModel);
+        }
+        catch (const std::invalid_argument& exception)
+        {
+            std::cerr << "configuration_error=" << exception.what() << std::endl;
+            return 2;
+        }
+        std::cerr << "The missing EESM beta was not rejected" << std::endl;
+        return 1;
+    }
+
+    if (failureCase != "none")
+    {
+        SionnaMimoConfiguration invalidConfiguration = mimoConfiguration;
+        if (failureCase == "invalid-nss")
+        {
+            invalidConfiguration.maxNss = 1;
+        }
+        else
+        {
+            invalidConfiguration.mode = SionnaMimoMode::SU_BEAMFORMING;
+        }
+        try
+        {
+            SionnaMimoHelper invalidHelper(invalidConfiguration);
+            static_cast<void>(invalidHelper);
+        }
+        catch (const std::invalid_argument& exception)
+        {
+            std::cerr << "configuration_error=" << exception.what() << std::endl;
+            return 2;
+        }
+        std::cerr << "The invalid configuration was not rejected" << std::endl;
+        return 1;
+    }
+
+    SionnaHelper diagnosticSionna("", "inproc://ns3sionna-mimo-helper-diagnostic");
+    SpectrumWifiPhyHelper diagnosticTxPhy;
+    SpectrumWifiPhyHelper diagnosticRxPhy;
+    auto receiver = CreateObject<SionnaSpectrumPropagationLossModel>();
+    SionnaMimoHelper(mimoConfiguration)
+        .ApplyForHeMcs(mcs,
+                       diagnosticSionna,
+                       diagnosticTxPhy,
+                       diagnosticRxPhy,
+                       receiver);
+    auto errorRateModel = CreateObject<TableBasedErrorRateModel>();
 
     ScenarioResult siso = Evaluate("siso-1x1",
                                    sisoChannel,
@@ -318,28 +438,21 @@ main(int argc, char* argv[])
                                       receiver,
                                       errorRateModel);
 
-    const double receivedPowerDbm = WToDbm(receivedPowerW);
     siso.throughputMbps = RunNetworkScenario(sisoChannel,
-                                             1,
+                                             sisoConfiguration,
                                              mcs,
                                              packetSizeBytes,
-                                             eesmBetaLinear,
-                                             noiseFigureDb,
                                              receivedPowerDbm);
     wellConditioned.throughputMbps =
         RunNetworkScenario(wellConditionedChannel,
-                           2,
+                           mimoConfiguration,
                            mcs,
                            packetSizeBytes,
-                           eesmBetaLinear,
-                           noiseFigureDb,
                            receivedPowerDbm);
     rankOne.throughputMbps = RunNetworkScenario(rankOneChannel,
-                                                2,
+                                                mimoConfiguration,
                                                 mcs,
                                                 packetSizeBytes,
-                                                eesmBetaLinear,
-                                                noiseFigureDb,
                                                 receivedPowerDbm);
 
     std::cout << std::fixed << std::setprecision(6);

@@ -168,6 +168,26 @@ class SionnaMimoHelper
                SpectrumWifiPhyHelper& rxPhyHelper,
                Ptr<SionnaSpectrumPropagationLossModel> spectrumModel) const;
 
+    /**
+     * Prevalidate an HE MCS and apply the complete configuration.
+     *
+     * This convenience entry point rejects a missing SU-MIMO EESM beta before
+     * any Sionna, PHY-helper, or propagation-model state is changed. SISO keeps
+     * the legacy scalar path and therefore requires no beta.
+     *
+     * \param heMcs HE MCS used by the configured link (0--11)
+     * \param sionnaHelper existing Sionna IPC helper
+     * \param txPhyHelper SpectrumWifiPhy helper for the transmitting endpoint
+     * \param rxPhyHelper SpectrumWifiPhy helper for the receiving endpoint
+     * \param spectrumModel Sionna SpectrumWifiPhy propagation adapter
+     * \throws std::invalid_argument if the configuration, MCS, or model is invalid
+     */
+    void ApplyForHeMcs(uint8_t heMcs,
+                       SionnaHelper& sionnaHelper,
+                       SpectrumWifiPhyHelper& txPhyHelper,
+                       SpectrumWifiPhyHelper& rxPhyHelper,
+                       Ptr<SionnaSpectrumPropagationLossModel> spectrumModel) const;
+
     /** Validate and set the orientation of one ns-3 node ID. */
     void SetNodeOrientation(uint32_t nodeId, const SionnaMimoOrientation& orientation);
 

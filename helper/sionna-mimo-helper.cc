@@ -263,6 +263,18 @@ SionnaMimoHelper::Apply(
 }
 
 void
+SionnaMimoHelper::ApplyForHeMcs(
+    uint8_t heMcs,
+    SionnaHelper& sionnaHelper,
+    SpectrumWifiPhyHelper& txPhyHelper,
+    SpectrumWifiPhyHelper& rxPhyHelper,
+    Ptr<SionnaSpectrumPropagationLossModel> spectrumModel) const
+{
+    ValidateForHeMcs(m_configuration, heMcs);
+    Apply(sionnaHelper, txPhyHelper, rxPhyHelper, spectrumModel);
+}
+
+void
 SionnaMimoHelper::SetNodeOrientation(uint32_t nodeId,
                                      const SionnaMimoOrientation& orientation)
 {
