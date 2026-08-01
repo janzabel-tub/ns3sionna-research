@@ -124,4 +124,12 @@ SuMimoLinkModel::Calculate(const MimoChannelMatrix& channel, double referenceSnr
     return result;
 }
 
+SuMimoLinkResult
+SuMimoLinkModel::Calculate(const MimoChannelMatrix& channel,
+                           const MimoPrecodingMatrix& precoding,
+                           double referenceSnrLinear)
+{
+    return Calculate(precoding.Apply(channel), referenceSnrLinear);
+}
+
 } // namespace ns3

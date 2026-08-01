@@ -31,6 +31,7 @@
 
 #include <limits>
 #include <map>
+#include <optional>
 
 namespace ns3
 {
@@ -93,6 +94,18 @@ class SionnaSpectrumPropagationLossModel : public SpectrumPropagationLossModel
     /** Atomically replace all configured linear EESM betas. */
     void ConfigureEesmBetas(const std::map<uint8_t, double>& betas);
 
+    /** Configure a validated user-provided fixed precoding tensor. */
+    void SetPrecodingMatrix(const MimoPrecodingMatrix& precoding);
+
+    /** Restore the Phase-2 path without precoding. */
+    void ClearPrecodingMatrix();
+
+    /** Return whether fixed precoding is configured. */
+    bool HasPrecodingMatrix() const;
+
+    /** Return the configured fixed precoding tensor. */
+    const MimoPrecodingMatrix& GetPrecodingMatrix() const;
+
     /** Return the receiver noise figure configured for the integrated path. */
     double GetReceiverNoiseFigureDb() const;
 
@@ -130,6 +143,7 @@ class SionnaSpectrumPropagationLossModel : public SpectrumPropagationLossModel
 
     Ptr<SionnaPropagationCache> m_propagationCache;
     Ptr<HeSuMimoLinkAbstraction> m_linkAbstraction;
+    std::optional<MimoPrecodingMatrix> m_precodingMatrix;
     bool m_fixedChannelEnabled{false};
     MimoChannelMatrix m_fixedChannel;
     double m_fixedPathLossDb{0.0};

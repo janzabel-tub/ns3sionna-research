@@ -260,6 +260,14 @@ SionnaMimoHelper::Apply(
 
     spectrumModel->SetReceiverNoiseFigureDb(config.receiverNoiseFigureDb);
     spectrumModel->ConfigureEesmBetas(config.eesmBetaLinear);
+    if (config.precodingMatrix)
+    {
+        spectrumModel->SetPrecodingMatrix(*config.precodingMatrix);
+    }
+    else
+    {
+        spectrumModel->ClearPrecodingMatrix();
+    }
 }
 
 void
@@ -324,6 +332,40 @@ SionnaMimoHelper::GetEesmBeta(uint8_t mcs) const
         Reject("HE MCS " + std::to_string(mcs) + " has no explicit EESM beta");
     }
     return beta->second;
+}
+
+void
+SionnaMimoHelper::SetPrecodingMatrix(const MimoPrecodingMatrix& precoding)
+{
+    SionnaMimoConfiguration candidate = m_configuration;
+    candidate.precodingMatrix = precoding;
+    Validate(candidate);
+    m_configuration = candidate;
+}
+
+void
+SionnaMimoHelper::ClearPrecodingMatrix()
+{
+    SionnaMimoConfiguration candidate = m_configuration;
+    candidate.precodingMatrix.reset();
+    Validate(candidate);
+    m_configuration = candidate;
+}
+
+bool
+SionnaMimoHelper::HasPrecodingMatrix() const
+{
+    return m_configuration.precodingMatrix.has_value();
+}
+
+const MimoPrecodingMatrix&
+SionnaMimoHelper::GetPrecodingMatrix() const
+{
+    if (!m_configuration.precodingMatrix)
+    {
+        Reject("no fixed precoding matrix is configured");
+    }
+    return *m_configuration.precodingMatrix;
 }
 
 const std::array<SionnaMimoMode, 2>&
@@ -392,13 +434,32 @@ SionnaMimoHelper::Validate(const SionnaMimoConfiguration& configuration)
         {
             Reject("SU-MIMO spatial multiplexing requires at least two TX antennas");
         }
-        if (configuration.numRxAntennas < configuration.numTxAntennas)
+        if (!configuration.precodingMatrix &&
+            configuration.numRxAntennas < configuration.numTxAntennas)
         {
             Reject("open-loop SU-MIMO requires at least one RX antenna per TX stream");
         }
-        if (configuration.maxNss != configuration.numTxAntennas)
+        if (!configuration.precodingMatrix &&
+            configuration.maxNss != configuration.numTxAntennas)
         {
             Reject("open-loop SU-MIMO uses one stream per TX antenna");
+        }
+    }
+
+    if (configuration.precodingMatrix)
+    {
+        const auto& precoding = *configuration.precodingMatrix;
+        if (precoding.GetNumTxAntennas() != configuration.numTxAntennas)
+        {
+            Reject("precoding TX dimension must match the configured TX antennas");
+        }
+        if (precoding.GetNumStreams() != configuration.maxNss)
+        {
+            Reject("maximum NSS must equal the fixed-precoding stream dimension");
+        }
+        if (precoding.GetNumStreams() > configuration.numRxAntennas)
+        {
+            Reject("fixed-precoding streams cannot exceed the RX antennas");
         }
     }
 

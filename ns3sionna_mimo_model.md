@@ -1,6 +1,6 @@
 # ns3sionna: MIMO-Abstraktionsmodell für IEEE 802.11ax/be
 
-Stand: 1. August 2026, Unterphase 2.3
+Stand: 1. August 2026, Unterphase 3.1 abgeschlossen
 
 Arbeitszweig: feature/su-mimo-minimal
 
@@ -14,7 +14,8 @@ Post-Processing-SINR, Effective-SINR, MCS/PER und später die Auswahl von
 Precoding und MU-MIMO, wird ausschließlich in ns-3 ausgeführt.
 
 Die Entwicklung erfolgt in kleinen, einzeln testbaren Schritten. Der aktuelle
-Stand umfasst die Unterphasen 1.1 bis 1.4 sowie die vollständige Phase 2:
+Stand umfasst die Unterphasen 1.1 bis 1.4, die vollständige Phase 2 sowie
+Unterphase 3.1:
 den numerischen SU-MIMO-Kern, konfigurierbare Sionna-Arrays, einen
 dimensionssicheren MIMO-Datenvertrag, explizit kalibrierbare
 802.11ax-EESM-/PER-Abbildung und die
@@ -26,8 +27,11 @@ EESM-Kalibrierung vor jeder Zustandsänderung. Das reproduzierbare Beispiel
 konfiguriert 1x1 und Vollrang-2x2 ausschließlich über SionnaMimoHelper und
 deckt mit dem deterministischen Kanalpfad SpectrumWifiPhy end-to-end ab.
 Integrationsnahe Negativläufe prüfen widersprüchliche NSS, nicht unterstützte
-Modi und eine CFR-/PHY-Dimensionsverletzung. Streamauswahl, Precoding,
-Beamforming und MU-MIMO wurden nicht begonnen.
+Modi und eine CFR-/PHY-Dimensionsverletzung. Ein dimensionssicherer,
+benutzergegebener Precoder unterstützt nun frequenzflaches und
+frequenzselektives festes W[k], einschließlich kontrollierter Streamauswahl
+mit N_s < N_tx. MRT/MRC, SVD, CSI-Feedback, Beamforming und MU-MIMO wurden
+nicht begonnen.
 
 ## 2. Reproduzierbare Ausgangsbasis
 
@@ -190,15 +194,162 @@ erfüllen dieses Kriterium.
 
 ### Phase 3: SU-MIMO mit Precoding und Beamforming
 
-Unterphasen:
+Sionna liefert weiterhin ausschließlich die komplexe CFR H[k]. Auswahl und
+Anwendung des Precoding W[k], Streamauswahl, Leistungsaufteilung und
+CSI-Zeitbezug bleiben vollständig in ns-3. Die bestehende skalare Grenze zu
+SpectrumWifiPhy bleibt erhalten: Erst nach der matrixwertigen Kanal-,
+Precoding- und Detektorberechnung wird auf eine Effective-SINR beziehungsweise
+äquivalente Empfangs-PSD komprimiert.
 
-1. festes, benutzergegebenes Precoding W[k]
-2. MRT/MRC für einen Stream
-3. SVD-Precoding und optionale Wasserfüllung
-4. quantisierte 802.11ax/be-Codebooks und veraltete CSI
+Phase 3 ist inhaltlich größer als Phase 1 oder Phase 2 jeweils für sich: Sie
+erweitert gleichzeitig Datenvertrag, numerischen Kern, High-Level-API und
+PHY-Integration und führt zusätzlich rückgemeldete sowie zeitabhängige CSI
+ein. Die folgenden fünf Unterphasen beschreiben deshalb vertikale,
+abnehmbare Funktionen; die einzelnen Aufzählungspunkte bleiben interne
+Implementierungsschritte. Unterphasen 3.1 bis 3.3 bilden den idealen
+Perfect-CSI-Kern, Unterphase 3.4 ist der eigene Realismus- und
+Standardisierungsblock und Unterphase 3.5 schließt die Phase end-to-end ab.
 
-Jede Unterphase erhält analytische Referenzkanäle sowie ein Beispiel
-ns3_wifi_sumimo_precoding.cc.
+#### Unterphase 3.1: Festes Precoding als vollständige Grundlage (implementiert)
+
+- Einen dimensionssicheren Vertrag für
+  W[k] in C^(N_tx x N_s) mit verbindlicher sc/tx/stream-Reihenfolge
+  definieren; frequenzflache Matrizen werden explizit auf alle Subcarrier
+  abgebildet.
+- Das Signalmodell auf
+  y[k] = sqrt(P/N_s) H[k] W[k] x[k] + n[k] verallgemeinern und den bestehenden
+  MMSE-Kern auf den effektiven Kanal H_eff[k] = H[k]W[k] anwenden.
+- N_s unabhängig von N_tx im Bereich 1 <= N_s <= min(N_tx, N_rx) führen.
+- Die Leistungsnormierung ||W[k]||_F^2 = N_s festlegen, sodass P weiterhin die
+  gesamte Sendeleistung bezeichnet und kein unbeabsichtigter Precoding-Gewinn
+  entsteht.
+- Analytische Tests für SISO, Identitäts-Precoding, Streamauswahl,
+  komplexwertige feste Matrizen und Dimensions-/Normierungsfehler ergänzen.
+
+Numerisches Zwischenkriterium: W[k] = I reproduziert den Phase-1-Kern
+innerhalb 1e-10;
+synthetische H[k]W[k]-Referenzen liefern indexgenau dieselben
+Post-MMSE-SINRs und die Gesamtleistung bleibt invariant.
+
+Integrationsschritte innerhalb derselben Unterphase:
+
+- Benutzergegebenes frequenzflaches und frequenzselektives W[k] durch
+  SionnaMimoHelper, Link-Abstraktion und SpectrumWifiPhy-Adapter führen.
+- WifiTxVector::GetNss an die Spaltenzahl von W[k] statt weiterhin zwingend
+  an N_tx koppeln und N_s < N_tx erstmals kontrolliert zulassen.
+- Subcarrierzahl, Antennenmaße, NSS, endliche Koeffizienten und
+  Leistungsnormierung vor jeder Zustandsänderung zentral validieren.
+- Ohne explizites Precoding den bisherigen SISO-/Open-Loop-Pfad byte- und
+  funktional kompatibel halten.
+- API-, Adapter- und End-to-End-Tests für 1x1, 2x2-Identität sowie
+  N_tx = 2, N_rx = 2, N_s = 1 ergänzen.
+
+Abnahmekriterium: Manuell und über SionnaMimoHelper konfiguriertes festes
+W[k] liefern dieselben SINR-, EESM- und PER-Ergebnisse; alle Phase-2-Tests
+bleiben unverändert erfolgreich. Die analytischen, Adapter- und
+SpectrumWifiPhy-End-to-End-Ergebnisse in Abschnitt 7 erfüllen dieses
+Kriterium.
+
+#### Unterphase 3.2: Ein-Stream-MRT/MRC
+
+- MRT für den eindeutig definierten MISO-Fall N_rx = 1 aus perfekter CFR
+  berechnen und auf Einheitsnorm normieren.
+- Für N_tx = 1 die bestehende Ein-Stream-MMSE-Lösung als äquivalente
+  MRC-Kombination ausweisen und validieren.
+- Den allgemeinen Fall N_tx > 1 und N_rx > 1 nicht mehrdeutig als MRT/MRC
+  bezeichnen; dessen optimale Ein-Stream-Lösung gehört zur SVD-Unterphase.
+- Analytische MISO-/SIMO-Kanäle, gemeinsame Phasendrehung, Nullkanal und
+  erwarteten Arraygewinn testen.
+
+Abnahmekriterium: MRT/MRC erreicht auf analytischen Ein-Stream-Kanälen die
+Post-Combining-SNR rho ||h||_2^2, bleibt leistungsnormalisiert und fällt im
+1x1-Grenzfall exakt auf das bestehende Ergebnis zurück.
+
+#### Unterphase 3.3: SVD-Precoding und Leistungsallokation
+
+- Pro Subcarrier H[k] = U[k] Sigma[k] V^H[k] zerlegen und die N_s stärksten
+  rechten Singulärvektoren bei zunächst gleicher Streamleistung als W[k]
+  verwenden.
+- N_s explizit wählen und gegen Antennenzahlen sowie einen dokumentierten
+  numerischen Rangschwellwert validieren.
+- Sortierung, Vorzeichen-/Phasenkonvention und Verhalten bei gleichen
+  Singularwerten deterministisch festlegen.
+- Diagonale, unitär gedrehte, frequenzselektive und rangdefiziente
+  Referenzkanäle gegen analytische Eigenmode-SINRs testen.
+
+Zwischenkriterium für SVD und Streamauswahl: Die Eigenmode-SINRs stimmen
+innerhalb 1e-10 mit
+den Singularwertreferenzen überein; Rangverlust wird durch eine explizite
+Streamwahl behandelt und nicht durch versteckte Regularisierung kaschiert.
+
+Optionale Leistungsallokation innerhalb derselben Unterphase:
+
+- Gleiche Leistung als reproduzierbaren Standard beibehalten und
+  Wasserfüllung als explizit auswählbare Forschungsoption ergänzen.
+- Den Umfang zunächst auf räumliche SVD-Moden je Subcarrier begrenzen, damit
+  spektrale Maske und Gesamtleistung pro Subcarrier unverändert bleiben.
+- Rauschleistung, Referenz-SNR, aktive Moden und die Summe der zugewiesenen
+  Leistung vollständig ausgeben und validieren.
+- Analytische Zwei-Moden-Fälle unterhalb und oberhalb der Aktivierungsschwelle
+  sowie Leistungserhaltung und KKT-Bedingungen testen.
+
+Abnahmekriterium der optionalen Erweiterung: Die Leistungsanteile sind
+endlich, nicht negativ und
+summieren sich exakt zur vorgegebenen Gesamtleistung; Wasserfüllung erreicht
+auf den Referenzkanälen mindestens die ideale Rate der geprüften
+Gleichleistungsreferenz, ohne Sendeleistung zu erzeugen.
+
+#### Unterphase 3.4: Quantisierte Rückmeldung und veraltete CSI
+
+- Vor der Implementierung das konkret unterstützte HE-/EHT-Feedbackformat,
+  Winkel-/Codebookdarstellung, Bitbreiten und Rekonstruktionsreihenfolge
+  verbindlich dokumentieren; nicht unterstützte Standardvarianten klar
+  abgrenzen.
+- Ideales SVD-Precoding, Quantisierung und Rekonstruktion als getrennte,
+  einzeln testbare Schritte modellieren.
+- Quantisiertes W[k] erneut leistungsnormalisieren und Feedbackumfang sowie
+  Quantisierungsfehler als Diagnosegrößen bereitstellen.
+- Bekannte Vektoren, Grenzwinkel, minimale/maximale Quantisierung und den
+  unquantisierten Grenzfall testen.
+
+Zwischenkriterium für die Quantisierung: Bitgenaue Referenzvektoren werden
+deterministisch
+rekonstruiert, die Precoder bleiben leistungsnormalisiert und feinere
+Quantisierung verschlechtert die Referenzmetrik auf den Testkanälen nicht.
+
+CSI-Alterung innerhalb derselben Unterphase:
+
+- Die zur Precoderwahl verwendete Schätzung H_hat[k,t_csi] strikt von der bei
+  der Paketübertragung wirksamen CFR H[k,t_tx] trennen.
+- CSI-Alter, Aktualisierungsintervall und Feedbackverzögerung explizit und
+  reproduzierbar konfigurieren; perfektes aktuelles CSI bleibt der
+  Nullalter-Grenzfall.
+- Richtung, Arraykonfiguration, Precodingmodus und CSI-Zeitstempel in Cache-
+  beziehungsweise Zustandsidentität berücksichtigen.
+- Statische Kanäle, kontrollierte Phasen-/Subraumrotationen und wiederholte
+  Läufe mit identischen Seeds testen.
+
+Abnahmekriterium: CSI-Alter null reproduziert das ideale Precoding exakt;
+kontrolliert veraltete Schätzungen werden nachweislich nur zur Wahl von W
+verwendet, während SINR und PER stets mit dem aktuellen H berechnet werden.
+
+#### Unterphase 3.5: Benutzbarkeit und Phasenvalidierung
+
+- SionnaMimoHelper erst nach erfolgreicher Implementierung die jeweiligen
+  Beamforming-/Precodingmodi als unterstützt melden lassen.
+- Das Beispiel ns3_wifi_sumimo_precoding.cc anlegen und Open-Loop, festes
+  Precoding, MRT sowie SVD bei gleicher Gesamtleistung vergleichen;
+  Wasserfüllung, Quantisierung und CSI-Alter werden als explizite Optionen
+  zugeschaltet.
+- Durchsatz, PER, Stream-SINR, Kanalrang, Precodingnorm, Leistungsanteile und
+  CSI-Alter maschinenlesbar ausgeben.
+- Negative Konfigurationstests und vollständige CPU-End-to-End-Regressionen
+  ergänzen sowie API-Migration und Modellgrenzen dokumentieren.
+
+Abnahmekriterium: Die Beispiele benötigen keine manuelle Verdrahtung interner
+Objekte, analytisch überlegene Precoder zeigen den erwarteten Gewinn ohne
+zusätzliche Sendeleistung, ungültige Konfigurationen brechen früh ab und alle
+Phase-1-/2-Regressionen bleiben erfolgreich.
 
 ### Phase 4: MU-MIMO
 
@@ -537,11 +688,13 @@ Die Integration bleibt auf
 SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity beschränkt.
 Für einen HE-SU-PPDU liest sie \(N_s\) ausschließlich mit
 WifiTxVector::GetNss. Vor der Link-Abstraktion müssen
-\(N_s=N_\mathrm{tx}\), die physikalischen TX-/RX-Antennenzahlen gleich den
-CFR-Dimensionen, die maximal unterstützten Spatial Streams mindestens
-\(N_s\) und \(N_\mathrm{ant,rx}\geq N_s\) sein. Inkonsistenzen brechen damit
-vor MMSE, EESM und Paketempfang ab. \(N_s<N_\mathrm{tx}\), Streamauswahl und
-Precoding gehören weiterhin ausdrücklich nicht zu Phase 1.
+die physikalischen TX-/RX-Antennenzahlen gleich den CFR-Dimensionen, die
+maximal unterstützten Spatial Streams mindestens \(N_s\) und
+\(N_\mathrm{ant,rx}\geq N_s\) sein. Ohne konfiguriertes Precoding bleibt
+zusätzlich unverändert \(N_s=N_\mathrm{tx}\). Mit festem Precoding muss
+\(N_s\) dagegen exakt der Spaltenzahl von W[k] entsprechen. Inkonsistenzen
+brechen damit vor MMSE, EESM und Paketempfang ab. Der neue kontrollierte Fall
+\(N_s<N_\mathrm{tx}\) ist ausschließlich mit explizitem festem W[k] zulässig.
 
 Der SpectrumChannel hat den skalaren Wideband-Pfadverlust bereits auf
 params->psd angewendet. Die MIMO-Integration verwendet daher
@@ -611,11 +764,13 @@ alle Subcarrier.
 Das Beispiel ns3_wifi_sumimo_minimal.cc erzeugt drei flache, normierte Kanäle
 bei HE MCS 5 und 20 dB Referenz-SNR: 1x1 mit \(h=1\), gut konditioniertes 2x2
 mit \(\mathrm{diag}(\sqrt{2},\sqrt{2})\) und Rang-1-2x2 mit ausschließlich
-Einsen. Es misst realen UDP-Durchsatz über SpectrumWifiPhy und gibt zusätzlich
-PER, Stream-SINR, EESM-SINR und Mindestkanalrang aus. Der Aufruf muss ein
-positives --eesmBetaLinear liefern. Der im Regressionstest verwendete Wert
-2 ist nur ein expliziter Formel-Sentinel; bei diesen flachen Kanälen ist das
-Ergebnis betaunabhängig und stellt keine Produktionskalibrierung dar.
+Einsen. Zusätzlich führt es den gut konditionierten Kanal mit explizitem
+Identitäts-Precoding und mit einem 2x1-Precoder zur Auswahl der ersten
+TX-Antenne aus. Es misst realen UDP-Durchsatz über SpectrumWifiPhy und gibt
+zusätzlich PER, Stream-SINR, EESM-SINR und Mindestkanalrang aus. Der Aufruf
+muss ein positives --eesmBetaLinear liefern. Der im Regressionstest verwendete
+Wert 2 ist nur ein expliziter Formel-Sentinel; bei diesen flachen Kanälen ist
+das Ergebnis betaunabhängig und stellt keine Produktionskalibrierung dar.
 
 Die deterministische Referenzausgabe lautet:
 
@@ -624,9 +779,98 @@ Die deterministische Referenzausgabe lautet:
 - gut konditioniertes 2x2: Rang 2, beide Stream-SINRs und Effective-SINR
   20,000 dB, PER 0,000016 und 134,3904 Mbit/s;
 - Rang-1-2x2: Rang 1, beide Stream-SINRs und Effective-SINR -0,043214 dB,
-  PER 1 und 0 Mbit/s.
+  PER 1 und 0 Mbit/s;
+- Identitäts-Precoding 2x2: dieselben analytischen SINR-, EESM- und
+  PER-Ergebnisse wie der offene Vollrangpfad und 133,4784 Mbit/s im
+  sequenziellen Netzwerkregressionslauf;
+- 2x1-Streamauswahl auf dem 2x2-Kanal: Rang 1, Stream-/Effective-SINR
+  23,010300 dB, PER 0 und 68,1504 Mbit/s. Der 3,0103-dB-Unterschied zum
+  offenen Einzelstreamvergleich folgt aus der vollen Gesamtleistung für
+  \(N_s=1\), nicht aus zusätzlicher Precoderleistung.
 
-## 6. High-Level-API-Vertrag der Unterphase 2.1
+### 5.9 Festes Precoding der Unterphase 3.1
+
+MimoPrecodingMatrix ist ein unveränderlicher, dimensionssicherer Werttyp für
+
+\[
+  \mathbf W[k]\in\mathbb C^{N_\mathrm{tx}\times N_s},
+  \qquad
+  1\leq N_s\leq\min(N_\mathrm{tx},N_\mathrm{rx}).
+\]
+
+Seine flache Reihenfolge ist verbindlich subcarrier/tx/stream:
+
+\[
+  j(k,t,s)=(kN_\mathrm{tx}+t)N_s+s.
+\]
+
+Der frequenzselektive Konstruktor erwartet deshalb genau
+\(N_\mathrm{sc}N_\mathrm{tx}N_s\) komplexe Koeffizienten. FrequencyFlat
+erwartet genau \(N_\mathrm{tx}N_s\) Werte in tx/stream-Reihenfolge und
+expandiert sie beim Erzeugen des Werttyps explizit auf alle \(N_\mathrm{sc}\)
+Subcarrier. Intern existiert damit kein implizites Broadcasting und jeder
+Zugriff besitzt dieselben drei Dimensionen. Alle Real- und Imaginärteile
+müssen endlich sein.
+
+Für jeden Subcarrier gilt verpflichtend
+
+\[
+  \lVert\mathbf W[k]\rVert_F^2
+  =\sum_{t=0}^{N_\mathrm{tx}-1}\sum_{s=0}^{N_s-1}|w_{t,s}[k]|^2
+  =N_s.
+\]
+
+Die absolute Prüftoleranz beträgt \(10^{-10}\). Eine verletzte Norm wird
+abgelehnt und nicht stillschweigend korrigiert. Mit
+\(\mathrm E[\mathbf x\mathbf x^H]=\mathbf I\) lautet das erweiterte
+Signalmodell
+
+\[
+  \mathbf y[k]=
+  \sqrt{\frac{P}{N_s}}\,\mathbf H[k]\mathbf W[k]\mathbf x[k]
+  +\mathbf n[k].
+\]
+
+Damit bleibt \(P\) die gesamte Sendeleistung und
+
+\[
+  \mathbf H_\mathrm{eff}[k]=\mathbf H[k]\mathbf W[k]
+  \in\mathbb C^{N_\mathrm{rx}\times N_s}.
+\]
+
+Der bestehende MMSE-Kern wird ohne neuen Detektortyp auf
+\(\mathbf H_\mathrm{eff}\) angewendet. Mit
+\(\alpha=\rho/N_s\) gilt weiterhin
+
+\[
+  \mathbf E[k]=
+  \left(\mathbf I_{N_s}+\alpha
+  \mathbf H_\mathrm{eff}^H[k]\mathbf H_\mathrm{eff}[k]\right)^{-1},
+  \qquad
+  \gamma_s[k]=\frac{1}{E_{s,s}[k]}-1.
+\]
+
+SuMimoLinkModel, HeSuMimoLinkAbstraction und der Spectrumadapter besitzen
+dafür explizite Precoding-Pfade. Ihre bisherigen Überladungen ohne W[k]
+bleiben bestehen und rechnen unverändert direkt mit H[k]. Insbesondere nimmt
+der bytegleiche 1x1-IPC-Vertrag kein neues Feld auf: Sionna liefert weiterhin
+ausschließlich H[k], W[k] existiert nur in ns-3.
+
+SionnaMimoConfiguration enthält optional precodingMatrix. Validate prüft vor
+jeder Helper-Zustandsänderung die TX-Dimension, die Gleichheit von maxNss und
+W-Spalten sowie \(N_s\leq N_\mathrm{rx}\). Apply ersetzt den Adapterzustand
+entweder durch den vollständig validierten Precoder oder löscht ihn explizit,
+sodass erneutes Anwenden einer Phase-2-Konfiguration kein altes W[k]
+zurücklässt. Am Laufzeitpfad werden zusätzlich CFR-Subcarrierzahl und beide
+CFR-Antennendimensionen geprüft, bevor ErrorRateModel- oder Empfangszustand
+verändert wird. WifiTxVector::GetNss muss bei vorhandenem W[k] exakt dessen
+Spaltenzahl, andernfalls weiterhin exakt \(N_\mathrm{tx}\) sein.
+
+Der Vertrag implementiert ausschließlich benutzergegebenes festes Precoding.
+Er leitet W[k] nicht aus H[k] ab und führt weder MRT/MRC noch SVD,
+CSI-Rückmeldung, Beamforming oder MU-MIMO ein.
+
+## 6. High-Level-API-Vertrag bis Unterphase 3.1
 
 ### 6.1 Typen, Besitz und Defaults
 
@@ -653,7 +897,8 @@ SionnaMimoOrientation speichert Azimut, Elevation und Rollwinkel in Grad. Die
 SionnaMimoConfiguration führt beide Arrays, den Modus, TX-/RX-Antennenzahl,
 maximale NSS, Empfänger, Normalisierung, Empfängerrauschzahl,
 Effective-SINR-Modell, explizite EESM-Betas und eine Map von ns-3-Node-ID auf
-Orientierung zusammen. Die festgeschriebenen Defaults sind:
+Orientierung sowie optional MimoPrecodingMatrix zusammen. Die
+festgeschriebenen Defaults sind:
 
 - Modus SISO, eine TX-Antenne, eine RX-Antenne und maximale NSS eins;
 - TX-Array 1 x 1, Abstände 0,5 Wellenlängen, TR-38.901-Muster, vertikale
@@ -668,23 +913,31 @@ Orientierung zusammen. Die festgeschriebenen Defaults sind:
   über alle Subcarrier und Antennenpaare gemäß Abschnitt 4.3;
 - 7 dB Empfängerrauschzahl entsprechend dem ns-3.40-WifiPhy-Default;
 - EESM als HE-Effective-SINR-Modell, aber weiterhin keine impliziten
-  MCS-Betas.
+  MCS-Betas;
+- kein Precoding. Dadurch nehmen alle bisherigen 1x1- und offenen
+  Mehrstromkonfigurationen weiterhin exakt den Phase-2-Pfad.
 
 SetNodeOrientation, ClearNodeOrientation und GetNodeOrientation verwalten die
 knotenbezogenen Winkel. SetEesmBeta, HasEesmBeta und GetEesmBeta verwalten
-explizite lineare Betas für HE MCS 0 bis 11. Diese Methoden ändern in
-Unterphase 2.1 noch kein Sionna-, WifiPhy- oder Link-Abstraktionsobjekt.
+explizite lineare Betas für HE MCS 0 bis 11. SetPrecodingMatrix,
+ClearPrecodingMatrix, HasPrecodingMatrix und GetPrecodingMatrix verwalten den
+optionalen festen Precoder atomar. Die gespeicherte Konfiguration bleibt ein
+wertbasierter Vertrag und verändert Simulationsobjekte erst mit Apply.
 
 ### 6.2 Unterstützte Betriebsarten
 
 GetSupportedModes und IsModeSupported melden genau zwei akzeptierte Modi:
 
 1. SISO mit genau einer TX- und einer RX-Antenne sowie NSS eins;
-2. SU_MIMO_SPATIAL_MULTIPLEXING ohne Precoding, mit genau einem Stream je
-   TX-Antenne und linearem MMSE-Empfänger.
+2. SU_MIMO_SPATIAL_MULTIPLEXING mit linearem MMSE-Empfänger. Ohne W[k]
+   bleibt genau ein Stream je TX-Antenne aktiv; mit explizitem festem W[k]
+   bestimmt dessen Spaltenzahl \(N_s\).
 
 SU_BEAMFORMING und MU_MIMO sind im Enum ausschließlich als stabile Namen für
-zukünftige Phasen repräsentiert. Validate weist beide eindeutig zurück. Ebenso
+zukünftige Phasen repräsentiert. Festes benutzergegebenes Precoding wird
+bewusst nicht in SU_BEAMFORMING umbenannt, weil es keine aus H[k]
+abgeleitete Strahlformung implementiert. Validate weist beide reservierten
+Modi weiterhin eindeutig zurück. Ebenso
 werden der repräsentierte Zero-Forcing-Empfänger, eine unnormalisierte CFR und
 Mutual Information als PER-wirksames Effective-SINR-Modell abgelehnt. Die
 MI-Kompression aus Abschnitt 5.4 bleibt eine Diagnosemetrik und wird nicht
@@ -700,10 +953,15 @@ Phase-1-Abstraktionsmodell:
   überein;
 - TX-/RX-Antennenzahlen und maxNss liegen im ns-3.40-Bereich 1 bis 8;
 - SISO besitzt exakt die Dimensionen 1 x 1 und maxNss eins;
-- Open-Loop-SU-MIMO erfüllt
+- SU-MIMO ohne W[k] erfüllt weiterhin
   \(2\leq N_\mathrm{tx}\leq N_\mathrm{rx}\leq8\) und
-  \(N_\mathrm{ss,max}=N_\mathrm{tx}\). Damit bleibt Streamauswahl
-  \(N_s<N_\mathrm{tx}\) außerhalb des Vertrags;
+  \(N_\mathrm{ss,max}=N_\mathrm{tx}\);
+- SU-MIMO mit W[k] erfüllt
+  \(1\leq N_s=N_\mathrm{ss,max}\leq
+  \min(N_\mathrm{tx},N_\mathrm{rx})\). TX- und Streamdimension stimmen
+  exakt mit der Matrix überein; Subcarrierzahl, Koeffizienten und
+  Leistungsnorm sind bereits Bestandteil des unveränderlichen
+  MimoPrecodingMatrix-Vertrags;
 - Azimut und Rollwinkel liegen endlich in [-180, 180] Grad, Elevation endlich
   in [-90, 90] Grad;
 - die Rauschzahl ist endlich und nicht negativ;
@@ -738,11 +996,14 @@ Die Zuordnung ist eindeutig:
 - receiverNoiseFigureDb setzt sowohl WifiPhy::RxNoiseFigure als auch den
   expliziten Rauschzahlwert des MIMO-Spectrumadapters;
 - die vollständige EESM-Map ersetzt atomar die bisherige Adapterkonfiguration,
-  sodass beim erneuten Anwenden keine veralteten MCS-Betas zurückbleiben.
+  sodass beim erneuten Anwenden keine veralteten MCS-Betas zurückbleiben;
+- precodingMatrix ersetzt den festen Adapter-Precoder vollständig. Fehlt der
+  optionale Wert, wird ein zuvor gesetztes W[k] gelöscht und der Phase-2-Pfad
+  wiederhergestellt.
 
 Linearer MMSE, gemeinsame Unit-Average-Pair-Power-Normalisierung und EESM
-benötigen keinen zusätzlichen Laufzeitselektor, weil Validate in Phase 2
-jeweils genau diese vorhandene Phase-1-Implementierung zulässt. Eine
+benötigen keinen zusätzlichen Laufzeitselektor. Das Vorhandensein von W[k]
+wählt ausschließlich die explizite \(H[k]W[k]\)-Überladung. Eine
 abweichende Empfänger-, Normalisierungs- oder Effective-SINR-Auswahl wird
 weiterhin vor Apply abgelehnt.
 
@@ -797,6 +1058,22 @@ gewählten HE-MCS:
     SionnaMimoHelper mimo(configuration);
     mimo.ApplyForHeMcs(mcs, sionna, txPhy, rxPhy, spectrumModel);
 
+Eine feste 2x1-Streamauswahl auf einem 2x2-Kanal ergänzt ausschließlich
+maxNss und den normalisierten Precoder:
+
+    configuration.maxNss = 1;
+    configuration.precodingMatrix = MimoPrecodingMatrix::FrequencyFlat(
+        numSubcarriers, 2, 1, {{1.0, 0.0}, {0.0, 0.0}});
+
+    SionnaMimoHelper mimo(configuration);
+    mimo.ApplyForHeMcs(mcs, sionna, txPhy, rxPhy, spectrumModel);
+
+Für frequenzselektives Precoding wird stattdessen der
+MimoPrecodingMatrix-Konstruktor mit
+\(N_\mathrm{sc}N_\mathrm{tx}N_s\) Koeffizienten in sc/tx/stream-Reihenfolge
+verwendet. Beide Varianten durchlaufen dieselbe Validierung und denselben
+Adapterpfad.
+
 ApplyForHeMcs führt zuerst ValidateForHeMcs aus. Ein ungültiger MCS oder ein
 fehlendes SU-MIMO-Beta bricht daher mit std::invalid_argument und einem
 SionnaMimoHelper-Präfix ab, bevor SionnaHelper, die beiden PHY-Helper oder der
@@ -804,9 +1081,10 @@ Spectrumadapter verändert werden. Apply bleibt für vorhandenen Code erhalten,
 wenn der verwendete MCS an dieser Stelle noch nicht bekannt ist.
 
 Das Programm ns3_wifi_sumimo_minimal.cc enthält die vollständigen
-helperkonfigurierten 1x1- und Vollrang-2x2-Szenarien. Es verbindet sie über
-eine feste normalisierte CFR mit dem echten UDP-/SpectrumWifiPhy-Pfad und
-behält zusätzlich den Phase-1-Rang-1-Vergleich:
+helperkonfigurierten 1x1-, offenen Vollrang-2x2-, Identitäts-Precoding- und
+2x1-Streamauswahlszenarien. Es verbindet sie über eine feste normalisierte CFR
+mit dem echten UDP-/SpectrumWifiPhy-Pfad und behält zusätzlich den
+Phase-1-Rang-1-Vergleich:
 
     ./ns3 run "ns3_wifi_sumimo_minimal \
       --mcs=5 --referenceSnrDb=20 --packetSize=1200 \
@@ -826,10 +1104,11 @@ SpectrumChannel-Verdrahtung bleiben unverändert. Ein Programm, das weiterhin
 nur SionnaHelper verwendet, nimmt damit unverändert den bisherigen
 1x1-Defaultpfad.
 
-Funktional unterstützt Phase 2 ausschließlich SISO und Open-Loop-SU-MIMO mit
-einem Stream je TX-Antenne, N_rx >= N_tx, linearem MMSE, gemeinsamer
-Unit-Average-Pair-Power-Normalisierung und EESM. Typische eindeutige Fehler
-sind:
+Funktional unterstützt der Stand bis Unterphase 3.1 SISO, offenen SU-MIMO mit
+einem Stream je TX-Antenne und festes benutzergegebenes Precoding mit
+\(1\leq N_s\leq\min(N_\mathrm{tx},N_\mathrm{rx})\). Linearer MMSE,
+gemeinsame Unit-Average-Pair-Power-Normalisierung der CFR und EESM bleiben
+unverändert. Typische eindeutige Fehler sind:
 
 - SionnaMimoHelper: open-loop SU-MIMO uses one stream per TX antenna bei
   widersprüchlichem maxNss;
@@ -837,60 +1116,78 @@ sind:
   supported für Beamforming oder MU-MIMO;
 - SionnaMimoHelper: open-loop SU-MIMO requires an explicit EESM beta for HE
   MCS ... bei fehlender Kalibrierung;
-- WifiTxVector NSS must equal the Sionna TX dimension, falls eine zur
-  helperkonfigurierten PHY widersprüchliche CFR erst am Laufzeitpfad ankommt.
+- SionnaMimoHelper: maximum NSS must equal the fixed-precoding stream
+  dimension bei widersprüchlicher Helper-Konfiguration;
+- WifiTxVector NSS must equal the transmitted stream dimension, falls
+  WifiTxVector und W-Spalten beziehungsweise der alte offene TX-Pfad
+  widersprüchlich sind.
 
 Die Enumwerte für Beamforming und MU-MIMO bleiben ausschließlich reservierte
-API-Namen. Unterphase 2.3 implementiert weder Streamauswahl noch Precoding,
-Beamforming oder MU-MIMO.
+API-Namen. Unterphase 3.1 implementiert weder MRT/MRC, SVD, CSI-Feedback,
+Beamforming noch MU-MIMO.
 
-## 7. Validierung der Unterphasen 1.1 bis 2.3
+## 7. Validierung der Unterphasen 1.1 bis 3.1
 
-Die native Suite sionna enthält nun 20 schnelle Fälle:
+Die native Suite sionna enthält nun 23 schnelle Fälle:
 
 1. API-Defaulttest für den vollständigen legacy-kompatiblen SISO-Vertrag,
-   leere EESM-Kalibrierung und exakt zwei gemeldete Betriebsarten.
+   leere EESM-Kalibrierung, fehlendes W[k] und exakt zwei gemeldete
+   Betriebsarten.
 2. Gültiger 2x2-Vertrag mit dual polarisiertem TX-Element, knotenspezifischer
-   Orientierung, explizitem Beta und MCS-bezogener Vollständigkeitsprüfung.
+   Orientierung, explizitem Beta, Identitäts-Precoding, frequenzselektiver
+   2x1-Streamauswahl sowie zulässigem 2-TX-/1-RX-/1-Stream-Grenzfall.
 3. Zentrale Negativmatrix für nicht endliche, unvollständige,
    widersprüchliche oder nicht unterstützte API-Konfigurationen einschließlich
-   Beamforming, MU-MIMO und fehlendem MCS-Beta.
+   Precoding-TX-/NSS-Dimension, Beamforming, MU-MIMO und fehlendem MCS-Beta.
 4. Manuell und über SionnaMimoHelper konfigurierte 1x1-Integration mit
    bytegleicher Array-/Orientierungs-IPC-Nachricht, identischer installierter
    SpectrumWifiPhy-Antennen-/NSS-Konfiguration, gleicher Rauschzahl und
    EESM-Kalibrierung sowie exakt gleichen MMSE-, EESM- und PER-Ergebnissen.
-5. Derselbe Integrationsvergleich für eine vollständige 2x2-Konfiguration.
-6. Layouttest eines 2 x 2 x 2-Tensors mit eindeutig nummerierten Koeffizienten.
-7. Reversible dB-/Linear-Umrechnung einschließlich 10 dB gleich Faktor zehn.
-8. Link-Budget-Test für Sendeleistung, Pfadverlust, \(B\), \(T\) und \(NF\)
-   sowie die erwartete Halbierung der SNR bei Verdopplung von \(B\) oder \(T\).
-9. Flacher orthogonaler 2x2-Kanal: EESM erhält identische Tone-/Stream-SINRs
+5. Derselbe Integrationsvergleich für eine vollständige offene
+   2x2-Konfiguration ohne W[k].
+6. Manuell gesetztes und durch SionnaMimoHelper angewendetes
+   frequenzselektives komplexes 2x1-W[k] liefern dieselben Koeffizienten,
+   installierten NSS, Post-MMSE-SINRs, EESM-SINR und PER.
+7. Layouttest eines 2 x 2 x 2-CFR-Tensors mit eindeutig nummerierten
+   Koeffizienten.
+8. Precoding-Vertragstest für sc/tx/stream-Reihenfolge, explizite
+   Frequenzflach-Expansion, Frobenius-Leistung sowie Dimensions-, Endlichkeits-
+   und Normierungsfehler.
+9. Reversible dB-/Linear-Umrechnung einschließlich 10 dB gleich Faktor zehn.
+10. Link-Budget-Test für Sendeleistung, Pfadverlust, \(B\), \(T\) und \(NF\)
+    sowie die erwartete Halbierung der SNR bei Verdopplung von \(B\) oder
+    \(T\).
+11. Flacher orthogonaler 2x2-Kanal: EESM erhält identische Tone-/Stream-SINRs
    unabhängig vom positiven Test-Beta.
-10. Frequenzselektiver SISO-Kanal: EESM stimmt mit der analytischen
-   Zweitonformel für das konfigurierte Beta überein.
-11. SISO-Parität zur direkten ns-3.40-ErrorRateModel-Abfrage für HE MCS
-   0, 3, 7 und 11, neun SNR-Punkte von -5 bis 35 dB sowie 32, 400 und
-   1458 Byte. Das sind 108 Kombinationen; MCS 11 prüft auch den
-   TableBased-Fallback auf Yans.
-12. Monotone PER auf einem normierten frequenzselektiven Vier-Ton-Kanal für
-   dieselben vier MCS und drei Paketgrößen bei 26 SNR-Punkten von -10 bis
-   40 dB. Die 312 geprüften Werte bilden je Konfiguration eine nicht steigende
-   Folge mit einem echten PER-Abfall.
-13. Exakte Reproduzierbarkeit von Post-MMSE-SINR, EESM-SINR und PER über
-   20 Wiederholungen eines komplexen frequenzselektiven 2x2-Kanals.
-14. SISO-Test mit \(h=2+j\) und \(\rho=10\); erwartet wird \(\gamma=50\).
-15. Orthogonaler 2x2-Kanal \(\mathbf H=\mathbf I\) und \(\rho=20\); jeder
+12. Frequenzselektiver SISO-Kanal: EESM stimmt mit der analytischen
+    Zweitonformel für das konfigurierte Beta überein.
+13. SISO-Parität zur direkten ns-3.40-ErrorRateModel-Abfrage für HE MCS
+    0, 3, 7 und 11, neun SNR-Punkte von -5 bis 35 dB sowie 32, 400 und
+    1458 Byte. Das sind 108 Kombinationen; MCS 11 prüft auch den
+    TableBased-Fallback auf Yans.
+14. Monotone PER auf einem normierten frequenzselektiven Vier-Ton-Kanal für
+    dieselben vier MCS und drei Paketgrößen bei 26 SNR-Punkten von -10 bis
+    40 dB. Die 312 geprüften Werte bilden je Konfiguration eine nicht steigende
+    Folge mit einem echten PER-Abfall.
+15. Exakte Reproduzierbarkeit von Post-MMSE-SINR, EESM-SINR und PER über
+    20 Wiederholungen eines komplexen frequenzselektiven 2x2-Kanals.
+16. SISO-Test mit \(h=2+j\) und \(\rho=10\); erwartet wird \(\gamma=50\).
+17. Orthogonaler 2x2-Kanal \(\mathbf H=\mathbf I\) und \(\rho=20\); jeder
     Stream erhält \(\gamma=10\) und \(\eta=2\log_2(11)\).
-16. Zwei diagonale Subcarrier diag(1,2) und diag(2,1) bei \(\rho=8\);
+18. Zwei diagonale Subcarrier diag(1,2) und diag(2,1) bei \(\rho=8\);
     erwartet werden (4,16), (16,4) und die analytische MI-Kompression.
-17. Deserialisierung einer alten Nachricht ohne Dimensionsfelder als
-    \(N_\mathrm{sc}\times1\times1\).
-18. Protocol-Buffer-Rundlauf einer synthetischen 2 x 2 x 2-CFR mit den
-    komplexen Werten 1-j bis 8-8j und indexgenauer Prüfung.
-19. Mindestkanalrang eins beziehungsweise zwei für Rang-1- und orthogonale
+19. Fester-Precoding-Referenztest für komplexes SISO, Identitätsparität,
+    indexgenaues komplexes \(H[k]W[k]\), identische MMSE-Ausgabe zum
+    vorberechneten effektiven Kanal und 2x2 mit einem ausgewählten Stream.
+20. Mindestkanalrang eins beziehungsweise zwei für Rang-1- und orthogonale
     2x2-Kanäle über alle Subcarrier.
-20. Spectrumadapter-Test für exaktes Rauschleistungs- und AWGN-Diversity-
-    Compensation-Mapping ohne doppelte Anwendung von Rauschen oder Arraygewinn.
+21. Spectrumadapter-Test für exaktes Rauschleistungs- und AWGN-Diversity-
+    Compensation-Mapping sowie SISO-, Identitäts- und 2x1-Precoding ohne
+    doppelte Anwendung von Rauschen, Leistung oder Arraygewinn.
+22. Deserialisierung einer alten Nachricht ohne Dimensionsfelder als
+    \(N_\mathrm{sc}\times1\times1\).
+23. Protocol-Buffer-Rundlauf einer synthetischen 2 x 2 x 2-CFR mit den
+    komplexen Werten 1-j bis 8-8j und indexgenauer Prüfung.
 
 Die fünf reinen Python-Vertragstests prüfen Standard- und explizite
 Arraykonfiguration, bytegleiche 1x1-Serialisierung, die sc/rx/tx-Reihenfolge
@@ -898,7 +1195,8 @@ einer synthetischen 2x2-CFR, die gemeinsame MIMO-Normalisierung sowie die
 legacy-kompatible und explizite Knotenorientierung. Diese
 Tests benötigen weder Raytracing, ZMQ noch eine GPU. Die analytischen
 Vergleiche des numerischen Kerns verwenden weiterhin eine absolute Toleranz
-von 1e-10; die neuen Link-Budget-/EESM-Vergleiche verwenden 1e-12.
+von 1e-10; dies gilt auch für Identitäts-Precoding und synthetische
+\(H[k]W[k]\)-Referenzen. Die Link-Budget-/EESM-Vergleiche verwenden 1e-12.
 
 Der reale Server-Integrationstest konfiguriert 1x2-PlanarArrays an TX und RX,
 führt Sionna RT auf der CPU aus und prüft die Form 2 x 2 x 256, 1024 komplexe
@@ -907,8 +1205,10 @@ decken den unveränderten 1x1-Pfad, Mobilität, Kohärenzzeit und Mehrnutzer-
 Anfragen ab.
 
 Die ExampleAsTest-Suites enthalten fünf Integrationsprozesse. Der Positivlauf
-führt 1x1, Vollrang-2x2 und Rang-1-2x2 über UDP/SpectrumWifiPhy aus und
-vergleicht alle Metriken bytegenau. Drei frühe Negativläufe prüfen
+führt 1x1, Vollrang-2x2, Rang-1-2x2, Identitäts-Precoding und
+2x1-Streamauswahl über UDP/SpectrumWifiPhy aus. Er prüft die analytischen
+Metriken exakt und die gemessenen UDP-Raten gegen deterministische
+Referenzwerte. Drei frühe Negativläufe prüfen
 widersprüchliches NSS, ein fehlendes MCS-Beta im MCS-bezogenen Apply-Aufruf
 und den reservierten Beamforming-Modus. Ein weiterer Negativlauf installiert
 die 2x2-Konfiguration über SionnaMimoHelper, liefert aber eine 1x1-CFR und
@@ -916,22 +1216,25 @@ erreicht nachweislich den Dimensionsguard im SpectrumWifiPhy-Adapter.
 
 ### 7.1 Ausgeführte CPU-Validierung
 
-Am 1. August 2026 wurden nach Abschluss der Unterphase 2.3 folgende Prüfungen
+Am 1. August 2026 wurden nach Abschluss der Unterphase 3.1 folgende Prüfungen
 auf einem CPU-System erfolgreich ausgeführt:
 
 - inkrementeller Build der geänderten Bibliotheks-, nativen Test- und
-  Beispielziele unter GCC 13.3
-- native ns-3-Suite sionna: 20 von 20 Fällen bestanden; die beiden neuen
-  Integrationsfälle verwenden ApplyForHeMcs und vergleichen manuelle und
-  helperbasierte 1x1-/2x2-IPC-, SpectrumWifiPhy- und Phase-1-Konfigurationen
-  ohne einen laufenden ZMQ-/Sionna-Server
+  Beispielziele unter GCC 13.3; zusätzlich wurde das unveränderte
+  P2P-Legacybeispiel neu gelinkt
+- native ns-3-Suite sionna: 23 von 23 Fällen bestanden; die
+  Integrationsfälle vergleichen manuelle und helperbasierte
+  1x1-/2x2-Konfigurationen ohne W[k] sowie frequenzselektives komplexes
+  2x1-W[k] ohne einen laufenden ZMQ-/Sionna-Server
 - SISO-Paritätsmatrix: alle 108 Kombinationen stimmen innerhalb 1e-12 mit der
   direkt aufgerufenen ns-3-Fehlermodellschnittstelle überein
 - frequenzselektive Monotonitätsmatrix: alle 312 PER-Werte bestanden
 - Reproduzierbarkeit: 20 identische 2x2-Aufrufe mit exakt gleichen Ergebnissen
 - ExampleAsTest sionna-example-sumimo-minimal: ein von einem Fall bestanden;
   Vollrang-2x2 erreicht 134,3904 statt 68,1408 Mbit/s bei 1x1, Rang-1-2x2
-  erreicht bei PER 1 erwartungsgemäß 0 Mbit/s
+  erreicht bei PER 1 erwartungsgemäß 0 Mbit/s; Identitäts-Precoding
+  reproduziert die analytischen Vollrangwerte und die 2x1-Auswahl erreicht
+  23,010300 dB bei voller Gesamtleistung
 - ExampleAsTest sionna-example-mimo-helper-configuration-negative: drei von
   drei Fällen bestanden; ungültiges NSS, reservierter Beamforming-Modus und
   fehlendes MCS-Beta brechen jeweils früh mit Status 2 und eindeutiger Meldung
@@ -941,8 +1244,8 @@ auf einem CPU-System erfolgreich ausgeführt:
   erwarteten Dimensionsguard im echten SpectrumWifiPhy-Laufzeitpfad
 - reine Python-Vertrags- und Import-Suite: fünf von fünf Fällen in 0,001 s
   bestanden
-- gesamte Sionna-CPU-Serversuite: acht von acht Fällen in 159,800 s bestanden;
-  der reale 2x2-Fall lief in 1,5773 s, lieferte 2 x 2 x 256 und erfüllte die
+- gesamte Sionna-CPU-Serversuite: acht von acht Fällen in 270,483 s bestanden;
+  der reale 2x2-Fall lief in 3,0752 s, lieferte 2 x 2 x 256 und erfüllte die
   Normalisierung innerhalb 1e-6
 - P2P-End-to-End-Test example-sionna-sensing im unveränderten 1x1-Modus:
   drei CFR-Antworten, zwei empfangene UDP-Pakete zu je 1024 Byte und
@@ -963,9 +1266,10 @@ nicht betroffen. Eine Korrektur gehört in eine eigene kleine Baseline-Subphase.
 - Nicht explizit orientierte Knoten behalten die alte Serverorientierung
   [0, -180, 0]. Explizite Winkel werden in beiden Servermodi an Sionna
   übertragen.
-- Der integrierte MIMO-Pfad unterstützt nur HE SU mit einem Open-Loop-Stream
-  je TX-Antenne. Nicht-HE-Kontrollrahmen verwenden das erste Antennenpaar;
-  MU-MIMO, Streamauswahl und Precoding bleiben außerhalb von Phase 1.
+- Der integrierte MIMO-Pfad unterstützt HE SU ohne Precoding mit einem
+  Open-Loop-Stream je TX-Antenne oder mit festem, benutzergegebenem
+  \(W[k]\). Nicht-HE-Kontrollrahmen verwenden das erste Antennenpaar;
+  kanaladaptives Precoding, Beamforming und MU-MIMO sind nicht implementiert.
 - Zeitvariable externe Interferenz wird nach der MMSE-/EESM-Abstraktion durch
   InterferenceHelper skalar berücksichtigt. Eine frequenz- und
   antennenabhängige Interferenzkovarianz im MMSE-Detektor ist noch nicht
@@ -981,17 +1285,19 @@ nicht betroffen. Eine Korrektur gehört in eine eigene kleine Baseline-Subphase.
 - TableBasedErrorRateModel ist eine AWGN-Referenz. Seine SNR-/PER-Kurven und
   Paketlängenextrapolation stammen aus ns-3; ihre Grenzen gelten unverändert.
 - Perfekte RX-CSI ist zunächst bewusst idealisiert.
-- Pro Antenne wird genau ein Stream angenommen; Streamauswahl und
-  \(N_s<N_\mathrm{tx}\) gehören zur Precoding-Phase.
+- Ohne W[k] gilt weiterhin genau ein Stream je TX-Antenne. Mit festem W[k]
+  sind kontrollierte Streamauswahl und
+  \(1\leq N_s\leq\min(N_\mathrm{tx},N_\mathrm{rx})\) implementiert.
 - Die MI-Kompression bleibt eine Diagnosemetrik; nur die explizit konfigurierte
   EESM-Ausgabe wird an ErrorRateModel übergeben.
 - Die bestehende Cache-Schlüsselbildung nimmt Reziprozität an. Für
   nicht-reziprokes Precoding müssen Richtung und Konfiguration Teil des
   Schlüssels werden.
 
-Phase 2 ist abgeschlossen: API-Vertrag, Integration, helperbasierte Beispiele,
-Laufzeit-Negativtests und Benutzerführung sind vorhanden. Streamauswahl,
-Precoding, Beamforming und MU-MIMO wurden bewusst nicht begonnen.
+Unterphase 3.1 ist abgeschlossen: Frequenzflaches und frequenzselektives
+festes Precoding, Streamauswahl, Leistungsnormierung, Helper-/Adapterintegration
+und End-to-End-Regressionen sind vorhanden. MRT/MRC, SVD, CSI-Feedback,
+kanaladaptives Beamforming und MU-MIMO wurden bewusst nicht begonnen.
 
 ## 9. Ausführung
 

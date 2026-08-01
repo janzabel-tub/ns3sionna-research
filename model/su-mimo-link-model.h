@@ -8,6 +8,7 @@
 #define SU_MIMO_LINK_MODEL_H
 
 #include "mimo-channel-matrix.h"
+#include "mimo-precoding-matrix.h"
 
 #include <cstdint>
 #include <vector>
@@ -64,6 +65,20 @@ class SuMimoLinkModel
      *        this is the total SNR across all spatial streams
      */
     static SuMimoLinkResult Calculate(const MimoChannelMatrix& channel,
+                                      double referenceSnrLinear);
+
+    /**
+     * Calculate post-MMSE SINR after applying user-provided fixed precoding.
+     *
+     * MMSE operates on H[k]W[k], and the total reference power is divided
+     * equally over the N_s columns of W[k].
+     *
+     * @param channel normalized frequency-selective MIMO CFR
+     * @param precoding validated frequency-selective precoding tensor
+     * @param referenceSnrLinear total received SNR before CFR weighting
+     */
+    static SuMimoLinkResult Calculate(const MimoChannelMatrix& channel,
+                                      const MimoPrecodingMatrix& precoding,
                                       double referenceSnrLinear);
 };
 

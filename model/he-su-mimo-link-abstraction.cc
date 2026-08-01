@@ -187,4 +187,44 @@ HeSuMimoLinkAbstraction::Calculate(const MimoChannelMatrix& channel,
     return result;
 }
 
+HeSuMimoLinkResult
+HeSuMimoLinkAbstraction::Calculate(const MimoChannelMatrix& channel,
+                                   const MimoPrecodingMatrix& precoding,
+                                   const WifiLinkBudgetResult& linkBudget,
+                                   const WifiTxVector& txVector,
+                                   uint32_t packetSizeBytes) const
+{
+    NS_ABORT_MSG_IF(!m_errorRateModel, "ErrorRateModel must be configured");
+    NS_ABORT_MSG_IF(!txVector.GetModeInitialized(), "WifiTxVector mode is not initialized");
+    const WifiMode mode = txVector.GetMode();
+    NS_ABORT_MSG_IF(mode.GetModulationClass() != WIFI_MOD_CLASS_HE,
+                    "The link abstraction requires an 802.11ax HE mode");
+    NS_ABORT_MSG_IF(txVector.GetNss() != precoding.GetNumStreams(),
+                    "WifiTxVector NSS must match the precoding stream dimension");
+    NS_ABORT_MSG_IF(channel.GetNumRxAntennas() > std::numeric_limits<uint8_t>::max(),
+                    "ErrorRateModel cannot represent more than 255 receive antennas");
+    NS_ABORT_MSG_IF(packetSizeBytes == 0, "Packet size must be positive");
+
+    precoding.ValidateForChannel(channel);
+
+    HeSuMimoLinkResult result;
+    result.m_linkBudget = linkBudget;
+    result.m_mimoResult = SuMimoLinkModel::Calculate(channel,
+                                                     precoding,
+                                                     linkBudget.GetReferenceSnrLinear());
+    result.m_effectiveSinrLinear =
+        CalculateEffectiveSinr(result.m_mimoResult, mode.GetMcsValue());
+    result.m_packetSuccessRate =
+        m_errorRateModel->GetChunkSuccessRate(mode,
+                                              txVector,
+                                              result.m_effectiveSinrLinear,
+                                              static_cast<uint64_t>(packetSizeBytes) * 8,
+                                              static_cast<uint8_t>(channel.GetNumRxAntennas()));
+    NS_ABORT_MSG_IF(!std::isfinite(result.m_packetSuccessRate) ||
+                        result.m_packetSuccessRate < 0.0 ||
+                        result.m_packetSuccessRate > 1.0,
+                    "ErrorRateModel returned an invalid packet success probability");
+    return result;
+}
+
 } // namespace ns3

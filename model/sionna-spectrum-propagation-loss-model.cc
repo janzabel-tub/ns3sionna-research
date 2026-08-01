@@ -201,6 +201,32 @@ SionnaSpectrumPropagationLossModel::ConfigureEesmBetas(
     m_linkAbstraction = linkAbstraction;
 }
 
+void
+SionnaSpectrumPropagationLossModel::SetPrecodingMatrix(
+    const MimoPrecodingMatrix& precoding)
+{
+    m_precodingMatrix = precoding;
+}
+
+void
+SionnaSpectrumPropagationLossModel::ClearPrecodingMatrix()
+{
+    m_precodingMatrix.reset();
+}
+
+bool
+SionnaSpectrumPropagationLossModel::HasPrecodingMatrix() const
+{
+    return m_precodingMatrix.has_value();
+}
+
+const MimoPrecodingMatrix&
+SionnaSpectrumPropagationLossModel::GetPrecodingMatrix() const
+{
+    NS_ABORT_MSG_IF(!m_precodingMatrix, "No fixed precoding matrix is configured");
+    return *m_precodingMatrix;
+}
+
 double
 SionnaSpectrumPropagationLossModel::GetReceiverNoiseFigureDb() const
 {
@@ -237,8 +263,11 @@ SionnaSpectrumPropagationLossModel::CalculateMimoRx(
                     "The minimal MIMO SpectrumWifiPhy path supports HE SU PPDUs only");
 
     const uint8_t nss = txVector.GetNss();
-    NS_ABORT_MSG_IF(nss != channel.GetNumTxAntennas(),
-                    "WifiTxVector NSS must equal the Sionna TX dimension");
+    const uint32_t expectedNss = m_precodingMatrix
+                                     ? m_precodingMatrix->GetNumStreams()
+                                     : channel.GetNumTxAntennas();
+    NS_ABORT_MSG_IF(nss != expectedNss,
+                    "WifiTxVector NSS must equal the transmitted stream dimension");
     NS_ABORT_MSG_IF(txPhyAntennas != channel.GetNumTxAntennas(),
                     "Transmitter PHY antennas must equal the Sionna TX dimension");
     NS_ABORT_MSG_IF(rxPhyAntennas != channel.GetNumRxAntennas(),
@@ -246,6 +275,10 @@ SionnaSpectrumPropagationLossModel::CalculateMimoRx(
     NS_ABORT_MSG_IF(rxPhyAntennas < nss,
                     "Receiver PHY needs at least one antenna per spatial stream");
     NS_ABORT_MSG_IF(!errorRateModel, "SpectrumWifiPhy ErrorRateModel must be configured");
+    if (m_precodingMatrix)
+    {
+        m_precodingMatrix->ValidateForChannel(channel);
+    }
 
     const auto linkBudget =
         WifiLinkBudget::Calculate(WToDbm(receivedPowerW),
@@ -256,8 +289,16 @@ SionnaSpectrumPropagationLossModel::CalculateMimoRx(
     m_linkAbstraction->SetErrorRateModel(errorRateModel);
 
     SionnaMimoSpectrumRxResult result;
-    result.m_linkResult =
-        m_linkAbstraction->Calculate(channel, linkBudget, txVector, packetSizeBytes);
+    result.m_linkResult = m_precodingMatrix
+                              ? m_linkAbstraction->Calculate(channel,
+                                                             *m_precodingMatrix,
+                                                             linkBudget,
+                                                             txVector,
+                                                             packetSizeBytes)
+                              : m_linkAbstraction->Calculate(channel,
+                                                             linkBudget,
+                                                             txVector,
+                                                             packetSizeBytes);
 
     // InterferenceHelper applies N_rx/N_ss for AWGN models. MMSE already contains
     // this array gain, so reduce the equivalent scalar signal by that exact factor.
@@ -325,9 +366,15 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
         wifiParams->ppdu->GetTxVector().GetPreambleType() == WIFI_PREAMBLE_HE_SU;
     if (isHeSu)
     {
-        NS_ABORT_MSG_IF(wifiParams->ppdu->GetTxVector().GetNss() !=
-                            channel.GetNumTxAntennas(),
-                        "WifiTxVector NSS must equal the Sionna TX dimension");
+        const uint32_t expectedNss = m_precodingMatrix
+                                         ? m_precodingMatrix->GetNumStreams()
+                                         : channel.GetNumTxAntennas();
+        NS_ABORT_MSG_IF(wifiParams->ppdu->GetTxVector().GetNss() != expectedNss,
+                        "WifiTxVector NSS must equal the transmitted stream dimension");
+        if (m_precodingMatrix)
+        {
+            m_precodingMatrix->ValidateForChannel(channel);
+        }
     }
 
     const bool legacySiso = channel.GetNumRxAntennas() == 1 &&

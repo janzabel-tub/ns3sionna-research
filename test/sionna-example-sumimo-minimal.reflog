@@ -2,4 +2,6 @@ explicit_EESM_beta_linear=2.000000 (caller supplied; not a production calibratio
 scenario=siso-1x1 nss=1 expected_throughput_Mbps=68.822397 rank=1 throughput_Mbps=68.140800 PER=0.000016 stream0_SINR_dB=20.000000 effective_SINR_dB=20.000000
 scenario=well-conditioned-2x2 nss=2 expected_throughput_Mbps=137.644794 rank=2 throughput_Mbps=134.390400 PER=0.000016 stream0_SINR_dB=20.000000 stream1_SINR_dB=20.000000 effective_SINR_dB=20.000000
 scenario=rank-one-2x2 nss=2 expected_throughput_Mbps=0.000000 rank=1 throughput_Mbps=0.000000 PER=1.000000 stream0_SINR_dB=-0.043214 stream1_SINR_dB=-0.043214 effective_SINR_dB=-0.043214
-validation=PASS full-rank spatial multiplexing gains; rank-one channel degrades
+scenario=identity-precoded-2x2 nss=2 expected_throughput_Mbps=137.644794 rank=2 throughput_Mbps=133.478400 PER=0.000016 stream0_SINR_dB=20.000000 stream1_SINR_dB=20.000000 effective_SINR_dB=20.000000
+scenario=selected-stream-2x2 nss=1 expected_throughput_Mbps=68.823530 rank=1 throughput_Mbps=68.150400 PER=0.000000 stream0_SINR_dB=23.010300 effective_SINR_dB=23.010300
+validation=PASS Phase-2 paths preserved; identity precoding matches; one 2x2 stream selected

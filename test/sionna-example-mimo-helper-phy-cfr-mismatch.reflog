@@ -1,2 +1,2 @@
-aborted. cond="wifiParams->ppdu->GetTxVector().GetNss() != channel.GetNumTxAntennas()", msg="WifiTxVector NSS must equal the Sionna TX dimension", +1.004466012s 1 file=sionna-spectrum-propagation-loss-model.cc, line=<runtime-guard>
+aborted. cond="wifiParams->ppdu->GetTxVector().GetNss() != expectedNss", msg="WifiTxVector NSS must equal the transmitted stream dimension", +1.004466012s 1 file=sionna-spectrum-propagation-loss-model.cc, line=<runtime-guard>
 NS_FATAL, terminating

@@ -9,6 +9,7 @@
 #include "ns3/he-phy.h"
 #include "ns3/he-su-mimo-link-abstraction.h"
 #include "ns3/mimo-channel-matrix.h"
+#include "ns3/mimo-precoding-matrix.h"
 #include "ns3/multi-model-spectrum-channel.h"
 #include "ns3/simulator.h"
 #include "ns3/sionna-helper.h"
@@ -150,6 +151,12 @@ class SionnaMimoHelperDefaultsTest : public TestCase
         NS_TEST_ASSERT_MSG_EQ(configuration.nodeOrientations.empty(),
                               true,
                               "Default nodes must not receive an implicit orientation override");
+        NS_TEST_ASSERT_MSG_EQ(configuration.precodingMatrix.has_value(),
+                              false,
+                              "The default must preserve the Phase-2 path without precoding");
+        NS_TEST_ASSERT_MSG_EQ(helper.HasPrecodingMatrix(),
+                              false,
+                              "The default helper unexpectedly reports fixed precoding");
 
         const auto defaultOrientation = helper.GetNodeOrientation(17);
         NS_TEST_ASSERT_MSG_EQ_TOL(defaultOrientation.azimuthDegrees,
@@ -235,6 +242,32 @@ class SionnaMimoHelperValidConfigurationTest : public TestCase
                                   3.5,
                                   1e-12,
                                   "Setter did not retain the EESM beta");
+
+        const auto identity = MimoPrecodingMatrix::FrequencyFlat(
+            2,
+            2,
+            2,
+            {{1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {1.0, 0.0}});
+        helper.SetPrecodingMatrix(identity);
+        NS_TEST_ASSERT_MSG_EQ(helper.HasPrecodingMatrix(),
+                              true,
+                              "Helper did not retain valid identity precoding");
+        NS_TEST_ASSERT_MSG_EQ(helper.GetPrecodingMatrix().GetNumSubcarriers(),
+                              2,
+                              "Helper changed the precoding subcarrier dimension");
+
+        auto selectedConfiguration = MakeOpenLoop2x2Configuration();
+        selectedConfiguration.maxNss = 1;
+        selectedConfiguration.precodingMatrix = MimoPrecodingMatrix(
+            2,
+            2,
+            1,
+            {{1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {0.0, 1.0}});
+        SionnaMimoHelper::Validate(selectedConfiguration);
+
+        selectedConfiguration.rxArray.numColumns = 1;
+        selectedConfiguration.numRxAntennas = 1;
+        SionnaMimoHelper::Validate(selectedConfiguration);
     }
 };
 
@@ -297,6 +330,24 @@ class SionnaMimoHelperInvalidConfigurationTest : public TestCase
         configuration.maxNss = 1;
         expectRejected(configuration,
                        "Open-loop MIMO with fewer streams than TX antennas was accepted");
+
+        configuration = MakeOpenLoop2x2Configuration();
+        configuration.precodingMatrix = MimoPrecodingMatrix::FrequencyFlat(
+            1,
+            2,
+            1,
+            {{1.0, 0.0}, {0.0, 0.0}});
+        expectRejected(configuration,
+                       "A precoding stream count inconsistent with maximum NSS was accepted");
+
+        configuration = MakeOpenLoop2x2Configuration();
+        configuration.precodingMatrix = MimoPrecodingMatrix::FrequencyFlat(
+            1,
+            1,
+            1,
+            {{1.0, 0.0}});
+        expectRejected(configuration,
+                       "A precoding TX dimension inconsistent with the array was accepted");
 
         configuration = MakeOpenLoop2x2Configuration();
         configuration.rxArray.numColumns = 1;
@@ -425,14 +476,24 @@ InstallConfiguredPhy(SpectrumWifiPhyHelper& phyHelper)
     return DynamicCast<SpectrumWifiPhy>(device->GetPhy());
 }
 
+enum class HelperIntegrationCase
+{
+    SISO,
+    OPEN_LOOP_2X2,
+    FIXED_PRECODING_2X1
+};
+
 class SionnaMimoHelperIntegrationTest : public TestCase
 {
   public:
-    explicit SionnaMimoHelperIntegrationTest(bool useMimo)
-        : TestCase(useMimo
-                       ? "manual and SionnaMimoHelper 2x2 integrations are equivalent"
-                       : "manual and SionnaMimoHelper 1x1 integrations are equivalent"),
-          m_useMimo(useMimo)
+    explicit SionnaMimoHelperIntegrationTest(HelperIntegrationCase integrationCase)
+        : TestCase(integrationCase == HelperIntegrationCase::SISO
+                       ? "manual and SionnaMimoHelper 1x1 integrations are equivalent"
+                   : integrationCase == HelperIntegrationCase::OPEN_LOOP_2X2
+                       ? "manual and SionnaMimoHelper open-loop 2x2 integrations are equivalent"
+                       : "manual and SionnaMimoHelper frequency-selective 2x1 precoding are "
+                         "equivalent"),
+          m_integrationCase(integrationCase)
     {
     }
 
@@ -445,8 +506,20 @@ class SionnaMimoHelperIntegrationTest : public TestCase
         constexpr double noiseFigureDb = 5.5;
         constexpr double bandwidthHz = 20e6;
 
+        const bool useMimo = m_integrationCase != HelperIntegrationCase::SISO;
+        const bool usePrecoding =
+            m_integrationCase == HelperIntegrationCase::FIXED_PRECODING_2X1;
         SionnaMimoConfiguration configuration =
-            m_useMimo ? MakeOpenLoop2x2Configuration() : SionnaMimoConfiguration{};
+            useMimo ? MakeOpenLoop2x2Configuration() : SionnaMimoConfiguration{};
+        if (usePrecoding)
+        {
+            configuration.maxNss = 1;
+            configuration.precodingMatrix = MimoPrecodingMatrix(
+                2,
+                2,
+                1,
+                {{1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {0.0, 1.0}});
+        }
         configuration.receiverNoiseFigureDb = noiseFigureDb;
         configuration.eesmBetaLinear.emplace(mcs, betaLinear);
         configuration.nodeOrientations.emplace(
@@ -460,7 +533,7 @@ class SionnaMimoHelperIntegrationTest : public TestCase
             configuration.txArray.verticalSpacing,
             configuration.txArray.horizontalSpacing,
             "tr38901",
-            m_useMimo ? "VH" : "V");
+            useMimo ? "VH" : "V");
         manualSionna.ConfigureReceiveArray(
             configuration.rxArray.numRows,
             configuration.rxArray.numColumns,
@@ -483,6 +556,10 @@ class SionnaMimoHelperIntegrationTest : public TestCase
         auto manualModel = CreateObject<SionnaSpectrumPropagationLossModel>();
         manualModel->SetReceiverNoiseFigureDb(noiseFigureDb);
         manualModel->SetEesmBeta(mcs, betaLinear);
+        if (configuration.precodingMatrix)
+        {
+            manualModel->SetPrecodingMatrix(*configuration.precodingMatrix);
+        }
 
         SionnaHelper highLevelSionna("", "inproc://sionna-mimo-high-level");
         SpectrumWifiPhyHelper highLevelTxPhyHelper;
@@ -524,6 +601,25 @@ class SionnaMimoHelperIntegrationTest : public TestCase
                                   manualModel->GetEesmBeta(mcs),
                                   1e-12,
                                   "Helper and manual EESM betas differ");
+        NS_TEST_ASSERT_MSG_EQ(highLevelModel->HasPrecodingMatrix(),
+                              manualModel->HasPrecodingMatrix(),
+                              "Helper/manual fixed-precoding presence differs");
+        if (configuration.precodingMatrix)
+        {
+            const auto& highLevelCoefficients =
+                highLevelModel->GetPrecodingMatrix().GetCoefficients();
+            const auto& manualCoefficients =
+                manualModel->GetPrecodingMatrix().GetCoefficients();
+            NS_TEST_ASSERT_MSG_EQ(highLevelCoefficients.size(),
+                                  manualCoefficients.size(),
+                                  "Helper/manual fixed-precoding sizes differ");
+            for (std::size_t i = 0; i < highLevelCoefficients.size(); ++i)
+            {
+                NS_TEST_ASSERT_MSG_EQ(highLevelCoefficients.at(i),
+                                      manualCoefficients.at(i),
+                                      "Helper/manual fixed-precoding coefficient differs");
+            }
+        }
 
         Ptr<SpectrumWifiPhy> manualTxPhy = InstallConfiguredPhy(manualTxPhyHelper);
         Ptr<SpectrumWifiPhy> manualRxPhy = InstallConfiguredPhy(manualRxPhyHelper);
@@ -565,7 +661,7 @@ class SionnaMimoHelperIntegrationTest : public TestCase
         MimoChannelMatrix channel(2,
                                   configuration.numRxAntennas,
                                   configuration.numTxAntennas);
-        if (m_useMimo)
+        if (useMimo)
         {
             for (uint32_t sc = 0; sc < channel.GetNumSubcarriers(); ++sc)
             {
@@ -634,7 +730,7 @@ class SionnaMimoHelperIntegrationTest : public TestCase
         Simulator::Destroy();
     }
 
-    bool m_useMimo;
+    HelperIntegrationCase m_integrationCase;
 };
 
 class MimoChannelMatrixLayoutTest : public TestCase
@@ -666,6 +762,248 @@ class MimoChannelMatrixLayoutTest : public TestCase
         NS_TEST_ASSERT_MSG_EQ(flat.at(0).real(), 1.0, "First coefficient is misplaced");
         NS_TEST_ASSERT_MSG_EQ(flat.at(5).real(), 6.0, "Subcarrier-major layout is wrong");
         NS_TEST_ASSERT_MSG_EQ(channel.Get(1, 1, 1).real(), 8.0, "Tensor lookup is wrong");
+    }
+};
+
+class MimoPrecodingMatrixContractTest : public TestCase
+{
+  public:
+    MimoPrecodingMatrixContractTest()
+        : TestCase("fixed precoding validates subcarrier-TX-stream layout and power")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        const auto identity = MimoPrecodingMatrix::FrequencyFlat(
+            3,
+            2,
+            2,
+            {{1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {1.0, 0.0}});
+        NS_TEST_ASSERT_MSG_EQ(identity.GetNumSubcarriers(),
+                              3,
+                              "Frequency-flat precoding was not expanded over all tones");
+        NS_TEST_ASSERT_MSG_EQ(identity.GetCoefficients().size(),
+                              12,
+                              "Expanded fixed-precoding coefficient count is wrong");
+        NS_TEST_ASSERT_MSG_EQ(identity.Get(2, 0, 0),
+                              std::complex<double>(1.0, 0.0),
+                              "Subcarrier-TX-stream ordering misplaced W[2](0,0)");
+        NS_TEST_ASSERT_MSG_EQ(identity.Get(2, 1, 1),
+                              std::complex<double>(1.0, 0.0),
+                              "Subcarrier-TX-stream ordering misplaced W[2](1,1)");
+        for (uint32_t sc = 0; sc < identity.GetNumSubcarriers(); ++sc)
+        {
+            NS_TEST_ASSERT_MSG_EQ_TOL(identity.GetPower(sc),
+                                      2.0,
+                                      1e-12,
+                                      "Identity precoding changed the total stream power");
+        }
+
+        auto expectRejected = [this](auto makePrecoding, const std::string& description) {
+            bool rejected = false;
+            try
+            {
+                makePrecoding();
+            }
+            catch (const std::invalid_argument& exception)
+            {
+                rejected =
+                    std::string(exception.what()).find("MimoPrecodingMatrix: ") == 0;
+            }
+            NS_TEST_ASSERT_MSG_EQ(rejected, true, description);
+        };
+
+        expectRejected(
+            []() {
+                static_cast<void>(MimoPrecodingMatrix::FrequencyFlat(
+                    0,
+                    1,
+                    1,
+                    {{1.0, 0.0}}));
+            },
+            "A zero-subcarrier precoding tensor was accepted");
+        expectRejected(
+            []() {
+                static_cast<void>(MimoPrecodingMatrix::FrequencyFlat(
+                    1,
+                    2,
+                    3,
+                    std::vector<std::complex<double>>(6, {1.0, 0.0})));
+            },
+            "More streams than TX antennas were accepted");
+        expectRejected(
+            []() {
+                static_cast<void>(MimoPrecodingMatrix::FrequencyFlat(
+                    1,
+                    2,
+                    1,
+                    {{1.0, 0.0}}));
+            },
+            "A coefficient count inconsistent with N_tx times N_s was accepted");
+        expectRejected(
+            []() {
+                static_cast<void>(MimoPrecodingMatrix::FrequencyFlat(
+                    1,
+                    2,
+                    1,
+                    {{1.0, 0.0}, {1.0, 0.0}}));
+            },
+            "A precoder with excess Frobenius power was accepted");
+        expectRejected(
+            []() {
+                static_cast<void>(MimoPrecodingMatrix::FrequencyFlat(
+                    1,
+                    1,
+                    1,
+                    {{std::numeric_limits<double>::quiet_NaN(), 0.0}}));
+            },
+            "A non-finite complex coefficient was accepted");
+        expectRejected(
+            [&identity]() {
+                MimoChannelMatrix mismatchedChannel(2, 2, 2);
+                identity.ValidateForChannel(mismatchedChannel);
+            },
+            "A precoding/CFR subcarrier mismatch was accepted");
+
+        const auto twoStreams = MimoPrecodingMatrix::FrequencyFlat(
+            1,
+            2,
+            2,
+            {{1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {1.0, 0.0}});
+        expectRejected(
+            [&twoStreams]() {
+                MimoChannelMatrix oneRxChannel(1, 1, 2);
+                twoStreams.ValidateForChannel(oneRxChannel);
+            },
+            "More precoded streams than RX antennas were accepted");
+    }
+};
+
+class SuMimoFixedPrecodingTest : public TestCase
+{
+  public:
+    SuMimoFixedPrecodingTest()
+        : TestCase("fixed precoding applies MMSE to exact complex H times W references")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        MimoChannelMatrix sisoChannel(1, 1, 1);
+        sisoChannel.Set(0, 0, 0, {2.0, 1.0});
+        const auto sisoPrecoding = MimoPrecodingMatrix::FrequencyFlat(
+            1,
+            1,
+            1,
+            {{0.0, 1.0}});
+        const auto siso = SuMimoLinkModel::Calculate(sisoChannel, sisoPrecoding, 10.0);
+        NS_TEST_ASSERT_MSG_EQ_TOL(siso.GetSinrLinear(0, 0),
+                                  50.0,
+                                  1e-10,
+                                  "Unit-power SISO precoding changed scalar SNR");
+
+        MimoChannelMatrix channel(2, 2, 2);
+        channel.Set(0, 0, 0, {1.0, 1.0});
+        channel.Set(0, 0, 1, {2.0, 0.0});
+        channel.Set(0, 1, 0, {0.0, 3.0});
+        channel.Set(0, 1, 1, {4.0, -1.0});
+        channel.Set(1, 0, 0, {0.5, -0.5});
+        channel.Set(1, 0, 1, {-1.0, 2.0});
+        channel.Set(1, 1, 0, {3.0, 1.0});
+        channel.Set(1, 1, 1, {-2.0, -1.0});
+
+        const auto identity = MimoPrecodingMatrix::FrequencyFlat(
+            2,
+            2,
+            2,
+            {{1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {1.0, 0.0}});
+        const auto legacy = SuMimoLinkModel::Calculate(channel, 7.5);
+        const auto identityResult = SuMimoLinkModel::Calculate(channel, identity, 7.5);
+        for (uint32_t sc = 0; sc < channel.GetNumSubcarriers(); ++sc)
+        {
+            for (uint32_t stream = 0; stream < 2; ++stream)
+            {
+                NS_TEST_ASSERT_MSG_EQ_TOL(identityResult.GetSinrLinear(sc, stream),
+                                          legacy.GetSinrLinear(sc, stream),
+                                          1e-10,
+                                          "Identity precoding did not reproduce Phase 2");
+            }
+        }
+
+        const double scale = 1.0 / std::sqrt(2.0);
+        const auto complexPrecoding = MimoPrecodingMatrix::FrequencyFlat(
+            2,
+            2,
+            2,
+            {{scale, 0.0}, {0.0, scale}, {0.0, scale}, {scale, 0.0}});
+        const MimoChannelMatrix effective = complexPrecoding.Apply(channel);
+        NS_TEST_ASSERT_MSG_EQ_TOL(effective.Get(0, 0, 0).real(),
+                                  scale,
+                                  1e-12,
+                                  "Complex H[0]W[0] real reference is wrong");
+        NS_TEST_ASSERT_MSG_EQ_TOL(effective.Get(0, 0, 0).imag(),
+                                  3.0 * scale,
+                                  1e-12,
+                                  "Complex H[0]W[0] imaginary reference is wrong");
+        NS_TEST_ASSERT_MSG_EQ_TOL(effective.Get(0, 0, 1).real(),
+                                  scale,
+                                  1e-12,
+                                  "Complex H[0]W[0] second-column real reference is wrong");
+        NS_TEST_ASSERT_MSG_EQ_TOL(effective.Get(0, 0, 1).imag(),
+                                  scale,
+                                  1e-12,
+                                  "Complex H[0]W[0] second-column imaginary reference is wrong");
+        NS_TEST_ASSERT_MSG_EQ_TOL(effective.Get(0, 1, 0).real(),
+                                  scale,
+                                  1e-12,
+                                  "Complex H[0]W[0] second-row real reference is wrong");
+        NS_TEST_ASSERT_MSG_EQ_TOL(effective.Get(0, 1, 0).imag(),
+                                  7.0 * scale,
+                                  1e-12,
+                                  "Complex H[0]W[0] second-row imaginary reference is wrong");
+        NS_TEST_ASSERT_MSG_EQ_TOL(effective.Get(0, 1, 1).real(),
+                                  scale,
+                                  1e-12,
+                                  "Complex H[0]W[0] last-entry real reference is wrong");
+        NS_TEST_ASSERT_MSG_EQ_TOL(effective.Get(0, 1, 1).imag(),
+                                  -scale,
+                                  1e-12,
+                                  "Complex H[0]W[0] last-entry imaginary reference is wrong");
+
+        const auto complexResult =
+            SuMimoLinkModel::Calculate(channel, complexPrecoding, 7.5);
+        const auto effectiveReference = SuMimoLinkModel::Calculate(effective, 7.5);
+        for (uint32_t sc = 0; sc < channel.GetNumSubcarriers(); ++sc)
+        {
+            for (uint32_t stream = 0; stream < 2; ++stream)
+            {
+                NS_TEST_ASSERT_MSG_EQ_TOL(complexResult.GetSinrLinear(sc, stream),
+                                          effectiveReference.GetSinrLinear(sc, stream),
+                                          1e-10,
+                                          "MMSE did not operate on H[k]W[k]");
+            }
+        }
+
+        MimoChannelMatrix selectedChannel(1, 2, 2);
+        selectedChannel.Set(0, 0, 0, {std::sqrt(2.0), 0.0});
+        selectedChannel.Set(0, 1, 1, {std::sqrt(2.0), 0.0});
+        const auto selectedPrecoding = MimoPrecodingMatrix::FrequencyFlat(
+            1,
+            2,
+            1,
+            {{0.0, 0.0}, {0.0, 1.0}});
+        const auto selected =
+            SuMimoLinkModel::Calculate(selectedChannel, selectedPrecoding, 10.0);
+        NS_TEST_ASSERT_MSG_EQ(selected.GetNumStreams(),
+                              1,
+                              "2x2 fixed precoding did not select one stream");
+        NS_TEST_ASSERT_MSG_EQ_TOL(selected.GetSinrLinear(0, 0),
+                                  20.0,
+                                  1e-10,
+                                  "Selected stream did not receive the full total power");
     }
 };
 
@@ -1299,6 +1637,64 @@ class SpectrumWifiPhyMimoAdapterTest : public TestCase
                                   referenceSnr * noisePowerW * 1e-12,
                                   "Equivalent SpectrumWifiPhy power applies noise twice");
 
+        const auto identity = MimoPrecodingMatrix::FrequencyFlat(
+            channel.GetNumSubcarriers(),
+            2,
+            2,
+            {{1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {1.0, 0.0}});
+        adapter->SetPrecodingMatrix(identity);
+        const auto identityResult = adapter->CalculateMimoRx(
+            channel,
+            receivedPowerW,
+            MakeHeTxVector(HePhy::GetHeMcs0(), 2),
+            1000,
+            2,
+            2,
+            bandwidthHz,
+            noiseFigureDb,
+            errorModel);
+        NS_TEST_ASSERT_MSG_EQ_TOL(identityResult.GetLinkResult().GetEffectiveSinrLinear(),
+                                  result.GetLinkResult().GetEffectiveSinrLinear(),
+                                  1e-12,
+                                  "Adapter identity precoding did not reproduce Phase 2");
+        NS_TEST_ASSERT_MSG_EQ_TOL(identityResult.GetLinkResult().GetPacketErrorRate(),
+                                  result.GetLinkResult().GetPacketErrorRate(),
+                                  1e-12,
+                                  "Adapter identity precoding changed PER");
+
+        const auto selectedPrecoding = MimoPrecodingMatrix::FrequencyFlat(
+            channel.GetNumSubcarriers(),
+            2,
+            1,
+            {{0.0, 0.0}, {0.0, 1.0}});
+        adapter->SetPrecodingMatrix(selectedPrecoding);
+        const auto selectedResult = adapter->CalculateMimoRx(
+            channel,
+            receivedPowerW,
+            MakeHeTxVector(HePhy::GetHeMcs0(), 1),
+            1000,
+            2,
+            2,
+            bandwidthHz,
+            noiseFigureDb,
+            errorModel);
+        NS_TEST_ASSERT_MSG_EQ(selectedResult.GetLinkResult().GetMimoResult().GetNumStreams(),
+                              1,
+                              "Adapter did not couple WifiTxVector NSS to W columns");
+        NS_TEST_ASSERT_MSG_EQ_TOL(selectedResult.GetLinkResult().GetEffectiveSinrLinear(),
+                                  2.0 * referenceSnr,
+                                  1e-12,
+                                  "Adapter selected-stream SINR is incorrect");
+        NS_TEST_ASSERT_MSG_EQ_TOL(selectedResult.GetEquivalentReceivedPowerW(),
+                                  referenceSnr * noisePowerW,
+                                  referenceSnr * noisePowerW * 1e-12,
+                                  "Selected-stream AWGN diversity compensation is wrong");
+
+        adapter->ClearPrecodingMatrix();
+        NS_TEST_ASSERT_MSG_EQ(adapter->HasPrecodingMatrix(),
+                              false,
+                              "Adapter did not restore the no-precoding path");
+
         MimoChannelMatrix extraRxChannel(1, 3, 2);
         extraRxChannel.Set(0, 0, 0, {std::sqrt(3.0), 0.0});
         extraRxChannel.Set(0, 1, 1, {std::sqrt(3.0), 0.0});
@@ -1319,6 +1715,27 @@ class SpectrumWifiPhyMimoAdapterTest : public TestCase
                                   10.0 * noisePowerW,
                                   10.0 * noisePowerW * 1e-12,
                                   "AWGN diversity gain was not compensated exactly once");
+
+        MimoChannelMatrix sisoChannel(1, 1, 1);
+        sisoChannel.Set(0, 0, 0, {1.0, 0.0});
+        adapter->SetPrecodingMatrix(MimoPrecodingMatrix::FrequencyFlat(
+            1,
+            1,
+            1,
+            {{0.0, 1.0}}));
+        const auto siso = adapter->CalculateMimoRx(sisoChannel,
+                                                   receivedPowerW,
+                                                   MakeHeTxVector(HePhy::GetHeMcs0(), 1),
+                                                   1000,
+                                                   1,
+                                                   1,
+                                                   bandwidthHz,
+                                                   noiseFigureDb,
+                                                   errorModel);
+        NS_TEST_ASSERT_MSG_EQ_TOL(siso.GetLinkResult().GetEffectiveSinrLinear(),
+                                  referenceSnr,
+                                  1e-12,
+                                  "Adapter SISO fixed precoding changed unit-channel SNR");
     }
 };
 
@@ -1331,11 +1748,15 @@ class SionnaTestSuite : public TestSuite
         AddTestCase(new SionnaMimoHelperDefaultsTest, TestCase::QUICK);
         AddTestCase(new SionnaMimoHelperValidConfigurationTest, TestCase::QUICK);
         AddTestCase(new SionnaMimoHelperInvalidConfigurationTest, TestCase::QUICK);
-        AddTestCase(new SionnaMimoHelperIntegrationTest(false),
+        AddTestCase(new SionnaMimoHelperIntegrationTest(HelperIntegrationCase::SISO),
                     TestCase::QUICK);
-        AddTestCase(new SionnaMimoHelperIntegrationTest(true),
+        AddTestCase(new SionnaMimoHelperIntegrationTest(HelperIntegrationCase::OPEN_LOOP_2X2),
+                    TestCase::QUICK);
+        AddTestCase(new SionnaMimoHelperIntegrationTest(
+                        HelperIntegrationCase::FIXED_PRECODING_2X1),
                     TestCase::QUICK);
         AddTestCase(new MimoChannelMatrixLayoutTest, TestCase::QUICK);
+        AddTestCase(new MimoPrecodingMatrixContractTest, TestCase::QUICK);
         AddTestCase(new WifiLinkBudgetConversionTest, TestCase::QUICK);
         AddTestCase(new WifiLinkBudgetCalculationTest, TestCase::QUICK);
         AddTestCase(new HeEesmFlatChannelTest, TestCase::QUICK);
@@ -1346,6 +1767,7 @@ class SionnaTestSuite : public TestSuite
         AddTestCase(new SuMimoSisoReductionTest, TestCase::QUICK);
         AddTestCase(new SuMimoOrthogonalChannelTest, TestCase::QUICK);
         AddTestCase(new SuMimoFrequencySelectiveTest, TestCase::QUICK);
+        AddTestCase(new SuMimoFixedPrecodingTest, TestCase::QUICK);
         AddTestCase(new SuMimoChannelRankTest, TestCase::QUICK);
         AddTestCase(new SpectrumWifiPhyMimoAdapterTest, TestCase::QUICK);
         AddTestCase(new LegacySisoDeserializationTest, TestCase::QUICK);

@@ -87,6 +87,15 @@ class HeSuMimoLinkAbstraction : public Object
                                  const WifiTxVector& txVector,
                                  uint32_t packetSizeBytes) const;
 
+    /**
+     * Calculate the complete HE result after applying fixed precoding.
+     */
+    HeSuMimoLinkResult Calculate(const MimoChannelMatrix& channel,
+                                 const MimoPrecodingMatrix& precoding,
+                                 const WifiLinkBudgetResult& linkBudget,
+                                 const WifiTxVector& txVector,
+                                 uint32_t packetSizeBytes) const;
+
   private:
     Ptr<ErrorRateModel> m_errorRateModel;
     std::map<uint8_t, double> m_eesmBetaLinear;

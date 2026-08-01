@@ -9,6 +9,7 @@
 #include "ns3/he-phy.h"
 #include "ns3/internet-module.h"
 #include "ns3/mimo-channel-matrix.h"
+#include "ns3/mimo-precoding-matrix.h"
 #include "ns3/mobility-module.h"
 #include "ns3/network-module.h"
 #include "ns3/propagation-module.h"
@@ -125,6 +126,7 @@ MakeMimoConfiguration(uint8_t antennas,
 ScenarioResult
 Evaluate(const std::string& name,
          const MimoChannelMatrix& channel,
+         uint8_t nss,
          double receivedPowerW,
          WifiMode mode,
          uint32_t packetSizeBytes,
@@ -132,13 +134,13 @@ Evaluate(const std::string& name,
          Ptr<SionnaSpectrumPropagationLossModel> receiver,
          Ptr<ErrorRateModel> errorRateModel)
 {
-    const uint8_t nss = static_cast<uint8_t>(channel.GetNumTxAntennas());
     const WifiTxVector txVector = MakeTxVector(mode, nss);
     const auto spectrumResult = receiver->CalculateMimoRx(channel,
                                                           receivedPowerW,
                                                           txVector,
                                                           packetSizeBytes,
-                                                          nss,
+                                                          static_cast<uint8_t>(
+                                                              channel.GetNumTxAntennas()),
                                                           static_cast<uint8_t>(
                                                               channel.GetNumRxAntennas()),
                                                           20e6,
@@ -338,6 +340,19 @@ main(int argc, char* argv[])
         MakeMimoConfiguration(1, mcs, eesmBetaLinear, noiseFigureDb);
     const SionnaMimoConfiguration mimoConfiguration =
         MakeMimoConfiguration(2, mcs, eesmBetaLinear, noiseFigureDb);
+    SionnaMimoConfiguration identityConfiguration = mimoConfiguration;
+    identityConfiguration.precodingMatrix = MimoPrecodingMatrix::FrequencyFlat(
+        numSubcarriers,
+        2,
+        2,
+        {{1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {1.0, 0.0}});
+    SionnaMimoConfiguration selectedConfiguration = mimoConfiguration;
+    selectedConfiguration.maxNss = 1;
+    selectedConfiguration.precodingMatrix = MimoPrecodingMatrix::FrequencyFlat(
+        numSubcarriers,
+        2,
+        1,
+        {{1.0, 0.0}, {0.0, 0.0}});
     const double receivedPowerDbm = WToDbm(receivedPowerW);
 
     if (failureCase == "phy-cfr-mismatch")
@@ -411,10 +426,31 @@ main(int argc, char* argv[])
                        diagnosticTxPhy,
                        diagnosticRxPhy,
                        receiver);
+    SionnaHelper identitySionna("", "inproc://ns3sionna-mimo-identity-diagnostic");
+    SpectrumWifiPhyHelper identityTxPhy;
+    SpectrumWifiPhyHelper identityRxPhy;
+    auto identityReceiver = CreateObject<SionnaSpectrumPropagationLossModel>();
+    SionnaMimoHelper(identityConfiguration)
+        .ApplyForHeMcs(mcs,
+                       identitySionna,
+                       identityTxPhy,
+                       identityRxPhy,
+                       identityReceiver);
+    SionnaHelper selectedSionna("", "inproc://ns3sionna-mimo-selected-diagnostic");
+    SpectrumWifiPhyHelper selectedTxPhy;
+    SpectrumWifiPhyHelper selectedRxPhy;
+    auto selectedReceiver = CreateObject<SionnaSpectrumPropagationLossModel>();
+    SionnaMimoHelper(selectedConfiguration)
+        .ApplyForHeMcs(mcs,
+                       selectedSionna,
+                       selectedTxPhy,
+                       selectedRxPhy,
+                       selectedReceiver);
     auto errorRateModel = CreateObject<TableBasedErrorRateModel>();
 
     ScenarioResult siso = Evaluate("siso-1x1",
                                    sisoChannel,
+                                   1,
                                    receivedPowerW,
                                    mode,
                                    packetSizeBytes,
@@ -423,6 +459,7 @@ main(int argc, char* argv[])
                                    errorRateModel);
     ScenarioResult wellConditioned = Evaluate("well-conditioned-2x2",
                                               wellConditionedChannel,
+                                              2,
                                               receivedPowerW,
                                               mode,
                                               packetSizeBytes,
@@ -431,12 +468,31 @@ main(int argc, char* argv[])
                                               errorRateModel);
     ScenarioResult rankOne = Evaluate("rank-one-2x2",
                                       rankOneChannel,
+                                      2,
                                       receivedPowerW,
                                       mode,
                                       packetSizeBytes,
                                       noiseFigureDb,
                                       receiver,
                                       errorRateModel);
+    ScenarioResult identity = Evaluate("identity-precoded-2x2",
+                                       wellConditionedChannel,
+                                       2,
+                                       receivedPowerW,
+                                       mode,
+                                       packetSizeBytes,
+                                       noiseFigureDb,
+                                       identityReceiver,
+                                       errorRateModel);
+    ScenarioResult selected = Evaluate("selected-stream-2x2",
+                                       wellConditionedChannel,
+                                       1,
+                                       receivedPowerW,
+                                       mode,
+                                       packetSizeBytes,
+                                       noiseFigureDb,
+                                       selectedReceiver,
+                                       errorRateModel);
 
     siso.throughputMbps = RunNetworkScenario(sisoChannel,
                                              sisoConfiguration,
@@ -454,6 +510,16 @@ main(int argc, char* argv[])
                                                 mcs,
                                                 packetSizeBytes,
                                                 receivedPowerDbm);
+    identity.throughputMbps = RunNetworkScenario(wellConditionedChannel,
+                                                 identityConfiguration,
+                                                 mcs,
+                                                 packetSizeBytes,
+                                                 receivedPowerDbm);
+    selected.throughputMbps = RunNetworkScenario(wellConditionedChannel,
+                                                 selectedConfiguration,
+                                                 mcs,
+                                                 packetSizeBytes,
+                                                 receivedPowerDbm);
 
     std::cout << std::fixed << std::setprecision(6);
     std::cout << "explicit_EESM_beta_linear=" << eesmBetaLinear
@@ -461,11 +527,15 @@ main(int argc, char* argv[])
     PrintResult(siso);
     PrintResult(wellConditioned);
     PrintResult(rankOne);
+    PrintResult(identity);
+    PrintResult(selected);
 
     const bool ranksAreCorrect =
         siso.link.GetMimoResult().GetMinimumChannelRank() == 1 &&
         wellConditioned.link.GetMimoResult().GetMinimumChannelRank() == 2 &&
-        rankOne.link.GetMimoResult().GetMinimumChannelRank() == 1;
+        rankOne.link.GetMimoResult().GetMinimumChannelRank() == 1 &&
+        identity.link.GetMimoResult().GetMinimumChannelRank() == 2 &&
+        selected.link.GetMimoResult().GetMinimumChannelRank() == 1;
     const bool multiplexingGain =
         wellConditioned.throughputMbps > 1.5 * siso.throughputMbps &&
         wellConditioned.expectedThroughputMbps > 1.9 * siso.expectedThroughputMbps;
@@ -473,7 +543,20 @@ main(int argc, char* argv[])
         rankOne.link.GetEffectiveSinrLinear() < siso.link.GetEffectiveSinrLinear() &&
         rankOne.throughputMbps < 0.5 * siso.throughputMbps &&
         rankOne.expectedThroughputMbps < siso.expectedThroughputMbps;
-    if (!ranksAreCorrect || !multiplexingGain || !rankOneDegrades)
+    const bool identityPreservesPhase2 =
+        identity.link.GetEffectiveSinrLinear() ==
+            wellConditioned.link.GetEffectiveSinrLinear() &&
+        identity.link.GetPacketErrorRate() == wellConditioned.link.GetPacketErrorRate() &&
+        identity.expectedThroughputMbps == wellConditioned.expectedThroughputMbps &&
+        std::abs(identity.throughputMbps - wellConditioned.throughputMbps) <
+            0.02 * wellConditioned.throughputMbps;
+    const bool selectedStreamIsControlled =
+        selected.link.GetMimoResult().GetNumStreams() == 1 &&
+        std::abs(selected.link.GetEffectiveSinrLinear() - 2.0 *
+                     WifiLinkBudget::DbToLinear(referenceSnrDb)) < 1e-10 &&
+        selected.throughputMbps > 0.9 * siso.throughputMbps;
+    if (!ranksAreCorrect || !multiplexingGain || !rankOneDegrades ||
+        !identityPreservesPhase2 || !selectedStreamIsControlled)
     {
         std::cerr << "Validation failed: choose an MCS/SNR point where the calibrated error "
                      "model resolves the expected full-rank gain and rank-one collapse"
@@ -481,7 +564,8 @@ main(int argc, char* argv[])
         return 1;
     }
 
-    std::cout << "validation=PASS full-rank spatial multiplexing gains; rank-one channel degrades"
+    std::cout << "validation=PASS Phase-2 paths preserved; identity precoding matches; "
+                 "one 2x2 stream selected"
               << std::endl;
     return 0;
 }

@@ -47,6 +47,7 @@ set(proto_source_files model/message.proto)
 set(SOURCE_FILES
         model/he-su-mimo-link-abstraction.cc
         model/mimo-channel-matrix.cc
+        model/mimo-precoding-matrix.cc
         model/su-mimo-link-model.cc
         model/wifi-link-budget.cc
         model/sionna-mobility-model.cc
@@ -64,6 +65,7 @@ set(SOURCE_FILES
 set(HEADER_FILES
         model/he-su-mimo-link-abstraction.h
         model/mimo-channel-matrix.h
+        model/mimo-precoding-matrix.h
         model/su-mimo-link-model.h
         model/wifi-link-budget.h
         model/sionna-mobility-model.h

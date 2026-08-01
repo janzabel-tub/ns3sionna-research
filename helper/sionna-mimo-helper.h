@@ -7,11 +7,13 @@
 #ifndef SIONNA_MIMO_HELPER_H
 #define SIONNA_MIMO_HELPER_H
 
+#include "ns3/mimo-precoding-matrix.h"
 #include "ns3/ptr.h"
 
 #include <array>
 #include <cstdint>
 #include <map>
+#include <optional>
 
 namespace ns3
 {
@@ -121,6 +123,7 @@ struct SionnaMimoConfiguration
     SionnaMimoEffectiveSinrModel effectiveSinrModel{SionnaMimoEffectiveSinrModel::EESM};
     std::map<uint8_t, double> eesmBetaLinear;
     std::map<uint32_t, SionnaMimoOrientation> nodeOrientations;
+    std::optional<MimoPrecodingMatrix> precodingMatrix;
 };
 
 /**
@@ -209,10 +212,22 @@ class SionnaMimoHelper
     /** Return the configured beta, throwing if the HE MCS has no calibration. */
     double GetEesmBeta(uint8_t mcs) const;
 
-    /** Return the modes that are functional in Phase 2. */
+    /** Validate and atomically configure user-provided fixed precoding. */
+    void SetPrecodingMatrix(const MimoPrecodingMatrix& precoding);
+
+    /** Clear fixed precoding if the resulting no-precoding configuration remains valid. */
+    void ClearPrecodingMatrix();
+
+    /** Return whether user-provided fixed precoding is configured. */
+    bool HasPrecodingMatrix() const;
+
+    /** Return the configured fixed precoding tensor, throwing if absent. */
+    const MimoPrecodingMatrix& GetPrecodingMatrix() const;
+
+    /** Return the modes that are functional through Phase 3.1. */
     static const std::array<SionnaMimoMode, 2>& GetSupportedModes();
 
-    /** Return whether a mode is functional in Phase 2. */
+    /** Return whether a mode is functional through Phase 3.1. */
     static bool IsModeSupported(SionnaMimoMode mode);
 
     /**
