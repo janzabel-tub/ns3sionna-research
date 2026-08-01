@@ -20,7 +20,7 @@ namespace ns3
 /**
  * \ingroup sionna
  *
- * A validated user-provided SU-MIMO precoding tensor.
+ * A validated SU-MIMO precoding tensor.
  *
  * Coefficients are stored in subcarrier-major, transmit-antenna-major order:
  * ((subcarrier * N_tx) + tx) * N_s + stream. Every stored matrix obeys
@@ -54,6 +54,19 @@ class MimoPrecodingMatrix
         uint32_t numTxAntennas,
         uint32_t numStreams,
         const std::vector<std::complex<double>>& coefficients);
+
+    /**
+     * Derive single-stream maximum-ratio transmission from a perfect MISO CFR.
+     *
+     * For every subcarrier, this returns W[k] = H[k]^H / ||H[k]||_2. The
+     * operation is deliberately restricted to one receive antenna; the
+     * general MIMO single-stream optimum belongs to SVD precoding.
+     *
+     * \throws std::invalid_argument unless N_rx is one and every subcarrier
+     *         has a finite, non-zero channel norm
+     */
+    static MimoPrecodingMatrix MaximumRatioTransmission(
+        const MimoChannelMatrix& channel);
 
     uint32_t GetNumSubcarriers() const;
     uint32_t GetNumTxAntennas() const;

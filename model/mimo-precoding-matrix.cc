@@ -102,6 +102,44 @@ MimoPrecodingMatrix::FrequencyFlat(
     return MimoPrecodingMatrix(numSubcarriers, numTxAntennas, numStreams, expanded);
 }
 
+MimoPrecodingMatrix
+MimoPrecodingMatrix::MaximumRatioTransmission(const MimoChannelMatrix& channel)
+{
+    if (channel.GetNumRxAntennas() != 1)
+    {
+        Reject("MRT requires exactly one RX antenna");
+    }
+
+    std::vector<std::complex<double>> coefficients;
+    coefficients.reserve(static_cast<std::size_t>(channel.GetNumSubcarriers()) *
+                         channel.GetNumTxAntennas());
+    for (uint32_t sc = 0; sc < channel.GetNumSubcarriers(); ++sc)
+    {
+        double channelNorm = 0.0;
+        for (uint32_t tx = 0; tx < channel.GetNumTxAntennas(); ++tx)
+        {
+            const auto coefficient = channel.Get(sc, 0, tx);
+            if (!std::isfinite(coefficient.real()) || !std::isfinite(coefficient.imag()))
+            {
+                Reject("MRT requires finite CFR coefficients");
+            }
+            channelNorm = std::hypot(channelNorm, std::abs(coefficient));
+        }
+        if (channelNorm == 0.0)
+        {
+            Reject("MRT requires a non-zero channel on every subcarrier");
+        }
+        for (uint32_t tx = 0; tx < channel.GetNumTxAntennas(); ++tx)
+        {
+            coefficients.push_back(std::conj(channel.Get(sc, 0, tx)) / channelNorm);
+        }
+    }
+    return MimoPrecodingMatrix(channel.GetNumSubcarriers(),
+                               channel.GetNumTxAntennas(),
+                               1,
+                               coefficients);
+}
+
 uint32_t
 MimoPrecodingMatrix::GetNumSubcarriers() const
 {

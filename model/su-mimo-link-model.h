@@ -52,7 +52,9 @@ class SuMimoLinkResult
  *
  * Minimal SU-MIMO spatial-multiplexing abstraction. Every transmit antenna
  * carries one independent stream with an equal share of the total power. The
- * receiver has perfect CFR knowledge and applies linear MMSE detection.
+ * receiver has perfect CFR knowledge and applies linear MMSE detection. With
+ * one transmit stream, this detector is equivalent to maximum-ratio combining
+ * and produces rho ||h[k]||_2^2.
  */
 class SuMimoLinkModel
 {

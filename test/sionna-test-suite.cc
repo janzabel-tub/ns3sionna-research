@@ -1007,6 +1007,116 @@ class SuMimoFixedPrecodingTest : public TestCase
     }
 };
 
+class SuMimoSingleStreamMrtMrcTest : public TestCase
+{
+  public:
+    SuMimoSingleStreamMrtMrcTest()
+        : TestCase("single-stream MRT and MRC are normalized and reach the analytical SNR")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        constexpr double referenceSnr = 3.0;
+        MimoChannelMatrix misoChannel(2, 1, 2);
+        misoChannel.Set(0, 0, 0, {1.0, 1.0});
+        misoChannel.Set(0, 0, 1, {-2.0, 1.0});
+        misoChannel.Set(1, 0, 0, {-1.0, 1.0});
+        misoChannel.Set(1, 0, 1, {-1.0, -2.0});
+
+        const auto mrt = MimoPrecodingMatrix::MaximumRatioTransmission(misoChannel);
+        const auto effective = mrt.Apply(misoChannel);
+        const auto mrtResult = SuMimoLinkModel::Calculate(misoChannel, mrt, referenceSnr);
+        NS_TEST_ASSERT_MSG_EQ(mrt.GetNumStreams(), 1, "MRT did not create one stream");
+        for (uint32_t sc = 0; sc < misoChannel.GetNumSubcarriers(); ++sc)
+        {
+            NS_TEST_ASSERT_MSG_EQ_TOL(mrt.GetPower(sc),
+                                      1.0,
+                                      1e-12,
+                                      "MRT violated the fixed-precoding power contract");
+            NS_TEST_ASSERT_MSG_EQ_TOL(effective.Get(sc, 0, 0).real(),
+                                      std::sqrt(7.0),
+                                      1e-12,
+                                      "MRT did not coherently combine the MISO channel");
+            NS_TEST_ASSERT_MSG_EQ_TOL(effective.Get(sc, 0, 0).imag(),
+                                      0.0,
+                                      1e-12,
+                                      "MRT left an unexpected effective-channel phase");
+            NS_TEST_ASSERT_MSG_EQ_TOL(mrtResult.GetSinrLinear(sc, 0),
+                                      referenceSnr * 7.0,
+                                      1e-10,
+                                      "MRT did not reach rho times the squared channel norm");
+        }
+
+        const std::complex<double> commonRotation{0.0, 1.0};
+        MimoChannelMatrix rotatedChannel(1, 1, 2);
+        for (uint32_t tx = 0; tx < 2; ++tx)
+        {
+            rotatedChannel.Set(0, 0, tx, commonRotation * misoChannel.Get(0, 0, tx));
+        }
+        const auto rotatedMrt =
+            MimoPrecodingMatrix::MaximumRatioTransmission(rotatedChannel);
+        for (uint32_t tx = 0; tx < 2; ++tx)
+        {
+            NS_TEST_ASSERT_MSG_EQ_TOL(
+                std::abs(rotatedMrt.Get(0, tx, 0) -
+                         std::conj(commonRotation) * mrt.Get(0, tx, 0)),
+                0.0,
+                1e-12,
+                "MRT did not compensate a common channel-phase rotation");
+        }
+        const auto rotatedResult =
+            SuMimoLinkModel::Calculate(rotatedChannel, rotatedMrt, referenceSnr);
+        NS_TEST_ASSERT_MSG_EQ_TOL(rotatedResult.GetSinrLinear(0, 0),
+                                  mrtResult.GetSinrLinear(0, 0),
+                                  1e-10,
+                                  "A common channel-phase rotation changed MRT SNR");
+
+        MimoChannelMatrix simoChannel(1, 2, 1);
+        simoChannel.Set(0, 0, 0, {1.0, 1.0});
+        simoChannel.Set(0, 1, 0, {2.0, -1.0});
+        const auto mrcResult = SuMimoLinkModel::Calculate(simoChannel, referenceSnr);
+        NS_TEST_ASSERT_MSG_EQ_TOL(mrcResult.GetSinrLinear(0, 0),
+                                  referenceSnr * 7.0,
+                                  1e-10,
+                                  "Single-stream MMSE did not reduce to analytical MRC");
+
+        MimoChannelMatrix sisoChannel(1, 1, 1);
+        sisoChannel.Set(0, 0, 0, {0.0, 2.0});
+        const auto sisoLegacy = SuMimoLinkModel::Calculate(sisoChannel, referenceSnr);
+        const auto sisoMrt = MimoPrecodingMatrix::MaximumRatioTransmission(sisoChannel);
+        const auto sisoMrtResult =
+            SuMimoLinkModel::Calculate(sisoChannel, sisoMrt, referenceSnr);
+        NS_TEST_ASSERT_MSG_EQ(sisoMrtResult.GetSinrLinear(0, 0),
+                              sisoLegacy.GetSinrLinear(0, 0),
+                              "MRT did not exactly preserve the 1x1 result");
+
+        auto expectMrtRejected = [this](const MimoChannelMatrix& channel,
+                                        const std::string& description) {
+            bool rejected = false;
+            try
+            {
+                static_cast<void>(MimoPrecodingMatrix::MaximumRatioTransmission(channel));
+            }
+            catch (const std::invalid_argument& exception)
+            {
+                rejected =
+                    std::string(exception.what()).find("MimoPrecodingMatrix: MRT ") == 0;
+            }
+            NS_TEST_ASSERT_MSG_EQ(rejected, true, description);
+        };
+
+        MimoChannelMatrix zeroChannel(1, 1, 2);
+        expectMrtRejected(zeroChannel, "A zero MISO channel was accepted for MRT");
+        MimoChannelMatrix generalMimoChannel(1, 2, 2);
+        generalMimoChannel.Set(0, 0, 0, {1.0, 0.0});
+        generalMimoChannel.Set(0, 1, 1, {1.0, 0.0});
+        expectMrtRejected(generalMimoChannel,
+                          "A general MIMO channel was ambiguously accepted as MRT/MRC");
+    }
+};
+
 class WifiLinkBudgetConversionTest : public TestCase
 {
   public:
@@ -1768,6 +1878,7 @@ class SionnaTestSuite : public TestSuite
         AddTestCase(new SuMimoOrthogonalChannelTest, TestCase::QUICK);
         AddTestCase(new SuMimoFrequencySelectiveTest, TestCase::QUICK);
         AddTestCase(new SuMimoFixedPrecodingTest, TestCase::QUICK);
+        AddTestCase(new SuMimoSingleStreamMrtMrcTest, TestCase::QUICK);
         AddTestCase(new SuMimoChannelRankTest, TestCase::QUICK);
         AddTestCase(new SpectrumWifiPhyMimoAdapterTest, TestCase::QUICK);
         AddTestCase(new LegacySisoDeserializationTest, TestCase::QUICK);
