@@ -1,6 +1,6 @@
 # ns3sionna: MIMO-Abstraktionsmodell für IEEE 802.11ax/be
 
-Stand: 2. August 2026, Unterphase 3.3 abgeschlossen
+Stand: 2. August 2026, Unterphase 3.4 abgeschlossen
 
 Arbeitszweig: feature/su-mimo-minimal
 
@@ -15,7 +15,7 @@ Precoding und MU-MIMO, wird ausschließlich in ns-3 ausgeführt.
 
 Die Entwicklung erfolgt in kleinen, einzeln testbaren Schritten. Der aktuelle
 Stand umfasst die Unterphasen 1.1 bis 1.4, die vollständige Phase 2 sowie
-die Unterphasen 3.1 bis 3.3: den numerischen SU-MIMO-Kern, konfigurierbare
+die Unterphasen 3.1 bis 3.4: den numerischen SU-MIMO-Kern, konfigurierbare
 Sionna-Arrays, einen
 dimensionssicheren MIMO-Datenvertrag, explizit kalibrierbare
 802.11ax-EESM-/PER-Abbildung und die
@@ -37,9 +37,17 @@ MRC-Kombination validiert. Die neue deterministische SVD-Fabrik wählt pro
 Subcarrier explizit die N_s stärksten numerisch tragfähigen Eigenmoden und
 erzeugt bei gleicher Leistung oder optionaler räumlicher Wasserfüllung erneut
 ein festes W[k]. Rang, Singularwerte, Rauschleistung, Referenz-SNR, aktive
-Moden und Leistungsallokation bleiben vollständig sichtbar. CSI-Feedback,
-CSI-Alterung, automatische Laufzeit-Beamformingmodi, MU-MIMO und die
-Phase-3.5-Integration wurden nicht begonnen.
+Moden und Leistungsallokation bleiben vollständig sichtbar. Die neue
+semantische HE-/EHT-SU-Feedbackdarstellung komprimiert gleichleistungs-
+SVD-Precoder getrennt in Givens-Winkel, quantisiert sie deterministisch mit
+den groben 4/2- oder feinen 6/4-Bit-Codebooks und rekonstruiert daraus erneut
+ein auf den festen-W[k]-Vertrag normalisiertes Ergebnis. Bitumfang,
+Normierungskorrektur sowie phaseninvariante Richtungs- und Koeffizientenfehler
+werden ausgewiesen. MimoCsiAgingModel trennt H_hat[k,t_csi] von H[k,t_tx],
+bildet periodische Aktualisierung und Feedbackverzögerung explizit ab und
+liefert eine gerichtete, array-, modus- und zeitstempelabhängige
+Zustandsidentität. Automatische Laufzeit-Beamformingmodi, MAC-Feedbackframes,
+MU-MIMO und die Phase-3.5-Integration wurden nicht begonnen.
 
 ## 2. Reproduzierbare Ausgangsbasis
 
@@ -310,7 +318,7 @@ summieren sich exakt zur vorgegebenen Gesamtleistung; Wasserfüllung erreicht
 auf den Referenzkanälen mindestens die ideale Rate der geprüften
 Gleichleistungsreferenz, ohne Sendeleistung zu erzeugen.
 
-#### Unterphase 3.4: Quantisierte Rückmeldung und veraltete CSI
+#### Unterphase 3.4: Quantisierte Rückmeldung und veraltete CSI (implementiert)
 
 - Vor der Implementierung das konkret unterstützte HE-/EHT-Feedbackformat,
   Winkel-/Codebookdarstellung, Bitbreiten und Rekonstruktionsreihenfolge
@@ -343,6 +351,9 @@ CSI-Alterung innerhalb derselben Unterphase:
 Abnahmekriterium: CSI-Alter null reproduziert das ideale Precoding exakt;
 kontrolliert veraltete Schätzungen werden nachweislich nur zur Wahl von W
 verwendet, während SINR und PER stets mit dem aktuellen H berechnet werden.
+Die bitgenauen Quantisierungs-, Leistungs-, Timing-, Subraum-, SINR- und
+PER-Regressionen in Abschnitt 7 erfüllen dieses Kriterium für den in
+Abschnitt 5.12 abgegrenzten SU-Feedbackumfang.
 
 #### Unterphase 3.5: Benutzbarkeit und Phasenvalidierung
 
@@ -1124,7 +1135,292 @@ SpectrumWifiPhy-Pfad. Der vorhandene feste-W[k]-Vertrag ist die einzige
 Integration; die benutzerseitige end-to-end Modusauswahl bleibt Unterphase
 3.5 vorbehalten.
 
-## 6. High-Level-API-Vertrag bis Unterphase 3.3
+### 5.12 Quantisierte HE-/EHT-SU-Rückmeldung und CSI-Alterung der Unterphase 3.4
+
+#### Unterstützter Feedbackumfang und Abgrenzung
+
+MimoCompressedBeamformingFeedback bildet die semantische komprimierte
+Beamformingmatrix \(\mathbf V[k]\) aus der HE-/EHT-SU-Rückmeldung ab. IEEE
+802.11ax beschreibt diese Matrix als geordnete Folge von
+\(\phi\)-Phasenwinkeln und reellen \(\psi\)-Givens-Winkeln. EHT übernimmt
+dieselbe komprimierte Darstellung mit erweiterten Grenzen für \(N_c\) und
+\(N_r\); dies ist auch in der öffentlichen
+[IEEE-802.11be-Beamforming-Korrespondenz](https://www.ieee802.org/11/email/stds-802-11-tgbe/msg01987.html)
+festgehalten. Die öffentlich gelisteten
+[HE-Comment-Resolution-Dokumente](https://www.ieee802.org/11/Reports/tgax_update.htm)
+verweisen auf die HE Compressed Beamforming Report- und
+SU-MIMO-Beamforming-Klauseln. Die Implementierung unterstützt daraus bewusst
+folgenden schmalen Vertrag:
+
+- ausschließlich Single-User-Feedback für eine semi-unitäre
+  Gleichleistungs-SVD-Matrix mit \(1\leq N_s\leq N_\mathrm{tx}\);
+- HE mit höchstens acht und EHT mit höchstens 16 TX-Antennen;
+- das grobe SU-Codebook mit \(b_\phi=4,\ b_\psi=2\) sowie das feine
+  SU-Codebook mit \(b_\phi=6,\ b_\psi=4\);
+- eine Matrix je modelliertem Subcarrier und einen unquantisierten
+  Forschungsgrenzfall.
+
+Der Typ ist absichtlich kein serialisierter IEEE-802.11-Action-Frame.
+MIMO-Control-, Average-SNR-/CQI-Felder, MAC-Header, Segmentierung,
+Subcarriergruppierung \(N_g\), Interpolation, RU-/Partial-Bandwidth-Auswahl,
+MU-Exclusive-Feedback und die feineren MU-Codebooks sind nicht implementiert.
+Wassergefülltes W[k] wird ebenfalls nicht als \(\mathbf V[k]\) ausgegeben,
+weil dessen Spalten nicht semi-unitär sind; die Richtungsrückmeldung und eine
+separate Leistungsallokation werden nicht fälschlich vermischt. Damit wird
+weder MU-MIMO noch die Laufzeitintegration aus Unterphase 3.5 vorweggenommen.
+
+#### Givens-Darstellung und verbindliche Winkelreihenfolge
+
+Sei \(m=\min(N_s,N_\mathrm{tx}-1)\). Für jede Stufe
+\(i=0,\ldots,m-1\) enthält \(\mathbf D_i\) auf den Diagonaleinträgen
+\(i,\ldots,N_\mathrm{tx}-2\) die Phasen
+\(\exp(j\phi_{r,i})\); der letzte Eintrag und die Einträge vor \(i\) sind
+eins. \(\mathbf G_{l,i}^{T}(\psi_{l,i})\) ist die reelle Rotation, deren
+\((i,l)\)-Block
+
+\[
+  \begin{bmatrix}
+    \cos\psi_{l,i} & -\sin\psi_{l,i}\\
+    \sin\psi_{l,i} &  \cos\psi_{l,i}
+  \end{bmatrix}
+\]
+
+lautet. Die Rekonstruktion verwendet exakt
+
+\[
+  \widehat{\mathbf V}[k]
+  =
+  \left[
+  \prod_{i=0}^{m-1}
+    \mathbf D_i
+    \left(
+      \mathbf G_{N_\mathrm{tx}-1,i}^{T}
+      \cdots
+      \mathbf G_{i+1,i}^{T}
+    \right)
+  \right]
+  \mathbf I_{N_\mathrm{tx}\times N_s}.
+\]
+
+Die flache Reihenfolge je Subcarrier ist für jede Stufe zuerst
+
+\[
+  \phi_{i,i},\ldots,\phi_{N_\mathrm{tx}-2,i}
+\]
+
+und danach
+
+\[
+  \psi_{i+1,i},\ldots,\psi_{N_\mathrm{tx}-1,i}.
+\]
+
+Die getrennten ganzzahligen \(\phi\)- und \(\psi\)-Arrays sind innerhalb
+ihres Typs subcarrier-major. Die Zahl der Winkel jedes Typs lautet
+
+\[
+  A =
+  \sum_{i=0}^{m-1}(N_\mathrm{tx}-i-1).
+\]
+
+Encode entfernt die für die Linkmetrik irrelevante Phase jeder SVD-Spalte
+deterministisch, extrahiert danach die idealen Winkel stufenweise und
+quantisiert nur diese Winkel. FromQuantizedAngles überspringt die Extraktion
+und erzeugt aus bekannten Integerindizes eine bitgenaue Referenzdarstellung.
+Reconstruct ist davon getrennt und verwendet ausschließlich die gespeicherten
+Indizes. Die idealen SVD-, Feedback- und Rekonstruktionsobjekte bleiben damit
+einzeln prüfbar.
+
+#### Deterministische Quantisierung und Grenzwerte
+
+Für \(\phi\in[0,2\pi)\) und \(2^{b_\phi}\) Zellen gelten
+
+\[
+  q_\phi =
+  \left\lfloor
+    \frac{2^{b_\phi}\phi}{2\pi}
+  \right\rfloor,
+  \qquad
+  \widehat\phi =
+  \frac{2\pi(q_\phi+\tfrac12)}{2^{b_\phi}}.
+\]
+
+Vor der Quantisierung wird \(\phi\) modulo \(2\pi\) normalisiert; der obere
+Rand \(2\pi\) fällt damit eindeutig auf Index null. Für
+\(\psi\in[0,\pi/2]\) gilt
+
+\[
+  q_\psi =
+  \min\left(
+    2^{b_\psi}-1,
+    \left\lfloor
+      \frac{2^{b_\psi+1}\psi}{\pi}
+    \right\rfloor
+  \right),
+  \qquad
+  \widehat\psi =
+  \frac{\pi(q_\psi+\tfrac12)}{2^{b_\psi+1}}.
+\]
+
+Damit rekonstruieren auch die minimalen und maximalen Indizes stets die
+Zellmitte und nie einen mehrdeutigen periodischen Rand. Nicht passende
+Indexanzahlen und Werte außerhalb der gewählten Bitbreite werden vor der
+Rekonstruktion mit std::invalid_argument abgelehnt. Der unquantisierte Modus
+speichert das bereits validierte feste W[k] direkt, rekonstruiert es
+koeffizientenexakt und weist null Feedbackbits aus; null bedeutet hier
+„kein endlicher Drahtumfang modelliert“ und nicht ein kostenloses
+Standardfeedback.
+
+Der reine Winkelumfang ohne PHY-/MAC-Header und ohne CQI ist
+
+\[
+  B_\mathrm{fb}
+  =
+  N_\mathrm{sc} A (b_\phi+b_\psi).
+\]
+
+Für eine 2x1-Matrix sind dies je Subcarrier sechs Bit im groben und zehn Bit
+im feinen SU-Codebook. Eine 3x2-Matrix besitzt je Typ drei Winkel und benötigt
+im feinen Profil 30 Bit je Subcarrier.
+
+#### Leistungsrenormierung und Diagnosegrößen
+
+Obwohl das Produkt idealer Rotationen semi-unitär ist, wird jede quantisiert
+rekonstruierte Matrix vor dem bestehenden festen-W[k]-Konstruktor explizit
+erneut normalisiert. Mit
+
+\[
+  P_\mathrm{vor}[k]
+  =
+  \lVert\widehat{\mathbf V}[k]\rVert_F^2,
+  \qquad
+  a[k]=\sqrt{\frac{N_s}{P_\mathrm{vor}[k]}},
+  \qquad
+  \mathbf W_q[k]=a[k]\widehat{\mathbf V}[k]
+\]
+
+gilt anschließend wieder
+
+\[
+  \lVert\mathbf W_q[k]\rVert_F^2=N_s.
+\]
+
+MimoFeedbackReconstruction weist \(P_\mathrm{vor}[k]\), \(a[k]\) und die
+endgültige Leistung getrennt aus. Nullleistung, nicht endliche Werte oder ein
+Ergebnis außerhalb des festen-W[k]-Vertrags werden abgelehnt.
+
+MimoFeedbackDiagnostics meldet neben \(B_\mathrm{fb}\) zwei
+phaseninvariante Fehler je Subcarrier. Für normierte ideale und
+rekonstruierte Spalten sind dies der mittlere Spalten-Chordalfehler
+
+\[
+  e_\mathrm{ch}[k]
+  =
+  \sqrt{
+    \frac1{N_s}\sum_s
+    \left(
+      1-
+      \frac{
+        |\mathbf w_s^H[k]\mathbf w_{q,s}[k]|^2
+      }{
+        \lVert\mathbf w_s[k]\rVert_2^2
+        \lVert\mathbf w_{q,s}[k]\rVert_2^2
+      }
+    \right)
+  }
+\]
+
+und der RMS-Koeffizientenfehler nach optimaler gemeinsamer Phasenausrichtung
+jeder Spalte. Zusätzlich stehen die Mittelwerte über alle Subcarrier bereit.
+Damit kann der Fehler ohne willkürliche SVD-Spaltenphase verglichen werden.
+Auf den Referenzvektoren ist das feine Codebook nicht schlechter als das
+grobe.
+
+#### Explizite CSI-Zeitachse
+
+MimoCsiAgingModel::Select erhält ausschließlich die zur Auswahl verwendete
+Schätzung
+
+\[
+  \widehat{\mathbf H}[k,t_\mathrm{csi}]
+\]
+
+sowie \(t_\mathrm{csi}\), \(t_\mathrm{tx}\) und eine
+MimoCsiSelectionConfiguration. Mit Aktualisierungsintervall \(T_u\geq0\) und
+Feedbackverzögerung \(d_\mathrm{fb}\geq0\) ist der neueste zum Sendezeitpunkt
+verfügbare Schätzzeitpunkt verbindlich
+
+\[
+  t_\mathrm{csi}
+  =
+  \begin{cases}
+    t_\mathrm{tx}-d_\mathrm{fb}, & T_u=0,\\
+    T_u\left\lfloor
+      \dfrac{t_\mathrm{tx}-d_\mathrm{fb}}{T_u}
+    \right\rfloor, & T_u>0.
+  \end{cases}
+\]
+
+Ein Sendezeitpunkt vor \(d_\mathrm{fb}\) besitzt noch kein verfügbares
+Feedback. Ein explizit übergebener Zeitstempel, der nicht der Gleichung
+entspricht, wird abgelehnt. Das ausgewiesene CSI-Alter ist
+
+\[
+  \Delta t_\mathrm{CSI}=t_\mathrm{tx}-t_\mathrm{csi}.
+\]
+
+\(T_u=0\) und \(d_\mathrm{fb}=0\) bilden den perfekten Nullalter-Grenzfall.
+Select berechnet aus \(\widehat{\mathbf H}[k,t_\mathrm{csi}]\) zuerst das
+deterministische Gleichleistungs-SVD-W[k], danach Feedback und Rekonstruktion.
+CalculateLink verlangt dagegen die davon getrennt übergebene aktuelle CFR
+
+\[
+  \mathbf H[k,t_\mathrm{tx}]
+\]
+
+und berechnet ausschließlich
+\(\mathbf H[k,t_\mathrm{tx}]\mathbf W_q[k]\). Der CSI-Schnappschuss wird in
+diesem Schritt nicht gespeichert oder wiederverwendet. Derselbe feste
+Precoder kann an HeSuMimoLinkAbstraction übergeben werden; dadurch verwenden
+auch EESM und PER explizit die aktuelle CFR. Eine kontrollierte orthogonale
+Subraumrotation liefert im Test mit altem W null SINR und eine entsprechend
+schlechtere PER, während ein statischer Kanal trotz positiven Alters
+unverändert bleibt.
+
+MimoCsiStateIdentity ist der vollständige wertbasierte Schlüssel des
+Auswahlzustands. Er enthält gerichtete TX- und RX-Node-IDs, beide
+Arraygeometrien einschließlich Abstand, Muster, Polarisation und Orientierung,
+den Precodingmodus, HE-/EHT-Feedbackprofil und \(t_\mathrm{csi}\).
+Vertauschte Richtung, eine geänderte Arraykonfiguration, ein anderes Profil
+oder ein anderer CSI-Zeitstempel sind damit verschiedene Zustände. Diese
+Identität ist von der bestehenden rohen Sionna-PropagationCache-Ablage
+getrennt und verhindert, dass ein späterer Laufzeitcache versehentlich
+Precoderzustände verschiedener Richtungen oder Konfigurationen teilt.
+
+Der ideale Aufruf ohne Quantisierung lautet:
+
+    MimoCsiSelectionConfiguration configuration;
+    configuration.numStreams = numStreams;
+    configuration.feedback.codebook =
+        MimoFeedbackCodebook::UNQUANTIZED;
+    configuration.timing.updateInterval = MilliSeconds(5);
+    configuration.timing.feedbackDelay = MilliSeconds(2);
+
+    const auto selection = MimoCsiAgingModel::Select(
+        channelEstimateAtCsiTime,
+        csiTimestamp,
+        transmissionTimestamp,
+        configuration);
+    const auto currentLink = selection.CalculateLink(
+        channelAtTransmissionTime,
+        referenceSnrLinear);
+
+Der neue Vertrag ist noch keine automatische Simulationstaktung:
+SionnaMimoHelper, SpectrumWifiPhy und das bestehende Beispiel wählen weiterhin
+keinen laufzeitabhängigen Precoder. Diese Aktivierung sowie
+maschinenlesbare Beispieloptionen gehören ausschließlich zu Unterphase 3.5.
+
+
+## 6. High-Level-API-Vertrag bis Unterphase 3.4
 
 ### 6.1 Typen, Besitz und Defaults
 
@@ -1358,7 +1654,7 @@ SpectrumChannel-Verdrahtung bleiben unverändert. Ein Programm, das weiterhin
 nur SionnaHelper verwendet, nimmt damit unverändert den bisherigen
 1x1-Defaultpfad.
 
-Funktional unterstützt der Stand bis Unterphase 3.3 SISO, offenen SU-MIMO mit
+Funktional unterstützt der Stand bis Unterphase 3.4 SISO, offenen SU-MIMO mit
 einem Stream je TX-Antenne und festes benutzergegebenes Precoding mit
 \(1\leq N_s\leq\min(N_\mathrm{tx},N_\mathrm{rx})\). Die MRT-Fabrik erzeugt
 für eine explizit übergebene perfekte MISO-CFR ein normiertes Ein-Stream-W[k].
@@ -1367,7 +1663,13 @@ explizit gewählte, numerisch tragfähige Eigenmoden; gleiche Leistung bleibt
 Standard und räumliche Wasserfüllung ist eine explizite Option. Beide Fabriken
 verwenden anschließend unverändert den festen Precodingpfad. Linearer MMSE,
 gemeinsame Unit-Average-Pair-Power-Normalisierung der CFR und EESM bleiben
-unverändert. Typische eindeutige Fehler sind:
+unverändert. MimoCompressedBeamformingFeedback,
+MimoFeedbackReconstruction und MimoFeedbackDiagnostics bilden nun den
+getrennten Feedbackpfad. MimoCsiAgingModel liefert einen festen
+Precoder-Schnappschuss mit explizitem Zeitbezug und zwingt für die
+Linkberechnung eine separate Übertragungskanal-Matrix. Diese wertbasierten
+Typen verändern keine Helper-, PHY-, IPC- oder Cacheobjekte und sind deshalb
+auch ohne Simulator testbar. Typische eindeutige Fehler sind:
 
 - SionnaMimoHelper: open-loop SU-MIMO uses one stream per TX antenna bei
   widersprüchlichem maxNss;
@@ -1387,14 +1689,22 @@ unverändert. Typische eindeutige Fehler sind:
   ... requested ... streams but subcarrier ... has numerical rank ... für
   ungültige Streamwahl oder Rangverlust sowie eindeutige Meldungen für nicht
   endliche CFR-, SNR-, Rausch- und Allokationseingaben.
+- MimoCsiFeedback: SU compressed feedback requires a semi-unitary
+  equal-power precoder beziehungsweise ... angle index exceeds the selected
+  codebook width für nicht darstellbare Leistung oder ungültige Indizes;
+- MimoCsiFeedback: CSI timestamp does not match update interval and feedback
+  delay beziehungsweise ... no CSI feedback is available ... für einen
+  off-grid oder noch nicht verfügbaren Schätzzeitpunkt.
 
 Die Enumwerte für Beamforming und MU-MIMO bleiben ausschließlich reservierte
-API-Namen. Die idealen MRT- und SVD-Fabriken aktivieren insbesondere noch
-nicht SU_BEAMFORMING im High-Level-Helper. CSI-Feedback, CSI-Alterung,
-automatische CSI-Aktualisierung, allgemeine Laufzeit-Modusauswahl, MU-MIMO und
-die Phase-3.5-Integration bleiben nicht implementiert.
+API-Namen. Die idealen MRT- und SVD-Fabriken sowie der neue Feedback-/
+Alterungspfad aktivieren insbesondere noch nicht SU_BEAMFORMING im
+High-Level-Helper. Quantisierung und CSI-Alterung sind als explizite,
+simulationsunabhängige Schritte implementiert; automatische
+CSI-Aktualisierung, allgemeine Laufzeit-Modusauswahl, MAC-Feedbacktransport,
+MU-MIMO und die Phase-3.5-Integration bleiben nicht implementiert.
 
-## 7. Validierung der Unterphasen 1.1 bis 3.3
+## 7. Validierung der Unterphasen 1.1 bis 3.4
 
 Die native Suite sionna enthält nun 25 schnelle Fälle:
 
@@ -1469,6 +1779,16 @@ Die native Suite sionna enthält nun 25 schnelle Fälle:
 25. Protocol-Buffer-Rundlauf einer synthetischen 2 x 2 x 2-CFR mit den
     komplexen Werten 1-j bis 8-8j und indexgenauer Prüfung.
 
+Die eigenständige native Suite `sionna-mimo-csi-feedback` ergänzt zwei Fälle
+für Unterphase 3.4. Der Feedbackfall prüft HE und EHT, beide SU-Codebücher,
+Bitbreiten und Payloadgrößen, exakt rekonstruierte Grenzindizes, deterministische
+Wiederholung, den allgemeinen 3x2-Mehrstromfall, Leistungsrenormierung,
+Phasen-/Subraumfehler sowie die Ablehnung nicht semi-unitärer Wasserfüllungs-
+Precoder und ungültiger Indizes. Der Alterungsfall prüft Nullalter, getrennte
+CSI- und Sende-CFR, Rasterung mit Aktualisierungsintervall und Rückmeldedauer,
+statische und orthogonal gedrehte Kanäle, den daraus folgenden SINR-/PER-Abfall,
+frische CSI, vollständige Zustandsidentität und den unveränderten 1x1-Fall.
+
 Die fünf reinen Python-Vertragstests prüfen Standard- und explizite
 Arraykonfiguration, bytegleiche 1x1-Serialisierung, die sc/rx/tx-Reihenfolge
 einer synthetischen 2x2-CFR, die gemeinsame MIMO-Normalisierung sowie die
@@ -1478,8 +1798,9 @@ Vergleiche des numerischen Kerns verwenden weiterhin eine absolute Toleranz
 von 1e-10; dies gilt auch für Identitäts-Precoding und synthetische
 \(H[k]W[k]\)-Referenzen sowie MRT-/MRC- und SVD-Eigenmode-SINRs.
 Precoderleistung, Phaseninvarianz, effektiver MRT-Kanal, deterministische
-SVD-Basis, Leistungsanteile, Wasserstand und KKT-Gleichheit werden innerhalb
-1e-12 geprüft. Die Link-Budget-/EESM-Vergleiche verwenden ebenfalls 1e-12.
+SVD-Basis, Leistungsanteile, Wasserstand, KKT-Gleichheit und die neue
+Feedback-Leistungsidentität werden innerhalb 1e-12 geprüft. Die
+Link-Budget-/EESM-Vergleiche verwenden ebenfalls 1e-12.
 
 Der reale Server-Integrationstest konfiguriert 1x2-PlanarArrays an TX und RX,
 führt Sionna RT auf der CPU aus und prüft die Form 2 x 2 x 256, 1024 komplexe
@@ -1499,7 +1820,7 @@ erreicht nachweislich den Dimensionsguard im SpectrumWifiPhy-Adapter.
 
 ### 7.1 Ausgeführte CPU-Validierung
 
-Am 2. August 2026 wurden nach Abschluss der Unterphase 3.3 folgende Prüfungen
+Am 2. August 2026 wurden nach Abschluss der Unterphase 3.4 folgende Prüfungen
 auf einem CPU-System erfolgreich ausgeführt:
 
 - gezielter Build von Bibliothek, nativer Testsuite, SU-MIMO-Beispiel und
@@ -1512,6 +1833,12 @@ auf einem CPU-System erfolgreich ausgeführt:
   analytischen Anteilen 0,59375 und 0,40625; Leistung, Wasserstand,
   KKT-Gleichheit und ideale Rate stimmen mit den Referenzen überein. Die
   bestehenden Phase-1-, Phase-2- und Phase-3.1-/3.2-Fälle bleiben bestanden
+- native ns-3-Suite sionna-mimo-csi-feedback: zwei von zwei Fällen bestanden;
+  deterministische HE-/EHT-Quantisierung und Rekonstruktion, Leistungs- und
+  Fehlerdiagnostik, allgemeines 3x2-SU-Feedback sowie CSI-Alterung mit
+  expliziter Zeit- und Zustandsidentität stimmen mit den analytischen
+  Referenzen überein. Der Alterungstest weist zusätzlich den erwarteten
+  SINR-/PER-Verlust bei orthogonal gedrehtem Sendekanal nach
 - SISO-Paritätsmatrix: alle 108 Kombinationen stimmen innerhalb 1e-12 mit der
   direkt aufgerufenen ns-3-Fehlermodellschnittstelle überein
 - frequenzselektive Monotonitätsmatrix: alle 312 PER-Werte bestanden
@@ -1531,8 +1858,8 @@ auf einem CPU-System erfolgreich ausgeführt:
 - reine Python-Vertragssuite: fünf von fünf Fällen in 0,001 s bestanden; der
   separate Legacy-Importlauf bestätigte Sionna 1.2.1, Mitsuba 3.7.1,
   NumPy 1.26.4, TensorFlow im CPU-Modus ohne GPU und ZeroMQ
-- gesamte Sionna-CPU-Serversuite: acht von acht Fällen in 160,110 s bestanden;
-  der reale 2x2-Fall lief in 1,6951 s, lieferte 2 x 2 x 256 und erfüllte die
+- gesamte Sionna-CPU-Serversuite: acht von acht Fällen in 153,015 s bestanden;
+  der reale 2x2-Fall lief in 1,6164 s, lieferte 2 x 2 x 256 und erfüllte die
   Normalisierung innerhalb 1e-6
 - P2P-End-to-End-Test example-sionna-sensing im unveränderten 1x1-Modus:
   drei 1 x 1 x 3072-CFR-Antworten, zwei empfangene UDP-Pakete zu je 1024 Byte
@@ -1559,7 +1886,9 @@ nicht betroffen. Eine Korrektur gehört in eine eigene kleine Baseline-Subphase.
   automatische kanaladaptive Precoderwahl, Beamformingmodi und MU-MIMO sind
   nicht implementiert. Die idealen MRT- und SVD-Fabriken erzeugen außerhalb
   dieses Laufzeitpfads einen festen W[k]-Schnappschuss aus einer explizit
-  übergebenen perfekten CFR.
+  übergebenen perfekten CFR. Quantisiertes HE-/EHT-SU-Feedback und
+  CSI-Alterung erzeugen ebenfalls außerhalb dieses Laufzeitpfads einen festen
+  W[k]-Schnappschuss; die automatische Helper-/PHY-Auswahl ist Unterphase 3.5.
 - Zeitvariable externe Interferenz wird nach der MMSE-/EESM-Abstraktion durch
   InterferenceHelper skalar berücksichtigt. Eine frequenz- und
   antennenabhängige Interferenzkovarianz im MMSE-Detektor ist noch nicht
@@ -1574,25 +1903,32 @@ nicht betroffen. Eine Korrektur gehört in eine eigene kleine Baseline-Subphase.
   bricht das Modell früh ab.
 - TableBasedErrorRateModel ist eine AWGN-Referenz. Seine SNR-/PER-Kurven und
   Paketlängenextrapolation stammen aus ns-3; ihre Grenzen gelten unverändert.
-- Perfekte RX-CSI und die an MRT beziehungsweise SVD übergebene perfekte CFR
-  sind zunächst bewusst idealisiert; ein CSI-Zeitbezug existiert noch nicht.
+- Perfekte RX-CSI bleibt bewusst idealisiert. Für die Precoderwahl trennt der
+  neue Alterungspfad die geschätzte CFR zum CSI-Zeitpunkt explizit von der CFR
+  zum Sendezeitpunkt und weist Alter, Aktualisierungsintervall und
+  Rückmeldedauer aus; eine automatische Kanalschätzung oder Ablaufsteuerung im
+  Helper existiert noch nicht.
 - Ohne W[k] gilt weiterhin genau ein Stream je TX-Antenne. Mit festem W[k]
   sind kontrollierte Streamauswahl und
   \(1\leq N_s\leq\min(N_\mathrm{tx},N_\mathrm{rx})\) implementiert.
 - Die MI-Kompression bleibt eine Diagnosemetrik; nur die explizit konfigurierte
   EESM-Ausgabe wird an ErrorRateModel übergeben.
-- Die bestehende Cache-Schlüsselbildung nimmt Reziprozität an. Für
-  nicht-reziprokes Precoding müssen Richtung und Konfiguration Teil des
-  Schlüssels werden.
+- Die bestehende Rohkanal-Cache-Schlüsselbildung nimmt weiterhin Reziprozität
+  an. Die neue Precoder-Zustandsidentität enthält dagegen gerichtete TX-/RX-
+  Knoten, beide Arraykonfigurationen, Modus, Feedbackkonfiguration und
+  CSI-Zeitpunkt. Ihre Anbindung an einen automatischen Laufzeitcache gehört zu
+  Unterphase 3.5.
 
-Unterphase 3.3 ist abgeschlossen: Auf dem festen W[k]-Vertrag erzeugt die
-SVD-Fabrik je Subcarrier deterministisch die explizit gewählten tragfähigen
-rechten Singulärmoden. Gleiche Streamleistung bleibt Standard; die optionale
-räumliche Wasserfüllung erhält die Gesamtleistung je Subcarrier und weist
-aktive Moden, Anteile, absolute Leistung und Wasserstand aus. Rangverlust
-wird explizit abgelehnt, der 1x1-Grenzfall bleibt exakt kompatibel.
-CSI-Quantisierung/-Feedback, CSI-Alterung, automatische Laufzeitintegration,
-MU-MIMO und Phase 3.5 wurden nicht begonnen.
+Unterphase 3.4 ist abgeschlossen: Der deterministische SVD-Pfad liefert den
+festen semi-unitären W[k]-Schnappschuss für HE-/EHT-SU-Rückmeldung. Die
+Codebücher werden über fest definierte Winkelreihenfolge und Mittelpunkt-
+Quantisierung bitgenau komprimiert, deterministisch rekonstruiert und auf
+Gesamtleistung N_s renormiert; Bitbedarf, Leistung und Fehler werden explizit
+diagnostiziert. Der Alterungspfad trennt CSI- von Sende-CFR, berechnet
+CSI-Zeitpunkt und Alter aus Aktualisierungsintervall und Rückmeldedauer und
+verwendet eine gerichtete, konfigurationsvollständige Zustandsidentität. Der
+1x1-Grenzfall bleibt exakt kompatibel. Automatische Laufzeitintegration,
+MAC-Feedbacktransport, MU-MIMO und Phase 3.5 wurden nicht begonnen.
 
 ## 9. Ausführung
 
@@ -1601,6 +1937,7 @@ Vom ns-3.40-Verzeichnis:
     ./ns3 configure --enable-examples --enable-tests
     ./ns3 build
     ./test.py -s sionna
+    ./test.py -s sionna-mimo-csi-feedback
     ./test.py -s sionna-example-sumimo-minimal
     ./test.py -s sionna-example-mimo-helper-configuration-negative
     ./test.py -s sionna-example-mimo-helper-runtime-negative

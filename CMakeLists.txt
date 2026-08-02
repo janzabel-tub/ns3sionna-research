@@ -47,6 +47,7 @@ set(proto_source_files model/message.proto)
 set(SOURCE_FILES
         model/he-su-mimo-link-abstraction.cc
         model/mimo-channel-matrix.cc
+        model/mimo-csi-feedback.cc
         model/mimo-precoding-matrix.cc
         model/su-mimo-link-model.cc
         model/wifi-link-budget.cc
@@ -65,6 +66,7 @@ set(SOURCE_FILES
 set(HEADER_FILES
         model/he-su-mimo-link-abstraction.h
         model/mimo-channel-matrix.h
+        model/mimo-csi-feedback.h
         model/mimo-precoding-matrix.h
         model/su-mimo-link-model.h
         model/wifi-link-budget.h
@@ -104,6 +106,7 @@ build_lib(
         ${Protobuf_LIBRARIES}
         TEST_SOURCES
         test/sionna-test-suite.cc
+        test/mimo-csi-feedback-test-suite.cc
         ${examples_as_tests_sources}
 )
 
