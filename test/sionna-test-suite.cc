@@ -1117,6 +1117,370 @@ class SuMimoSingleStreamMrtMrcTest : public TestCase
     }
 };
 
+class SuMimoSvdPrecodingAndPowerAllocationTest : public TestCase
+{
+  public:
+    SuMimoSvdPrecodingAndPowerAllocationTest()
+        : TestCase("SVD precoding is deterministic and water filling conserves power")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        constexpr double referenceSnr = 8.0;
+        MimoChannelMatrix frequencySelective(2, 2, 2);
+        frequencySelective.Set(0, 0, 0, {3.0, 0.0});
+        frequencySelective.Set(0, 1, 1, {1.0, 0.0});
+        frequencySelective.Set(1, 0, 0, {2.0, 0.0});
+        frequencySelective.Set(1, 1, 1, {4.0, 0.0});
+
+        const auto svd =
+            MimoPrecodingMatrix::SingularValueDecomposition(frequencySelective, 2);
+        const auto& precoding = svd.GetPrecodingMatrix();
+        NS_TEST_ASSERT_MSG_EQ(
+            static_cast<int>(svd.GetPowerAllocationMode()),
+            static_cast<int>(MimoPowerAllocationMode::EQUAL_POWER),
+            "Equal power is not the SVD default");
+        NS_TEST_ASSERT_MSG_EQ_TOL(svd.GetReferenceSnrLinear(),
+                                  1.0,
+                                  1e-12,
+                                  "Default SVD diagnostic SNR changed");
+        NS_TEST_ASSERT_MSG_EQ_TOL(svd.GetNoisePower(),
+                                  1.0,
+                                  1e-12,
+                                  "Default SVD diagnostic noise changed");
+        NS_TEST_ASSERT_MSG_EQ_TOL(svd.GetRankTolerance(),
+                                  MimoSvdPrecodingOptions::DEFAULT_RANK_TOLERANCE,
+                                  0.0,
+                                  "Default numerical-rank threshold changed");
+        NS_TEST_ASSERT_MSG_EQ_TOL(svd.GetSingularValue(0, 0),
+                                  3.0,
+                                  1e-12,
+                                  "Strongest first-tone singular value is wrong");
+        NS_TEST_ASSERT_MSG_EQ_TOL(svd.GetSingularValue(0, 1),
+                                  1.0,
+                                  1e-12,
+                                  "Second first-tone singular value is wrong");
+        NS_TEST_ASSERT_MSG_EQ_TOL(svd.GetSingularValue(1, 0),
+                                  4.0,
+                                  1e-12,
+                                  "Frequency-selective singular-value sorting is wrong");
+        NS_TEST_ASSERT_MSG_EQ_TOL(svd.GetSingularValue(1, 1),
+                                  2.0,
+                                  1e-12,
+                                  "Frequency-selective second singular value is wrong");
+        NS_TEST_ASSERT_MSG_EQ_TOL(std::abs(precoding.Get(0, 0, 0) -
+                                           std::complex<double>(1.0, 0.0)),
+                                  0.0,
+                                  1e-12,
+                                  "First tone did not select the strongest right singular vector");
+        NS_TEST_ASSERT_MSG_EQ_TOL(std::abs(precoding.Get(1, 1, 0) -
+                                           std::complex<double>(1.0, 0.0)),
+                                  0.0,
+                                  1e-12,
+                                  "Second tone did not reorder the strongest spatial mode");
+        for (uint32_t sc = 0; sc < 2; ++sc)
+        {
+            NS_TEST_ASSERT_MSG_EQ(svd.GetNumericalRank(sc),
+                                  2,
+                                  "Full-rank diagonal SVD reported the wrong rank");
+            NS_TEST_ASSERT_MSG_EQ(svd.GetNumActiveModes(sc),
+                                  2,
+                                  "Equal power did not keep every selected mode active");
+            NS_TEST_ASSERT_MSG_EQ_TOL(svd.GetPowerFraction(sc, 0),
+                                      0.5,
+                                      1e-12,
+                                      "Equal-power first-mode fraction is wrong");
+            NS_TEST_ASSERT_MSG_EQ_TOL(svd.GetPowerFraction(sc, 1),
+                                      0.5,
+                                      1e-12,
+                                      "Equal-power second-mode fraction is wrong");
+            NS_TEST_ASSERT_MSG_EQ_TOL(precoding.GetPower(sc),
+                                      2.0,
+                                      1e-12,
+                                      "SVD violated the fixed-W[k] power contract");
+            NS_TEST_ASSERT_MSG_EQ_TOL(svd.GetTotalAllocatedPower(sc),
+                                      svd.GetTotalPower(),
+                                      1e-12,
+                                      "Equal SVD allocation did not conserve total power");
+        }
+
+        const auto eigenmodes =
+            SuMimoLinkModel::Calculate(frequencySelective, precoding, referenceSnr);
+        const double expectedSinr[2][2] = {{36.0, 4.0}, {64.0, 16.0}};
+        for (uint32_t sc = 0; sc < 2; ++sc)
+        {
+            for (uint32_t stream = 0; stream < 2; ++stream)
+            {
+                NS_TEST_ASSERT_MSG_EQ_TOL(eigenmodes.GetSinrLinear(sc, stream),
+                                          expectedSinr[sc][stream],
+                                          1e-10,
+                                          "SVD eigenmode SINR differs from rho sigma^2 / N_s");
+            }
+        }
+
+        const double inverseSqrtTwo = 1.0 / std::sqrt(2.0);
+        MimoChannelMatrix rotated(1, 2, 2);
+        rotated.Set(0, 0, 0, {3.0 * inverseSqrtTwo, 0.0});
+        rotated.Set(0, 0, 1, {3.0 * inverseSqrtTwo, 0.0});
+        rotated.Set(0, 1, 0, {inverseSqrtTwo, 0.0});
+        rotated.Set(0, 1, 1, {-inverseSqrtTwo, 0.0});
+        const auto rotatedSvd =
+            MimoPrecodingMatrix::SingularValueDecomposition(rotated, 2);
+        const auto rotatedEffective = rotatedSvd.GetPrecodingMatrix().Apply(rotated);
+        NS_TEST_ASSERT_MSG_EQ_TOL(std::abs(rotatedEffective.Get(0, 0, 0) -
+                                           std::complex<double>(3.0, 0.0)),
+                                  0.0,
+                                  1e-12,
+                                  "Unitary-rotated strongest SVD mode is wrong");
+        NS_TEST_ASSERT_MSG_EQ_TOL(std::abs(rotatedEffective.Get(0, 1, 1) -
+                                           std::complex<double>(1.0, 0.0)),
+                                  0.0,
+                                  1e-12,
+                                  "Unitary-rotated second SVD mode is wrong");
+        NS_TEST_ASSERT_MSG_EQ_TOL(std::abs(rotatedEffective.Get(0, 0, 1)),
+                                  0.0,
+                                  1e-12,
+                                  "Unitary rotation left inter-mode coupling");
+
+        MimoChannelMatrix degenerate(1, 2, 2);
+        degenerate.Set(0, 0, 1, {0.0, 1.0});
+        degenerate.Set(0, 1, 0, {1.0, 0.0});
+        const auto degenerateSvd =
+            MimoPrecodingMatrix::SingularValueDecomposition(degenerate, 2);
+        const auto& deterministic = degenerateSvd.GetPrecodingMatrix();
+        for (uint32_t tx = 0; tx < 2; ++tx)
+        {
+            for (uint32_t stream = 0; stream < 2; ++stream)
+            {
+                const std::complex<double> expected =
+                    (tx == stream) ? std::complex<double>(1.0, 0.0) :
+                                     std::complex<double>(0.0, 0.0);
+                NS_TEST_ASSERT_MSG_EQ_TOL(std::abs(deterministic.Get(0, tx, stream) -
+                                                   expected),
+                                          0.0,
+                                          1e-12,
+                                          "Equal singular values did not use the canonical basis");
+            }
+        }
+
+        MimoChannelMatrix sisoChannel(1, 1, 1);
+        sisoChannel.Set(0, 0, 0, {0.0, 2.0});
+        const auto sisoSvd =
+            MimoPrecodingMatrix::SingularValueDecomposition(sisoChannel, 1);
+        NS_TEST_ASSERT_MSG_EQ(
+            SuMimoLinkModel::Calculate(sisoChannel, sisoSvd.GetPrecodingMatrix(), 3.0)
+                .GetSinrLinear(0, 0),
+            SuMimoLinkModel::Calculate(sisoChannel, 3.0).GetSinrLinear(0, 0),
+            "Default SVD precoding did not preserve the 1x1 result");
+
+        auto expectSvdRejected = [this](auto makeSvd, const std::string& description) {
+            bool rejected = false;
+            try
+            {
+                makeSvd();
+            }
+            catch (const std::invalid_argument& exception)
+            {
+                rejected =
+                    std::string(exception.what()).find("MimoPrecodingMatrix: SVD ") == 0;
+            }
+            NS_TEST_ASSERT_MSG_EQ(rejected, true, description);
+        };
+
+        MimoChannelMatrix rankOne(1, 2, 2);
+        rankOne.Set(0, 0, 0, {2.0, 0.0});
+        const auto rankOneSvd =
+            MimoPrecodingMatrix::SingularValueDecomposition(rankOne, 1);
+        NS_TEST_ASSERT_MSG_EQ(rankOneSvd.GetNumericalRank(0),
+                              1,
+                              "Rank-deficient channel did not report rank one");
+        expectSvdRejected(
+            [&rankOne]() {
+                static_cast<void>(
+                    MimoPrecodingMatrix::SingularValueDecomposition(rankOne, 2));
+            },
+            "Rank loss was hidden instead of rejecting two requested streams");
+
+        MimoChannelMatrix thresholdChannel(1, 2, 2);
+        thresholdChannel.Set(0, 0, 0, {1.0, 0.0});
+        thresholdChannel.Set(0, 1, 1, {5e-13, 0.0});
+        expectSvdRejected(
+            [&thresholdChannel]() {
+                static_cast<void>(
+                    MimoPrecodingMatrix::SingularValueDecomposition(thresholdChannel, 2));
+            },
+            "A singular value below the documented relative threshold was accepted");
+        expectSvdRejected(
+            [&frequencySelective]() {
+                static_cast<void>(MimoPrecodingMatrix::SingularValueDecomposition(
+                    frequencySelective, 0));
+            },
+            "Zero requested SVD streams were accepted");
+        expectSvdRejected(
+            [&frequencySelective]() {
+                static_cast<void>(MimoPrecodingMatrix::SingularValueDecomposition(
+                    frequencySelective, 3));
+            },
+            "More SVD streams than antenna dimensions were accepted");
+
+        MimoSvdPrecodingOptions invalidOptions;
+        invalidOptions.rankTolerance = 0.0;
+        expectSvdRejected(
+            [&frequencySelective, &invalidOptions]() {
+                static_cast<void>(MimoPrecodingMatrix::SingularValueDecomposition(
+                    frequencySelective, 2, invalidOptions));
+            },
+            "A zero numerical-rank threshold was accepted");
+        invalidOptions = {};
+        invalidOptions.referenceSnrLinear = 0.0;
+        expectSvdRejected(
+            [&frequencySelective, &invalidOptions]() {
+                static_cast<void>(MimoPrecodingMatrix::SingularValueDecomposition(
+                    frequencySelective, 2, invalidOptions));
+            },
+            "A zero SVD reference SNR was accepted");
+        invalidOptions = {};
+        invalidOptions.noisePower = std::numeric_limits<double>::quiet_NaN();
+        expectSvdRejected(
+            [&frequencySelective, &invalidOptions]() {
+                static_cast<void>(MimoPrecodingMatrix::SingularValueDecomposition(
+                    frequencySelective, 2, invalidOptions));
+            },
+            "A non-finite SVD noise power was accepted");
+        invalidOptions = {};
+        invalidOptions.powerAllocation = static_cast<MimoPowerAllocationMode>(99);
+        expectSvdRejected(
+            [&frequencySelective, &invalidOptions]() {
+                static_cast<void>(MimoPrecodingMatrix::SingularValueDecomposition(
+                    frequencySelective, 2, invalidOptions));
+            },
+            "An unknown SVD power-allocation mode was accepted");
+        MimoChannelMatrix nonFiniteChannel(1, 1, 1);
+        nonFiniteChannel.Set(
+            0, 0, 0, {std::numeric_limits<double>::infinity(), 0.0});
+        expectSvdRejected(
+            [&nonFiniteChannel]() {
+                static_cast<void>(
+                    MimoPrecodingMatrix::SingularValueDecomposition(nonFiniteChannel, 1));
+            },
+            "A non-finite CFR was accepted for SVD");
+
+        MimoChannelMatrix twoModeChannel(1, 2, 2);
+        twoModeChannel.Set(0, 0, 0, {2.0, 0.0});
+        twoModeChannel.Set(0, 1, 1, {1.0, 0.0});
+
+        MimoSvdPrecodingOptions lowSnrOptions;
+        lowSnrOptions.powerAllocation = MimoPowerAllocationMode::WATER_FILLING;
+        lowSnrOptions.referenceSnrLinear = 0.5;
+        lowSnrOptions.noisePower = 2.0;
+        const auto lowWater = MimoPrecodingMatrix::SingularValueDecomposition(
+            twoModeChannel, 2, lowSnrOptions);
+        NS_TEST_ASSERT_MSG_EQ(lowWater.GetNumActiveModes(0),
+                              1,
+                              "Weak mode was active below its water-filling threshold");
+        NS_TEST_ASSERT_MSG_EQ_TOL(lowWater.GetPowerFraction(0, 0),
+                                  1.0,
+                                  1e-12,
+                                  "Below-threshold power was not assigned to the strong mode");
+        NS_TEST_ASSERT_MSG_EQ_TOL(lowWater.GetPowerFraction(0, 1),
+                                  0.0,
+                                  1e-12,
+                                  "Below-threshold weak mode received power");
+        NS_TEST_ASSERT_MSG_EQ_TOL(lowWater.GetAllocatedPower(0, 0),
+                                  1.0,
+                                  1e-12,
+                                  "Low-SNR allocated power is wrong");
+        NS_TEST_ASSERT_MSG_EQ_TOL(lowWater.GetTotalAllocatedPower(0),
+                                  lowWater.GetTotalPower(),
+                                  1e-12,
+                                  "Low-SNR water filling did not conserve power");
+        NS_TEST_ASSERT_MSG_EQ_TOL(lowWater.GetWaterLevel(0),
+                                  1.5,
+                                  1e-12,
+                                  "Low-SNR water level is wrong");
+        NS_TEST_ASSERT_MSG_EQ_TOL(lowWater.GetPrecodingMatrix().GetPower(0),
+                                  2.0,
+                                  1e-12,
+                                  "Low-SNR water filling violated fixed-W[k] normalization");
+
+        MimoSvdPrecodingOptions lowEqualOptions = lowSnrOptions;
+        lowEqualOptions.powerAllocation = MimoPowerAllocationMode::EQUAL_POWER;
+        const auto lowEqual = MimoPrecodingMatrix::SingularValueDecomposition(
+            twoModeChannel, 2, lowEqualOptions);
+        const double lowWaterRate =
+            SuMimoLinkModel::Calculate(twoModeChannel,
+                                       lowWater.GetPrecodingMatrix(),
+                                       lowSnrOptions.referenceSnrLinear)
+                .GetSpectralEfficiency();
+        const double lowEqualRate =
+            SuMimoLinkModel::Calculate(twoModeChannel,
+                                       lowEqual.GetPrecodingMatrix(),
+                                       lowEqualOptions.referenceSnrLinear)
+                .GetSpectralEfficiency();
+        NS_TEST_ASSERT_MSG_EQ((lowWaterRate >= lowEqualRate),
+                              true,
+                              "Low-SNR water filling reduced ideal rate");
+
+        MimoSvdPrecodingOptions highSnrOptions;
+        highSnrOptions.powerAllocation = MimoPowerAllocationMode::WATER_FILLING;
+        highSnrOptions.referenceSnrLinear = 4.0;
+        highSnrOptions.noisePower = 2.0;
+        const auto highWater = MimoPrecodingMatrix::SingularValueDecomposition(
+            twoModeChannel, 2, highSnrOptions);
+        NS_TEST_ASSERT_MSG_EQ(highWater.GetNumActiveModes(0),
+                              2,
+                              "Both modes were not active above the threshold");
+        NS_TEST_ASSERT_MSG_EQ_TOL(highWater.GetPowerFraction(0, 0),
+                                  0.59375,
+                                  1e-12,
+                                  "High-SNR strong-mode water fraction is wrong");
+        NS_TEST_ASSERT_MSG_EQ_TOL(highWater.GetPowerFraction(0, 1),
+                                  0.40625,
+                                  1e-12,
+                                  "High-SNR weak-mode water fraction is wrong");
+        NS_TEST_ASSERT_MSG_EQ_TOL(highWater.GetTotalAllocatedPower(0),
+                                  8.0,
+                                  1e-12,
+                                  "High-SNR water filling did not conserve total power");
+        NS_TEST_ASSERT_MSG_EQ_TOL(highWater.GetWaterLevel(0),
+                                  5.25,
+                                  1e-12,
+                                  "High-SNR water level is wrong");
+        NS_TEST_ASSERT_MSG_EQ_TOL(highWater.GetAllocatedPower(0, 0) + 2.0 / 4.0,
+                                  highWater.GetWaterLevel(0),
+                                  1e-12,
+                                  "Strong active mode violates the KKT water level");
+        NS_TEST_ASSERT_MSG_EQ_TOL(highWater.GetAllocatedPower(0, 1) + 2.0 / 1.0,
+                                  highWater.GetWaterLevel(0),
+                                  1e-12,
+                                  "Weak active mode violates the KKT water level");
+        NS_TEST_ASSERT_MSG_EQ_TOL(highWater.GetPrecodingMatrix().GetPower(0),
+                                  2.0,
+                                  1e-12,
+                                  "High-SNR water filling violated fixed-W[k] normalization");
+
+        MimoSvdPrecodingOptions highEqualOptions = highSnrOptions;
+        highEqualOptions.powerAllocation = MimoPowerAllocationMode::EQUAL_POWER;
+        const auto highEqual = MimoPrecodingMatrix::SingularValueDecomposition(
+            twoModeChannel, 2, highEqualOptions);
+        const double highWaterRate =
+            SuMimoLinkModel::Calculate(twoModeChannel,
+                                       highWater.GetPrecodingMatrix(),
+                                       highSnrOptions.referenceSnrLinear)
+                .GetSpectralEfficiency();
+        const double highEqualRate =
+            SuMimoLinkModel::Calculate(twoModeChannel,
+                                       highEqual.GetPrecodingMatrix(),
+                                       highEqualOptions.referenceSnrLinear)
+                .GetSpectralEfficiency();
+        NS_TEST_ASSERT_MSG_EQ((highWaterRate >= highEqualRate),
+                              true,
+                              "High-SNR water filling reduced ideal rate");
+    }
+};
+
 class WifiLinkBudgetConversionTest : public TestCase
 {
   public:
@@ -1879,6 +2243,7 @@ class SionnaTestSuite : public TestSuite
         AddTestCase(new SuMimoFrequencySelectiveTest, TestCase::QUICK);
         AddTestCase(new SuMimoFixedPrecodingTest, TestCase::QUICK);
         AddTestCase(new SuMimoSingleStreamMrtMrcTest, TestCase::QUICK);
+        AddTestCase(new SuMimoSvdPrecodingAndPowerAllocationTest, TestCase::QUICK);
         AddTestCase(new SuMimoChannelRankTest, TestCase::QUICK);
         AddTestCase(new SpectrumWifiPhyMimoAdapterTest, TestCase::QUICK);
         AddTestCase(new LegacySisoDeserializationTest, TestCase::QUICK);

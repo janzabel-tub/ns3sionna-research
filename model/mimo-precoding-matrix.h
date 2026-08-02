@@ -17,6 +17,35 @@
 namespace ns3
 {
 
+/** Spatial power allocation used by ideal per-subcarrier SVD precoding. */
+enum class MimoPowerAllocationMode
+{
+    EQUAL_POWER,
+    WATER_FILLING
+};
+
+/**
+ * \ingroup sionna
+ * Options for ideal per-subcarrier SVD precoding.
+ *
+ * The default is equal power. Water filling is confined to the selected
+ * spatial modes of each subcarrier and therefore preserves the per-tone total
+ * power. The total power used for diagnostics is referenceSnrLinear times
+ * noisePower.
+ */
+struct MimoSvdPrecodingOptions
+{
+    /** A singular value is non-zero iff sigma > tolerance * sigma_max. */
+    static constexpr double DEFAULT_RANK_TOLERANCE = 1e-12;
+
+    MimoPowerAllocationMode powerAllocation{MimoPowerAllocationMode::EQUAL_POWER};
+    double referenceSnrLinear{1.0};
+    double noisePower{1.0};
+    double rankTolerance{DEFAULT_RANK_TOLERANCE};
+};
+
+class MimoSvdPrecodingResult;
+
 /**
  * \ingroup sionna
  *
@@ -68,6 +97,24 @@ class MimoPrecodingMatrix
     static MimoPrecodingMatrix MaximumRatioTransmission(
         const MimoChannelMatrix& channel);
 
+    /**
+     * Derive deterministic per-subcarrier SVD precoding from perfect CFR.
+     *
+     * The requested strongest right singular vectors are used as W[k]. Equal
+     * power is the default. In water-filling mode, their column norms encode
+     * the allocated powers while preserving ||W[k]||_F^2 = N_s.
+     *
+     * \param channel perfect frequency-selective MIMO CFR
+     * \param numStreams explicit number of selected spatial modes
+     * \param options rank threshold and power-allocation inputs
+     * \throws std::invalid_argument for invalid inputs or if any subcarrier's
+     *         numerical rank is smaller than numStreams
+     */
+    static MimoSvdPrecodingResult SingularValueDecomposition(
+        const MimoChannelMatrix& channel,
+        uint32_t numStreams,
+        const MimoSvdPrecodingOptions& options = {});
+
     uint32_t GetNumSubcarriers() const;
     uint32_t GetNumTxAntennas() const;
     uint32_t GetNumStreams() const;
@@ -99,6 +146,53 @@ class MimoPrecodingMatrix
     uint32_t m_numTxAntennas;
     uint32_t m_numStreams;
     std::vector<std::complex<double>> m_coefficients;
+};
+
+/**
+ * \ingroup sionna
+ * Immutable diagnostics and fixed W[k] produced by ideal SVD precoding.
+ */
+class MimoSvdPrecodingResult
+{
+  public:
+    const MimoPrecodingMatrix& GetPrecodingMatrix() const;
+    MimoPowerAllocationMode GetPowerAllocationMode() const;
+    double GetReferenceSnrLinear() const;
+    double GetNoisePower() const;
+    double GetTotalPower() const;
+    double GetRankTolerance() const;
+
+    uint32_t GetNumericalRank(uint32_t subcarrier) const;
+    uint32_t GetNumActiveModes(uint32_t subcarrier) const;
+    double GetSingularValue(uint32_t subcarrier, uint32_t stream) const;
+    double GetPowerFraction(uint32_t subcarrier, uint32_t stream) const;
+    double GetAllocatedPower(uint32_t subcarrier, uint32_t stream) const;
+    double GetTotalAllocatedPower(uint32_t subcarrier) const;
+
+    /** Water level in power units; zero for equal-power allocation. */
+    double GetWaterLevel(uint32_t subcarrier) const;
+
+  private:
+    friend class MimoPrecodingMatrix;
+
+    MimoSvdPrecodingResult(MimoPrecodingMatrix precodingMatrix,
+                           const MimoSvdPrecodingOptions& options,
+                           std::vector<uint32_t> numericalRanks,
+                           std::vector<uint32_t> activeModes,
+                           std::vector<double> singularValues,
+                           std::vector<double> powerFractions,
+                           std::vector<double> waterLevels);
+
+    std::size_t GetFlatIndex(uint32_t subcarrier, uint32_t stream) const;
+
+    MimoPrecodingMatrix m_precodingMatrix;
+    MimoSvdPrecodingOptions m_options;
+    double m_totalPower;
+    std::vector<uint32_t> m_numericalRanks;
+    std::vector<uint32_t> m_activeModes;
+    std::vector<double> m_singularValues;
+    std::vector<double> m_powerFractions;
+    std::vector<double> m_waterLevels;
 };
 
 } // namespace ns3

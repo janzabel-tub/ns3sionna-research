@@ -1,6 +1,6 @@
 # ns3sionna: MIMO-Abstraktionsmodell für IEEE 802.11ax/be
 
-Stand: 1. August 2026, Unterphase 3.2 abgeschlossen
+Stand: 2. August 2026, Unterphase 3.3 abgeschlossen
 
 Arbeitszweig: feature/su-mimo-minimal
 
@@ -15,8 +15,8 @@ Precoding und MU-MIMO, wird ausschließlich in ns-3 ausgeführt.
 
 Die Entwicklung erfolgt in kleinen, einzeln testbaren Schritten. Der aktuelle
 Stand umfasst die Unterphasen 1.1 bis 1.4, die vollständige Phase 2 sowie
-die Unterphasen 3.1 und 3.2:
-den numerischen SU-MIMO-Kern, konfigurierbare Sionna-Arrays, einen
+die Unterphasen 3.1 bis 3.3: den numerischen SU-MIMO-Kern, konfigurierbare
+Sionna-Arrays, einen
 dimensionssicheren MIMO-Datenvertrag, explizit kalibrierbare
 802.11ax-EESM-/PER-Abbildung und die
 schmale Einkopplung in den SpectrumWifiPhy-Empfangspfad. SionnaMimoHelper legt
@@ -32,10 +32,14 @@ benutzergegebener Precoder unterstützt nun frequenzflaches und
 frequenzselektives festes W[k], einschließlich kontrollierter Streamauswahl
 mit N_s < N_tx. Darauf aufbauend erzeugt ns-3 nun für den eindeutigen
 MISO-Fall aus perfekter CFR ein leistungsnormalisiertes Ein-Stream-MRT-W[k].
-Für N_tx = 1 ist der bestehende Ein-Stream-MMSE-Pfad analytisch und automatisch
-als äquivalente MRC-Kombination validiert. Allgemeines SVD-Precoding,
-CSI-Feedback, adaptive Laufzeit-Beamformingmodi und MU-MIMO wurden nicht
-begonnen.
+Für N_tx = 1 ist der bestehende Ein-Stream-MMSE-Pfad als äquivalente
+MRC-Kombination validiert. Die neue deterministische SVD-Fabrik wählt pro
+Subcarrier explizit die N_s stärksten numerisch tragfähigen Eigenmoden und
+erzeugt bei gleicher Leistung oder optionaler räumlicher Wasserfüllung erneut
+ein festes W[k]. Rang, Singularwerte, Rauschleistung, Referenz-SNR, aktive
+Moden und Leistungsallokation bleiben vollständig sichtbar. CSI-Feedback,
+CSI-Alterung, automatische Laufzeit-Beamformingmodi, MU-MIMO und die
+Phase-3.5-Integration wurden nicht begonnen.
 
 ## 2. Reproduzierbare Ausgangsbasis
 
@@ -272,7 +276,7 @@ MRT-/MRC-Test in Abschnitt 7 erfüllt dieses Kriterium einschließlich
 Phaseninvarianz und eindeutiger Ablehnung der Null- und allgemeinen
 MIMO-Fälle.
 
-#### Unterphase 3.3: SVD-Precoding und Leistungsallokation
+#### Unterphase 3.3: SVD-Precoding und Leistungsallokation (implementiert)
 
 - Pro Subcarrier H[k] = U[k] Sigma[k] V^H[k] zerlegen und die N_s stärksten
   rechten Singulärvektoren bei zunächst gleicher Streamleistung als W[k]
@@ -873,12 +877,13 @@ CFR-Antennendimensionen geprüft, bevor ErrorRateModel- oder Empfangszustand
 verändert wird. WifiTxVector::GetNss muss bei vorhandenem W[k] exakt dessen
 Spaltenzahl, andernfalls weiterhin exakt \(N_\mathrm{tx}\) sein.
 
-Bis Unterphase 3.1 implementiert der Vertrag ausschließlich benutzergegebenes
-festes Precoding. Unterphase 3.2 ergänzt darauf genau eine CFR-abhängige
-Erzeugungsfunktion für MISO-MRT; der erzeugte Werttyp durchläuft anschließend
-unverändert denselben H[k]W[k]-Pfad. Allgemeines SVD-Precoding,
-CSI-Rückmeldung, adaptive Laufzeit-Beamformingmodi und MU-MIMO bleiben
-außerhalb dieses Vertrags.
+Unterphase 3.1 implementiert benutzergegebenes festes Precoding, Unterphase
+3.2 ergänzt die CFR-abhängige MISO-MRT-Fabrik und Unterphase 3.3 die
+deterministische allgemeine SVD-Fabrik mit gleicher oder wassergefüllter
+räumlicher Leistung. Alle erzeugen unveränderliche W[k]-Schnappschüsse, die
+anschließend denselben H[k]W[k]-Pfad durchlaufen. CSI-Rückmeldung, CSI-Alterung,
+automatische Laufzeit-Beamformingmodi und MU-MIMO bleiben außerhalb dieses
+Vertrags.
 
 ### 5.10 Ein-Stream-MRT/MRC der Unterphase 3.2
 
@@ -956,7 +961,170 @@ periodische Aktualisierung ein. Der erzeugte Precoder kann wie jeder feste
 2x1-Precoder durch die bereits validierten Pfade aus Unterphase 3.1 geführt
 werden; die end-to-end Modusauswahl bleibt Unterphase 3.5 vorbehalten.
 
-## 6. High-Level-API-Vertrag bis Unterphase 3.2
+
+### 5.11 Deterministisches SVD-Precoding und Leistungsallokation der Unterphase 3.3
+
+Für jeden Subcarrier berechnet
+MimoPrecodingMatrix::SingularValueDecomposition aus der explizit übergebenen
+perfekten CFR eine dünne Jacobi-SVD
+
+\[
+  \mathbf H[k]=\mathbf U[k]\boldsymbol\Sigma[k]\mathbf V^H[k],
+  \qquad
+  \sigma_0[k]\geq\sigma_1[k]\geq\ldots\geq0.
+\]
+
+Die Streamzahl wird nicht aus dem Kanal erraten, sondern als \(N_s\) explizit
+übergeben und muss
+
+\[
+  1\leq N_s\leq\min(N_\mathrm{tx},N_\mathrm{rx})
+\]
+
+erfüllen. Der numerische Rang je Subcarrier ist
+
+\[
+  r[k]=\#\left\{i:\sigma_i[k]>
+  \tau_\mathrm{rank}\sigma_0[k]\right\}.
+\]
+
+Der dokumentierte Standard ist
+\(\tau_\mathrm{rank}=10^{-12}\); ein benutzergegebener Wert muss endlich
+und strikt in (0,1) liegen. Gilt auf auch nur einem Subcarrier
+\(r[k]<N_s\), wird der gesamte Fabrikaufruf mit Subcarrierindex, geforderter
+Streamzahl und gefundenem Rang abgelehnt. Es gibt weder eine versteckte
+Regularisierung noch eine stille Verringerung von \(N_s\). Nicht endliche
+CFR-Koeffizienten werden vor der Zerlegung zurückgewiesen.
+
+Die von Eigen absteigend gelieferten Singularwerte erhalten zusätzlich eine
+explizite deterministische Vektorkonvention. Zwei Werte derselben Zerlegung
+gelten bei
+
+\[
+  |\sigma_i-\sigma_j|\leq10^{-12}\sigma_0
+\]
+
+als numerisch gleich. Für jede solche entartete Gruppe wird nicht die vom
+SVD-Algorithmus beliebig gewählte Basis übernommen. Stattdessen bildet ns-3
+den eindeutigen Unterraumprojektor
+\(\mathbf P=\mathbf V_g\mathbf V_g^H\), projiziert die kanonischen
+TX-Koordinatenachsen und orthonormalisiert sie deterministisch. Je Schritt
+wird die Achse mit der größten Residualnorm gewählt; numerisch gleiche
+Kandidaten verwenden den kleinsten TX-Index. Abschließend wird jeder
+Singulärvektor so phasengedreht, dass sein betragsgrößter Eintrag reell und
+nicht negativ ist; bei gleichem Betrag gewinnt ebenfalls der kleinste
+TX-Index. Damit sind Reihenfolge, Vorzeichen beziehungsweise komplexe Phase
+und die Basis bei gleichen Singularwerten vollständig festgelegt.
+
+#### Gleiche Leistung als Standard
+
+Im Standardmodus MimoPowerAllocationMode::EQUAL_POWER gilt für alle gewählten
+Moden
+
+\[
+  f_s[k]=\frac{1}{N_s},
+  \qquad
+  \mathbf W[k]=[\mathbf v_0[k],\ldots,\mathbf v_{N_s-1}[k]].
+\]
+
+Damit besitzt jede Spalte Norm eins und der Vertrag aus Abschnitt 5.9 bleibt
+unverändert:
+
+\[
+  \lVert\mathbf W[k]\rVert_F^2=N_s.
+\]
+
+Die SVD-Moden sind orthogonal. Der unveränderte MMSE-Kern liefert deshalb
+ohne Inter-Stream-Interferenz
+
+\[
+  \gamma_s[k]=\frac{\rho}{N_s}\sigma_s^2[k].
+\]
+
+Der 1x1-Grenzfall verwendet den einzigen rechten Singulärvektor mit
+Einheitsnorm und reproduziert das bisherige skalare Ergebnis exakt. Die
+Optionen verwenden für die normierten Leistungsdiagnosen standardmäßig
+\(\rho=1\) und \(N=1\); die gleichmäßige Richtungsauswahl ist davon
+unabhängig.
+
+#### Optionale räumliche Wasserfüllung
+
+Wasserfüllung wird nur durch die explizite Auswahl
+MimoPowerAllocationMode::WATER_FILLING aktiviert. Sie verteilt die Leistung
+ausschließlich über die \(N_s\) bereits gewählten räumlichen SVD-Moden eines
+Subcarriers. Zwischen Subcarriern wird keine Leistung verschoben; spektrale
+Maske und Gesamtleistung je Subcarrier bleiben daher unverändert. Mit
+Rauschleistung \(N>0\), Referenz-SNR \(\rho>0\), Gesamtleistung
+\(P=\rho N\) und Modengewinn \(g_s[k]=\sigma_s^2[k]\) lauten die
+Leistungsanteile
+
+\[
+  f_s[k]=\left(
+    \nu[k]-\frac{1}{\rho g_s[k]}
+  \right)^+,
+  \qquad
+  \sum_{s=0}^{N_s-1}f_s[k]=1.
+\]
+
+Der aktive Modensatz und der normierte Wasserstand \(\nu[k]\) werden
+deterministisch aus den absteigend sortierten Moden bestimmt. Eine Mode am
+exakten Aktivierungsschwellwert bleibt inaktiv. Der Precoder skaliert danach
+
+\[
+  \mathbf w_s[k]=\sqrt{N_s f_s[k]}\,\mathbf v_s[k].
+\]
+
+Somit gilt auch bei inaktiven Nullspalten exakt
+
+\[
+  \sum_s\lVert\mathbf w_s[k]\rVert_2^2
+  =N_s\sum_s f_s[k]=N_s.
+\]
+
+Die physikalisch ausgewiesene Modenleistung und der Wasserstand sind
+
+\[
+  p_s[k]=P f_s[k],
+  \qquad
+  \mu[k]=P\nu[k].
+\]
+
+Für jede aktive Mode erfüllen sie die KKT-Bedingung
+
+\[
+  p_s[k]+\frac{N}{g_s[k]}=\mu[k],
+\]
+
+während inaktive Moden keinen negativen Leistungsanteil erhalten. Eine
+abschließende Rundungskorrektur wird ausschließlich auf den letzten aktiven
+Anteil angewendet, sodass die Anteile wieder exakt zur normierten
+Gesamtleistung summieren. Alle Gewinne, Anteile und Wasserstände werden auf
+Endlichkeit und Nichtnegativität geprüft.
+
+MimoSvdPrecodingResult hält den festen Precoder sowie pro Subcarrier
+numerischen Rang, gewählte Singularwerte, aktive Modenzahl, Leistungsanteile,
+absolute Modenleistungen, deren Summe und den Wasserstand. Zusätzlich werden
+Rauschleistung, Referenz-SNR, Gesamtleistung und Rangtoleranz unverändert
+ausgewiesen. Ein idealer Aufruf mit Wasserfüllung lautet:
+
+    MimoSvdPrecodingOptions options;
+    options.powerAllocation = MimoPowerAllocationMode::WATER_FILLING;
+    options.referenceSnrLinear = rho;
+    options.noisePower = noisePower;
+
+    const auto svd = MimoPrecodingMatrix::SingularValueDecomposition(
+        channelAtCsiTime, numStreams, options);
+    const auto result = SuMimoLinkModel::Calculate(
+        channelAtCsiTime, svd.GetPrecodingMatrix(), options.referenceSnrLinear);
+
+Wie MRT erzeugt auch SVD ausschließlich einen unveränderlichen perfekten-CSI-
+W[k]-Schnappschuss. Unterphase 3.3 aktiviert weder SU_BEAMFORMING im Helper
+noch automatische Aktualisierung, Feedback, CSI-Zeitbezug oder einen neuen
+SpectrumWifiPhy-Pfad. Der vorhandene feste-W[k]-Vertrag ist die einzige
+Integration; die benutzerseitige end-to-end Modusauswahl bleibt Unterphase
+3.5 vorbehalten.
+
+## 6. High-Level-API-Vertrag bis Unterphase 3.3
 
 ### 6.1 Typen, Besitz und Defaults
 
@@ -1190,12 +1358,14 @@ SpectrumChannel-Verdrahtung bleiben unverändert. Ein Programm, das weiterhin
 nur SionnaHelper verwendet, nimmt damit unverändert den bisherigen
 1x1-Defaultpfad.
 
-Funktional unterstützt der Stand bis Unterphase 3.2 SISO, offenen SU-MIMO mit
+Funktional unterstützt der Stand bis Unterphase 3.3 SISO, offenen SU-MIMO mit
 einem Stream je TX-Antenne und festes benutzergegebenes Precoding mit
 \(1\leq N_s\leq\min(N_\mathrm{tx},N_\mathrm{rx})\). Die MRT-Fabrik erzeugt
-zusätzlich für eine explizit übergebene perfekte MISO-CFR ein normiertes
-Ein-Stream-W[k], das anschließend denselben festen Precodingpfad verwendet.
-Linearer MMSE,
+für eine explizit übergebene perfekte MISO-CFR ein normiertes Ein-Stream-W[k].
+Die SVD-Fabrik erzeugt aus einer allgemeinen perfekten CFR ein festes W[k] für
+explizit gewählte, numerisch tragfähige Eigenmoden; gleiche Leistung bleibt
+Standard und räumliche Wasserfüllung ist eine explizite Option. Beide Fabriken
+verwenden anschließend unverändert den festen Precodingpfad. Linearer MMSE,
 gemeinsame Unit-Average-Pair-Power-Normalisierung der CFR und EESM bleiben
 unverändert. Typische eindeutige Fehler sind:
 
@@ -1212,17 +1382,21 @@ unverändert. Typische eindeutige Fehler sind:
   widersprüchlich sind;
 - MimoPrecodingMatrix: MRT requires exactly one RX antenna beziehungsweise
   ... a non-zero channel on every subcarrier für mehrdeutige oder nicht
-  normierbare MRT-Eingaben.
+  normierbare MRT-Eingaben;
+- MimoPrecodingMatrix: SVD stream count must be in ... beziehungsweise
+  ... requested ... streams but subcarrier ... has numerical rank ... für
+  ungültige Streamwahl oder Rangverlust sowie eindeutige Meldungen für nicht
+  endliche CFR-, SNR-, Rausch- und Allokationseingaben.
 
 Die Enumwerte für Beamforming und MU-MIMO bleiben ausschließlich reservierte
-API-Namen. Die ideale MRT-Fabrik aus Unterphase 3.2 aktiviert insbesondere
-noch nicht SU_BEAMFORMING im High-Level-Helper. SVD, CSI-Feedback,
-automatische CSI-Aktualisierung, allgemeines Beamforming und MU-MIMO bleiben
-nicht implementiert.
+API-Namen. Die idealen MRT- und SVD-Fabriken aktivieren insbesondere noch
+nicht SU_BEAMFORMING im High-Level-Helper. CSI-Feedback, CSI-Alterung,
+automatische CSI-Aktualisierung, allgemeine Laufzeit-Modusauswahl, MU-MIMO und
+die Phase-3.5-Integration bleiben nicht implementiert.
 
-## 7. Validierung der Unterphasen 1.1 bis 3.2
+## 7. Validierung der Unterphasen 1.1 bis 3.3
 
-Die native Suite sionna enthält nun 24 schnelle Fälle:
+Die native Suite sionna enthält nun 25 schnelle Fälle:
 
 1. API-Defaulttest für den vollständigen legacy-kompatiblen SISO-Vertrag,
    leere EESM-Kalibrierung, fehlendes W[k] und exakt zwei gemeldete
@@ -1278,14 +1452,21 @@ Die native Suite sionna enthält nun 24 schnelle Fälle:
     \(\rho\lVert h\rVert_2^2\), gemeinsame Phasendrehung, äquivalentes
     1x2-SIMO-MRC, exakte 1x1-Parität sowie die eindeutige Ablehnung von
     Nullkanal und allgemeinem 2x2-MIMO.
-21. Mindestkanalrang eins beziehungsweise zwei für Rang-1- und orthogonale
+21. Deterministischer SVD-/Leistungsallokationstest für diagonale, unitär
+    gedrehte, frequenzselektive, rangdefiziente und gleichsinguläre Kanäle.
+    Er prüft explizite Stream-/Ranggrenzen, den relativen Rangschwellwert,
+    Phasen-/Entartungskonvention, 1x1-Parität und analytische Eigenmode-SINRs.
+    Zwei Zweimodenfälle unterhalb und oberhalb der Wasserfüllschwelle prüfen
+    aktive Moden, endliche nichtnegative Anteile, exakte Leistungserhaltung,
+    Wasserstand, KKT-Bedingungen und mindestens die Gleichleistungsrate.
+22. Mindestkanalrang eins beziehungsweise zwei für Rang-1- und orthogonale
     2x2-Kanäle über alle Subcarrier.
-22. Spectrumadapter-Test für exaktes Rauschleistungs- und AWGN-Diversity-
+23. Spectrumadapter-Test für exaktes Rauschleistungs- und AWGN-Diversity-
     Compensation-Mapping sowie SISO-, Identitäts- und 2x1-Precoding ohne
     doppelte Anwendung von Rauschen, Leistung oder Arraygewinn.
-23. Deserialisierung einer alten Nachricht ohne Dimensionsfelder als
+24. Deserialisierung einer alten Nachricht ohne Dimensionsfelder als
     \(N_\mathrm{sc}\times1\times1\).
-24. Protocol-Buffer-Rundlauf einer synthetischen 2 x 2 x 2-CFR mit den
+25. Protocol-Buffer-Rundlauf einer synthetischen 2 x 2 x 2-CFR mit den
     komplexen Werten 1-j bis 8-8j und indexgenauer Prüfung.
 
 Die fünf reinen Python-Vertragstests prüfen Standard- und explizite
@@ -1295,9 +1476,10 @@ legacy-kompatible und explizite Knotenorientierung. Diese
 Tests benötigen weder Raytracing, ZMQ noch eine GPU. Die analytischen
 Vergleiche des numerischen Kerns verwenden weiterhin eine absolute Toleranz
 von 1e-10; dies gilt auch für Identitäts-Precoding und synthetische
-\(H[k]W[k]\)-Referenzen sowie die MRT-/MRC-SINR. Precoderleistung,
-Phaseninvarianz und effektiver MRT-Kanal werden innerhalb 1e-12 geprüft. Die
-Link-Budget-/EESM-Vergleiche verwenden ebenfalls 1e-12.
+\(H[k]W[k]\)-Referenzen sowie MRT-/MRC- und SVD-Eigenmode-SINRs.
+Precoderleistung, Phaseninvarianz, effektiver MRT-Kanal, deterministische
+SVD-Basis, Leistungsanteile, Wasserstand und KKT-Gleichheit werden innerhalb
+1e-12 geprüft. Die Link-Budget-/EESM-Vergleiche verwenden ebenfalls 1e-12.
 
 Der reale Server-Integrationstest konfiguriert 1x2-PlanarArrays an TX und RX,
 führt Sionna RT auf der CPU aus und prüft die Form 2 x 2 x 256, 1024 komplexe
@@ -1317,20 +1499,19 @@ erreicht nachweislich den Dimensionsguard im SpectrumWifiPhy-Adapter.
 
 ### 7.1 Ausgeführte CPU-Validierung
 
-Am 1. August 2026 wurden nach Abschluss der Unterphase 3.2 folgende Prüfungen
+Am 2. August 2026 wurden nach Abschluss der Unterphase 3.3 folgende Prüfungen
 auf einem CPU-System erfolgreich ausgeführt:
 
-- inkrementeller Build der geänderten Bibliotheks- und nativen Testziele unter
-  GCC 13.3; zusätzlich wurde das unveränderte P2P-Legacybeispiel neu
-  kompiliert und gelinkt
-- native ns-3-Suite sionna: 24 von 24 Fällen bestanden; der neue Fall prüft
-  frequenzselektives komplexes 2x1-MRT bei \(\rho=3\) und
-  \(\lVert h[k]\rVert_2^2=7\), W[k]-Leistung eins, den erwarteten SINR-Wert
-  21, gemeinsame Phasendrehung, 1x2-MRC mit SINR 21, exakte 1x1-Parität sowie
-  die Ablehnung von Nullkanal und allgemeinem 2x2-MIMO. Die bestehenden
-  Integrationsfälle vergleichen manuelle und helperbasierte
-  1x1-/2x2-Konfigurationen ohne W[k] sowie frequenzselektives komplexes
-  2x1-W[k] ohne einen laufenden ZMQ-/Sionna-Server
+- gezielter Build von Bibliothek, nativer Testsuite, SU-MIMO-Beispiel und
+  beiden unveränderten Legacybeispielen unter GCC 13.3
+- native ns-3-Suite sionna: 25 von 25 Fällen bestanden. Der neue
+  SVD-/Leistungsallokationsfall prüft zwei frequenzselektive diagonale Moden,
+  unitäre Rotation, gleiche Singularwerte, 1x1-Parität, explizite
+  Stream-/Rangfehler und nicht endliche Eingaben. Wasserfüllung aktiviert bei
+  \(\rho=0{,}5\) nur die starke Mode und bei \(\rho=4\) beide Moden mit den
+  analytischen Anteilen 0,59375 und 0,40625; Leistung, Wasserstand,
+  KKT-Gleichheit und ideale Rate stimmen mit den Referenzen überein. Die
+  bestehenden Phase-1-, Phase-2- und Phase-3.1-/3.2-Fälle bleiben bestanden
 - SISO-Paritätsmatrix: alle 108 Kombinationen stimmen innerhalb 1e-12 mit der
   direkt aufgerufenen ns-3-Fehlermodellschnittstelle überein
 - frequenzselektive Monotonitätsmatrix: alle 312 PER-Werte bestanden
@@ -1347,11 +1528,11 @@ auf einem CPU-System erfolgreich ausgeführt:
 - ExampleAsTest sionna-example-mimo-helper-runtime-negative: ein von einem
   Fall bestanden; eine helperkonfigurierte 2x2-PHY mit 1x1-CFR erreicht den
   erwarteten Dimensionsguard im echten SpectrumWifiPhy-Laufzeitpfad
-- reine Python-Vertragssuite: fünf von fünf Fällen in 0,011 s bestanden;
-  der Legacy-Importlauf bestätigte Sionna 1.2.1, Mitsuba 3.7.1, NumPy 1.26.4,
-  TensorFlow im CPU-Modus ohne GPU und ZeroMQ
-- gesamte Sionna-CPU-Serversuite: acht von acht Fällen in 168,829 s bestanden;
-  der reale 2x2-Fall lief in 1,6695 s, lieferte 2 x 2 x 256 und erfüllte die
+- reine Python-Vertragssuite: fünf von fünf Fällen in 0,001 s bestanden; der
+  separate Legacy-Importlauf bestätigte Sionna 1.2.1, Mitsuba 3.7.1,
+  NumPy 1.26.4, TensorFlow im CPU-Modus ohne GPU und ZeroMQ
+- gesamte Sionna-CPU-Serversuite: acht von acht Fällen in 160,110 s bestanden;
+  der reale 2x2-Fall lief in 1,6951 s, lieferte 2 x 2 x 256 und erfüllte die
   Normalisierung innerhalb 1e-6
 - P2P-End-to-End-Test example-sionna-sensing im unveränderten 1x1-Modus:
   drei 1 x 1 x 3072-CFR-Antworten, zwei empfangene UDP-Pakete zu je 1024 Byte
@@ -1376,9 +1557,9 @@ nicht betroffen. Eine Korrektur gehört in eine eigene kleine Baseline-Subphase.
   Open-Loop-Stream je TX-Antenne oder mit festem, benutzergegebenem
   \(W[k]\). Nicht-HE-Kontrollrahmen verwenden das erste Antennenpaar;
   automatische kanaladaptive Precoderwahl, Beamformingmodi und MU-MIMO sind
-  nicht implementiert. Die ideale MRT-Fabrik erzeugt außerhalb dieses
-  Laufzeitpfads einen festen W[k]-Schnappschuss aus einer explizit übergebenen
-  perfekten MISO-CFR.
+  nicht implementiert. Die idealen MRT- und SVD-Fabriken erzeugen außerhalb
+  dieses Laufzeitpfads einen festen W[k]-Schnappschuss aus einer explizit
+  übergebenen perfekten CFR.
 - Zeitvariable externe Interferenz wird nach der MMSE-/EESM-Abstraktion durch
   InterferenceHelper skalar berücksichtigt. Eine frequenz- und
   antennenabhängige Interferenzkovarianz im MMSE-Detektor ist noch nicht
@@ -1393,8 +1574,8 @@ nicht betroffen. Eine Korrektur gehört in eine eigene kleine Baseline-Subphase.
   bricht das Modell früh ab.
 - TableBasedErrorRateModel ist eine AWGN-Referenz. Seine SNR-/PER-Kurven und
   Paketlängenextrapolation stammen aus ns-3; ihre Grenzen gelten unverändert.
-- Perfekte RX-CSI und die an die MRT-Fabrik übergebene perfekte MISO-CFR sind
-  zunächst bewusst idealisiert; ein CSI-Zeitbezug existiert noch nicht.
+- Perfekte RX-CSI und die an MRT beziehungsweise SVD übergebene perfekte CFR
+  sind zunächst bewusst idealisiert; ein CSI-Zeitbezug existiert noch nicht.
 - Ohne W[k] gilt weiterhin genau ein Stream je TX-Antenne. Mit festem W[k]
   sind kontrollierte Streamauswahl und
   \(1\leq N_s\leq\min(N_\mathrm{tx},N_\mathrm{rx})\) implementiert.
@@ -1404,13 +1585,14 @@ nicht betroffen. Eine Korrektur gehört in eine eigene kleine Baseline-Subphase.
   nicht-reziprokes Precoding müssen Richtung und Konfiguration Teil des
   Schlüssels werden.
 
-Unterphase 3.2 ist abgeschlossen: Auf dem festen W[k]-Vertrag erzeugt die
-MRT-Fabrik für jeden nicht verschwindenden MISO-Subcarrier den normierten
-konjugierten Kanalvektor. Der bestehende Ein-Stream-MMSE-Pfad ist für SIMO als
-äquivalentes MRC ausgewiesen und beide Fälle erreichen analytisch
-\(\rho\lVert h\rVert_2^2\). Der allgemeine MIMO-Fall wird bewusst abgelehnt.
-SVD, Wasserfüllung, CSI-Quantisierung/-Feedback, automatische
-Beamformingaktualisierung und MU-MIMO wurden nicht begonnen.
+Unterphase 3.3 ist abgeschlossen: Auf dem festen W[k]-Vertrag erzeugt die
+SVD-Fabrik je Subcarrier deterministisch die explizit gewählten tragfähigen
+rechten Singulärmoden. Gleiche Streamleistung bleibt Standard; die optionale
+räumliche Wasserfüllung erhält die Gesamtleistung je Subcarrier und weist
+aktive Moden, Anteile, absolute Leistung und Wasserstand aus. Rangverlust
+wird explizit abgelehnt, der 1x1-Grenzfall bleibt exakt kompatibel.
+CSI-Quantisierung/-Feedback, CSI-Alterung, automatische Laufzeitintegration,
+MU-MIMO und Phase 3.5 wurden nicht begonnen.
 
 ## 9. Ausführung
 
