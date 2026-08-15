@@ -400,7 +400,7 @@ main(int argc, char* argv[])
         }
         else
         {
-            invalidConfiguration.mode = SionnaMimoMode::SU_BEAMFORMING;
+            invalidConfiguration.mode = SionnaMimoMode::MU_MIMO;
         }
         try
         {

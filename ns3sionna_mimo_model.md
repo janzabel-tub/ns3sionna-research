@@ -1,6 +1,6 @@
 # ns3sionna: MIMO-Abstraktionsmodell für IEEE 802.11ax/be
 
-Stand: 2. August 2026, Unterphase 3.4 abgeschlossen
+Stand: 15. August 2026, Unterphase 3.5 und damit Phase 3 abgeschlossen
 
 Arbeitszweig: feature/su-mimo-minimal
 
@@ -15,7 +15,7 @@ Precoding und MU-MIMO, wird ausschließlich in ns-3 ausgeführt.
 
 Die Entwicklung erfolgt in kleinen, einzeln testbaren Schritten. Der aktuelle
 Stand umfasst die Unterphasen 1.1 bis 1.4, die vollständige Phase 2 sowie
-die Unterphasen 3.1 bis 3.4: den numerischen SU-MIMO-Kern, konfigurierbare
+die Unterphasen 3.1 bis 3.5: den numerischen SU-MIMO-Kern, konfigurierbare
 Sionna-Arrays, einen
 dimensionssicheren MIMO-Datenvertrag, explizit kalibrierbare
 802.11ax-EESM-/PER-Abbildung und die
@@ -46,8 +46,14 @@ Normierungskorrektur sowie phaseninvariante Richtungs- und Koeffizientenfehler
 werden ausgewiesen. MimoCsiAgingModel trennt H_hat[k,t_csi] von H[k,t_tx],
 bildet periodische Aktualisierung und Feedbackverzögerung explizit ab und
 liefert eine gerichtete, array-, modus- und zeitstempelabhängige
-Zustandsidentität. Automatische Laufzeit-Beamformingmodi, MAC-Feedbackframes,
-MU-MIMO und die Phase-3.5-Integration wurden nicht begonnen.
+Zustandsidentität. SionnaMimoHelper integriert nun festes Precoding, MRT, SVD,
+Wasserfüllung, quantisiertes Feedback und CSI-Alterung durch eine explizite,
+unveränderliche Precoderwahl. Apply führt das ausgewählte W[k] ohne geänderte
+Semantik durch denselben festen SpectrumWifiPhy-Adapterpfad. Das neue
+CPU-End-to-End-Beispiel vergleicht Open Loop, festen 2x1-Precoder, MRT und SVD
+bei gleicher Gesamtleistung und gibt Konfiguration, Durchsatz, PER,
+Stream-SINR, Rang, Precodingnorm, Leistungsanteile, Feedbackdiagnostik und
+CSI-Alter maschinenlesbar aus. MU-MIMO und Phase 4 wurden nicht begonnen.
 
 ## 2. Reproduzierbare Ausgangsbasis
 
@@ -355,7 +361,7 @@ Die bitgenauen Quantisierungs-, Leistungs-, Timing-, Subraum-, SINR- und
 PER-Regressionen in Abschnitt 7 erfüllen dieses Kriterium für den in
 Abschnitt 5.12 abgegrenzten SU-Feedbackumfang.
 
-#### Unterphase 3.5: Benutzbarkeit und Phasenvalidierung
+#### Unterphase 3.5: Benutzbarkeit und Phasenvalidierung (implementiert)
 
 - SionnaMimoHelper erst nach erfolgreicher Implementierung die jeweiligen
   Beamforming-/Precodingmodi als unterstützt melden lassen.
@@ -372,6 +378,13 @@ Abnahmekriterium: Die Beispiele benötigen keine manuelle Verdrahtung interner
 Objekte, analytisch überlegene Precoder zeigen den erwarteten Gewinn ohne
 zusätzliche Sendeleistung, ungültige Konfigurationen brechen früh ab und alle
 Phase-1-/2-Regressionen bleiben erfolgreich.
+
+Dieses Kriterium ist erfüllt: Der Helper meldet SU_BEAMFORMING erst mit dieser
+Integration als unterstützt, das neue Vergleichsbeispiel verwendet nur die
+öffentliche High-Level-Konfiguration und SelectPrecoding, alle vier Modi
+halten dieselbe Gesamtleistungsdefinition ein, ungültige Kombinationen
+brechen vor Zustandsänderungen ab und die CPU-Regressionen in Abschnitt 7
+decken die alten sowie die neuen Pfade ab.
 
 ### Phase 4: MU-MIMO
 
@@ -970,7 +983,8 @@ perfekte CFR. Unterphase 3.2 führt absichtlich keinen automatischen
 Helper-/SpectrumWifiPhy-Beamformingmodus, keine CSI-Zeitachse und keine
 periodische Aktualisierung ein. Der erzeugte Precoder kann wie jeder feste
 2x1-Precoder durch die bereits validierten Pfade aus Unterphase 3.1 geführt
-werden; die end-to-end Modusauswahl bleibt Unterphase 3.5 vorbehalten.
+werden; die darauf aufbauende end-to-end Modusauswahl ist nun in Abschnitt
+6.7 als Teil der abgeschlossenen Unterphase 3.5 beschrieben.
 
 
 ### 5.11 Deterministisches SVD-Precoding und Leistungsallokation der Unterphase 3.3
@@ -1132,8 +1146,9 @@ Wie MRT erzeugt auch SVD ausschließlich einen unveränderlichen perfekten-CSI-
 W[k]-Schnappschuss. Unterphase 3.3 aktiviert weder SU_BEAMFORMING im Helper
 noch automatische Aktualisierung, Feedback, CSI-Zeitbezug oder einen neuen
 SpectrumWifiPhy-Pfad. Der vorhandene feste-W[k]-Vertrag ist die einzige
-Integration; die benutzerseitige end-to-end Modusauswahl bleibt Unterphase
-3.5 vorbehalten.
+Integration; Unterphase 3.5 verwendet genau diesen Vertrag nun für die
+benutzerseitige end-to-end Modusauswahl, ohne die SVD- oder
+Leistungsallokationssemantik zu verändern.
 
 ### 5.12 Quantisierte HE-/EHT-SU-Rückmeldung und CSI-Alterung der Unterphase 3.4
 
@@ -1414,13 +1429,15 @@ Der ideale Aufruf ohne Quantisierung lautet:
         channelAtTransmissionTime,
         referenceSnrLinear);
 
-Der neue Vertrag ist noch keine automatische Simulationstaktung:
-SionnaMimoHelper, SpectrumWifiPhy und das bestehende Beispiel wählen weiterhin
-keinen laufzeitabhängigen Precoder. Diese Aktivierung sowie
-maschinenlesbare Beispieloptionen gehören ausschließlich zu Unterphase 3.5.
+Der Vertrag bleibt bewusst keine automatische Simulationstaktung. Unterphase
+3.5 bindet ihn nun durch einen expliziten SelectPrecoding-Aufruf an
+SionnaMimoHelper und SpectrumWifiPhy: Der Anwender übergibt CSI- und
+Sendezeitpunkt, der Helper hält das unveränderliche Ergebnis und Apply nutzt
+anschließend den vorhandenen festen-W[k]-Pfad. Periodische Ereignisse oder
+MAC-Feedbackframes werden dadurch nicht vorgetäuscht.
 
 
-## 6. High-Level-API-Vertrag bis Unterphase 3.4
+## 6. High-Level-API-Vertrag bis Unterphase 3.5
 
 ### 6.1 Typen, Besitz und Defaults
 
@@ -1447,7 +1464,8 @@ SionnaMimoOrientation speichert Azimut, Elevation und Rollwinkel in Grad. Die
 SionnaMimoConfiguration führt beide Arrays, den Modus, TX-/RX-Antennenzahl,
 maximale NSS, Empfänger, Normalisierung, Empfängerrauschzahl,
 Effective-SINR-Modell, explizite EESM-Betas und eine Map von ns-3-Node-ID auf
-Orientierung sowie optional MimoPrecodingMatrix zusammen. Die
+Orientierung sowie optional MimoPrecodingMatrix oder eine explizite
+SionnaMimoBeamformingConfiguration zusammen. Die
 festgeschriebenen Defaults sind:
 
 - Modus SISO, eine TX-Antenne, eine RX-Antenne und maximale NSS eins;
@@ -1464,7 +1482,8 @@ festgeschriebenen Defaults sind:
 - 7 dB Empfängerrauschzahl entsprechend dem ns-3.40-WifiPhy-Default;
 - EESM als HE-Effective-SINR-Modell, aber weiterhin keine impliziten
   MCS-Betas;
-- kein Precoding. Dadurch nehmen alle bisherigen 1x1- und offenen
+- weder ein fester Precoder noch Beamformingoptionen oder eine ausgewählte
+  Precodingmomentaufnahme. Dadurch nehmen alle bisherigen 1x1- und offenen
   Mehrstromkonfigurationen weiterhin exakt den Phase-2-Pfad.
 
 SetNodeOrientation, ClearNodeOrientation und GetNodeOrientation verwalten die
@@ -1476,22 +1495,28 @@ wertbasierter Vertrag und verändert Simulationsobjekte erst mit Apply.
 
 ### 6.2 Unterstützte Betriebsarten
 
-GetSupportedModes und IsModeSupported melden genau zwei akzeptierte Modi:
+GetSupportedModes und IsModeSupported melden genau drei akzeptierte Modi:
 
 1. SISO mit genau einer TX- und einer RX-Antenne sowie NSS eins;
 2. SU_MIMO_SPATIAL_MULTIPLEXING mit linearem MMSE-Empfänger. Ohne W[k]
    bleibt genau ein Stream je TX-Antenne aktiv; mit explizitem festem W[k]
-   bestimmt dessen Spaltenzahl \(N_s\).
+   bestimmt dessen Spaltenzahl \(N_s\);
+3. SU_BEAMFORMING mit explizit gewähltem MRT oder SVD. SelectPrecoding erzeugt
+   aus der übergebenen CSI-Matrix genau eine unveränderliche Auswahl, die
+   Apply anschließend über den vorhandenen festen-W[k]-Pfad installiert.
 
-SU_BEAMFORMING und MU_MIMO sind im Enum ausschließlich als stabile Namen für
-zukünftige Phasen repräsentiert. Festes benutzergegebenes Precoding wird
-bewusst nicht in SU_BEAMFORMING umbenannt, weil es keine aus H[k]
-abgeleitete Strahlformung implementiert. Validate weist beide reservierten
-Modi weiterhin eindeutig zurück. Ebenso
-werden der repräsentierte Zero-Forcing-Empfänger, eine unnormalisierte CFR und
-Mutual Information als PER-wirksames Effective-SINR-Modell abgelehnt. Die
-MI-Kompression aus Abschnitt 5.4 bleibt eine Diagnosemetrik und wird nicht
-fälschlich als kalibrierte PER-Abbildung angeboten.
+Festes benutzergegebenes Precoding bleibt bewusst
+SU_MIMO_SPATIAL_MULTIPLEXING zugeordnet, weil es keine aus H[k] abgeleitete
+Strahlformung implementiert. MRT ist weiterhin auf perfektes aktuelles
+2x1-MISO-CSI und einen Stream begrenzt. SVD unterstützt Gleichleistung,
+quantisiertes HE-/EHT-SU-Feedback und explizites CSI-Alter. Räumliche
+Wasserfüllung ist mit unquantisiertem aktuellem CSI verfügbar; ihre
+Kombination mit Feedbackquantisierung oder Alterung bleibt aufgrund des
+semi-unitären Feedbackvertrags unzulässig. MU_MIMO bleibt der einzige
+reservierte Modus und wird eindeutig abgelehnt. Ebenso werden der
+repräsentierte Zero-Forcing-Empfänger, eine unnormalisierte CFR und Mutual
+Information als PER-wirksames Effective-SINR-Modell abgelehnt. Die
+MI-Kompression aus Abschnitt 5.4 bleibt eine Diagnosemetrik.
 
 ### 6.3 Zentrale Konsistenzprüfung
 
@@ -1512,6 +1537,16 @@ Phase-1-Abstraktionsmodell:
   exakt mit der Matrix überein; Subcarrierzahl, Koeffizienten und
   Leistungsnorm sind bereits Bestandteil des unveränderlichen
   MimoPrecodingMatrix-Vertrags;
+- SU_BEAMFORMING besitzt mindestens zwei TX-Antennen, kein gleichzeitig
+  benutzergegebenes W[k] und eine explizite MRT- oder SVD-Konfiguration;
+- MRT verlangt genau eine RX-Antenne, einen Stream, unquantisiertes aktuelles
+  CSI und unveränderte SVD-Standardoptionen;
+- SVD prüft endliche positive Referenz-SNR und Rauschleistung, einen relativen
+  Rangschwellwert in (0,1), HE/EHT und unquantisiertes, grobes oder feines
+  SU-Codebook sowie nichtnegative CSI-Zeiten. Wasserfüllung schließt
+  Quantisierung und positives CSI-Alter aus;
+- jede Änderung der Konfiguration oder einer Knotenorientierung verwirft eine
+  zuvor ausgewählte Momentaufnahme, damit Apply kein veraltetes W[k] nutzt;
 - Azimut und Rollwinkel liegen endlich in [-180, 180] Grad, Elevation endlich
   in [-90, 90] Grad;
 - die Rauschzahl ist endlich und nicht negativ;
@@ -1519,9 +1554,10 @@ Phase-1-Abstraktionsmodell:
   positiv.
 
 ValidateForHeMcs ergänzt die nutzungsbezogene Vollständigkeitsprüfung: Für
-Open-Loop-SU-MIMO muss das konkret verwendete MCS ein explizites Beta besitzen.
-SISO verlangt wegen des unveränderten skalaren Phase-1-Pfads weiterhin kein
-Beta. Damit werden keine unbelegten Kalibrierwerte eingeführt.
+Open-Loop-SU-MIMO und SU_BEAMFORMING muss das konkret verwendete MCS ein
+explizites Beta besitzen. SISO verlangt wegen des unveränderten skalaren
+Phase-1-Pfads weiterhin kein Beta. Damit werden keine unbelegten
+Kalibrierwerte eingeführt.
 
 ### 6.4 Gemeinsamer Integrationsaufruf
 
@@ -1547,13 +1583,16 @@ Die Zuordnung ist eindeutig:
   expliziten Rauschzahlwert des MIMO-Spectrumadapters;
 - die vollständige EESM-Map ersetzt atomar die bisherige Adapterkonfiguration,
   sodass beim erneuten Anwenden keine veralteten MCS-Betas zurückbleiben;
+- eine durch SelectPrecoding gespeicherte MRT-/SVD-Auswahl ersetzt den festen
+  Adapter-Precoder vollständig und hat ausschließlich im Modus SU_BEAMFORMING
+  Vorrang;
 - precodingMatrix ersetzt den festen Adapter-Precoder vollständig. Fehlt der
-  optionale Wert, wird ein zuvor gesetztes W[k] gelöscht und der Phase-2-Pfad
-  wiederhergestellt.
+  optionale Wert in einem Nicht-Beamformingmodus, wird ein zuvor gesetztes
+  W[k] gelöscht und der Phase-2-Pfad wiederhergestellt.
 
 Linearer MMSE, gemeinsame Unit-Average-Pair-Power-Normalisierung und EESM
-benötigen keinen zusätzlichen Laufzeitselektor. Das Vorhandensein von W[k]
-wählt ausschließlich die explizite \(H[k]W[k]\)-Überladung. Eine
+bleiben unverändert. Festes oder ausgewähltes W[k] wählt ausschließlich die
+bereits vorhandene \(H[k]W[k]\)-Überladung. Eine
 abweichende Empfänger-, Normalisierungs- oder Effective-SINR-Auswahl wird
 weiterhin vor Apply abgelehnt.
 
@@ -1654,8 +1693,9 @@ SpectrumChannel-Verdrahtung bleiben unverändert. Ein Programm, das weiterhin
 nur SionnaHelper verwendet, nimmt damit unverändert den bisherigen
 1x1-Defaultpfad.
 
-Funktional unterstützt der Stand bis Unterphase 3.4 SISO, offenen SU-MIMO mit
-einem Stream je TX-Antenne und festes benutzergegebenes Precoding mit
+Funktional unterstützt der Stand bis Unterphase 3.5 SISO, offenen SU-MIMO,
+festes benutzergegebenes Precoding und explizites SU-Beamforming mit MRT oder
+SVD. Für festes W[k] gilt weiterhin
 \(1\leq N_s\leq\min(N_\mathrm{tx},N_\mathrm{rx})\). Die MRT-Fabrik erzeugt
 für eine explizit übergebene perfekte MISO-CFR ein normiertes Ein-Stream-W[k].
 Die SVD-Fabrik erzeugt aus einer allgemeinen perfekten CFR ein festes W[k] für
@@ -1667,16 +1707,20 @@ unverändert. MimoCompressedBeamformingFeedback,
 MimoFeedbackReconstruction und MimoFeedbackDiagnostics bilden nun den
 getrennten Feedbackpfad. MimoCsiAgingModel liefert einen festen
 Precoder-Schnappschuss mit explizitem Zeitbezug und zwingt für die
-Linkberechnung eine separate Übertragungskanal-Matrix. Diese wertbasierten
-Typen verändern keine Helper-, PHY-, IPC- oder Cacheobjekte und sind deshalb
-auch ohne Simulator testbar. Typische eindeutige Fehler sind:
+Linkberechnung eine separate Übertragungskanal-Matrix. Der Helper kapselt
+diese wertbasierten Ergebnisse unverändert; sie bleiben auch ohne Simulator
+testbar. Typische eindeutige Fehler sind:
 
 - SionnaMimoHelper: open-loop SU-MIMO uses one stream per TX antenna bei
   widersprüchlichem maxNss;
-- SionnaMimoHelper: only SISO and open-loop SU-MIMO spatial multiplexing are
-  supported für Beamforming oder MU-MIMO;
-- SionnaMimoHelper: open-loop SU-MIMO requires an explicit EESM beta for HE
-  MCS ... bei fehlender Kalibrierung;
+- SionnaMimoHelper: SU beamforming requires an explicit MRT or SVD
+  configuration bei fehlender Auswahlmethode;
+- SionnaMimoHelper: water-filling cannot be combined with quantized feedback
+  or CSI aging für nicht darstellbare Vertragskombinationen;
+- SionnaMimoHelper: SU beamforming must select a channel-dependent precoder
+  before Apply bei fehlendem CSI-Auswahlschritt;
+- SionnaMimoHelper: ... requires an explicit EESM beta for HE MCS ... bei
+  fehlender Kalibrierung für Open Loop oder Beamforming;
 - SionnaMimoHelper: maximum NSS must equal the fixed-precoding stream
   dimension bei widersprüchlicher Helper-Konfiguration;
 - WifiTxVector NSS must equal the transmitted stream dimension, falls
@@ -1696,27 +1740,118 @@ auch ohne Simulator testbar. Typische eindeutige Fehler sind:
   delay beziehungsweise ... no CSI feedback is available ... für einen
   off-grid oder noch nicht verfügbaren Schätzzeitpunkt.
 
-Die Enumwerte für Beamforming und MU-MIMO bleiben ausschließlich reservierte
-API-Namen. Die idealen MRT- und SVD-Fabriken sowie der neue Feedback-/
-Alterungspfad aktivieren insbesondere noch nicht SU_BEAMFORMING im
-High-Level-Helper. Quantisierung und CSI-Alterung sind als explizite,
-simulationsunabhängige Schritte implementiert; automatische
-CSI-Aktualisierung, allgemeine Laufzeit-Modusauswahl, MAC-Feedbacktransport,
-MU-MIMO und die Phase-3.5-Integration bleiben nicht implementiert.
 
-## 7. Validierung der Unterphasen 1.1 bis 3.4
+### 6.7 Kanalabhängige Auswahl, Diagnose und Phasenbeispiel
 
-Die native Suite sionna enthält nun 25 schnelle Fälle:
+SionnaMimoBeamformingConfiguration bündelt die explizite Methode MRT oder
+SVD, die unveränderten MimoSvdPrecodingOptions, MimoFeedbackConfiguration und
+MimoCsiTimingConfiguration. SionnaMimoPrecodingSelection besitzt den
+ausgewählten festen Precoder, CSI- und Sendezeitpunkt, CSI-Alter und, sofern
+vorhanden, die ursprünglichen SVD- und Feedback-/Alterungsergebnisse. Der
+Helper berechnet oder interpretiert diese Diagnosen nicht neu.
+
+    configuration.mode = SionnaMimoMode::SU_BEAMFORMING;
+    configuration.maxNss = 1;
+    configuration.beamforming = SionnaMimoBeamformingConfiguration{};
+    configuration.beamforming->method = SionnaMimoBeamformingMethod::SVD;
+    configuration.beamforming->feedback.codebook = MimoFeedbackCodebook::SU_FINE;
+    configuration.beamforming->csiTiming.updateInterval = MilliSeconds(5);
+    configuration.beamforming->csiTiming.feedbackDelay = MilliSeconds(2);
+
+    SionnaMimoHelper mimo(configuration);
+    const auto& selection = mimo.SelectPrecoding(
+        channelEstimateAtCsiTime,
+        txNodeId, rxNodeId,
+        csiTimestamp, transmissionTimestamp);
+    mimo.ApplyForHeMcs(mcs, sionna, txPhy, rxPhy, spectrumModel);
+
+SelectPrecoding validiert Konfiguration, CSI-Dimensionen und Zeitraster,
+erstellt das Ergebnis zunächst als lokalen Kandidaten und ersetzt den
+gespeicherten Zustand erst nach vollständigem Erfolg. SetConfiguration sowie
+Änderungen einer Knotenorientierung verwerfen die Auswahl. Apply lehnt
+SU_BEAMFORMING ohne vorherige Auswahl ab und installiert sonst ausschließlich
+selection.GetPrecodingMatrix() durch SetPrecodingMatrix. Der Adapter, das
+Signalmodell, die Leistungsnorm \(\lVert W[k]\rVert_F^2=N_s\) und die
+1x1-/Open-Loop-/Festprecodingpfade bleiben unverändert.
+
+Das neue Programm ns3_wifi_sumimo_precoding.cc führt vier getrennte
+UDP-/SpectrumWifiPhy-CPU-Läufe aus. Open Loop und SVD verwenden denselben
+normalisierten 2x2-Kanal; fester Precoder und MRT verwenden denselben
+2x1-MISO-Kanal, sodass der MRT-Gewinn direkt gegen die erste feste Antenne
+vergleichbar ist. Alle Fälle verwenden dieselbe Gesamtleistung \(P\); die
+unterschiedlichen Frobeniusnormen \(\sqrt{N_s}\) kompensiert das unveränderte
+Signalmodell durch \(P/N_s\).
+
+    ./ns3 run "ns3_wifi_sumimo_precoding \
+      --mcs=5 --referenceSnrDb=16 --packetSize=1200 \
+      --eesmBetaLinear=2"
+
+Der Referenzlauf liefert für festes W[k] 16,000000 dB und 24,931200 Mbit/s,
+für MRT den analytischen Gewinn auf 19,010300 dB und 68,582400 Mbit/s und für
+Ein-Stream-SVD 21,563025 dB und 68,697600 Mbit/s. Die Precodingnorm bleibt in
+allen Ein-Stream-Fällen eins; Open Loop verwendet bei zwei Streams
+\(\sqrt 2\). Das Beispiel bricht ab, falls die Gesamtleistungsidentität, die
+analytische MRT-SINR oder der ideale SVD-Gewinn verletzt wird.
+
+Quantisierung und Alterung sind keine versteckten Defaults, sondern
+ausdrückliche Optionen:
+
+    ./ns3 run "ns3_wifi_sumimo_precoding \
+      --mcs=5 --eesmBetaLinear=2 --quantization=coarse \
+      --csiUpdateIntervalMs=5 --feedbackDelayMs=2 \
+      --transmissionTimeMs=13 --agingRotationDegrees=25"
+
+quantization akzeptiert none, coarse und fine.
+csiUpdateIntervalMs, feedbackDelayMs und transmissionTimeMs bestimmen
+den nach Abschnitt 5.12 zulässigen CSI-Zeitstempel;
+agingRotationDegrees verändert ausschließlich den aktuellen Sendekanal.
+Wasserfüllung wird separat und weiterhin nur mit unquantisiertem aktuellem
+CSI aktiviert:
+
+    ./ns3 run "ns3_wifi_sumimo_precoding \
+      --mcs=5 --eesmBetaLinear=2 --svdStreams=2 --waterFilling=1"
+
+Jede Ausgabezeile besteht aus whitespace-getrennten schlüssel=wert-Feldern.
+Die configuration-Zeile enthält Referenz-SNR, konstante Gesamtleistung,
+Quantisierung, Wasserfüllschalter, Aktualisierungsintervall,
+Feedbackverzögerung, CSI-Alter, kontrollierte Kanalrotation und das explizite
+EESM-Beta. Jede scenario-Zeile enthält mindestens:
+
+- throughput_mbps, expected_throughput_mbps und per;
+- stream_sinr_db als kommaseparierte Streamliste sowie
+  effective_sinr_db;
+- channel_rank, precoding_norm und power_fractions;
+- csi_age_ns, wobei -1 einen nicht-CSI-basierten Modus bezeichnet;
+- feedback_bits, chordal_error und rms_coefficient_error.
+
+Eine abschließende validation=PASS-Zeile macht den Prozessstatus zusätzlich
+maschinenlesbar. Die ExampleAsTest-Referenzdateien fixieren alle Felder für
+den idealen, quantisiert-gealterten und Wasserfüllungsfall.
+
+Die Migration ist additiv: Bestehende SISO-, Open-Loop- und
+Festprecodingprogramme ändern weder Modus noch Aufrufreihenfolge. Nur
+kanalabhängige Programme wählen SU_BEAMFORMING, füllen beamforming, rufen
+nach Vorliegen einer expliziten CSI-Matrix einmal SelectPrecoding auf und
+verwenden danach das bestehende ApplyForHeMcs. ClearSelectedPrecoding
+ermöglicht eine bewusste Neuwahl. Es gibt weiterhin keinen automatischen
+Simulator-Timer, keine implizite CSI-Abfrage und keinen MAC-Feedbacktransport;
+diese Grenzen verhindern, dass das explizite Forschungsmodell eine
+vollständige 802.11-Soundingprozedur vortäuscht.
+
+## 7. Validierung der Unterphasen 1.1 bis 3.5
+
+Die native Suite sionna enthält nun 26 schnelle Fälle:
 
 1. API-Defaulttest für den vollständigen legacy-kompatiblen SISO-Vertrag,
-   leere EESM-Kalibrierung, fehlendes W[k] und exakt zwei gemeldete
+   leere EESM-Kalibrierung, fehlendes W[k] und exakt drei gemeldete
    Betriebsarten.
 2. Gültiger 2x2-Vertrag mit dual polarisiertem TX-Element, knotenspezifischer
    Orientierung, explizitem Beta, Identitäts-Precoding, frequenzselektiver
    2x1-Streamauswahl sowie zulässigem 2-TX-/1-RX-/1-Stream-Grenzfall.
 3. Zentrale Negativmatrix für nicht endliche, unvollständige,
    widersprüchliche oder nicht unterstützte API-Konfigurationen einschließlich
-   Precoding-TX-/NSS-Dimension, Beamforming, MU-MIMO und fehlendem MCS-Beta.
+   Precoding-TX-/NSS-Dimension, unzulässiger Beamforming-/Feedback-/Alterungs-
+   Kombinationen, MU-MIMO und fehlendem MCS-Beta.
 4. Manuell und über SionnaMimoHelper konfigurierte 1x1-Integration mit
    bytegleicher Array-/Orientierungs-IPC-Nachricht, identischer installierter
    SpectrumWifiPhy-Antennen-/NSS-Konfiguration, gleicher Rauschzahl und
@@ -1779,6 +1914,14 @@ Die native Suite sionna enthält nun 25 schnelle Fälle:
 25. Protocol-Buffer-Rundlauf einer synthetischen 2 x 2 x 2-CFR mit den
     komplexen Werten 1-j bis 8-8j und indexgenauer Prüfung.
 
+26. Helperauswahl für exaktes MRT, quantisierte gleichleistungs-SVD mit
+    vollständiger Zustandsidentität und drei Millisekunden CSI-Alter sowie
+    räumliche Wasserfüllung. Der Fall vergleicht jedes W[k] mit der bereits
+    abgeschlossenen Fabrik, prüft Feedbackbits, Leistungsanteile und
+    Gesamtleistung, weist nach, dass Apply exakt dieselben Koeffizienten am
+    Adapter installiert, und verwirft die Auswahl nach einer
+    Orientierungsänderung.
+
 Die eigenständige native Suite `sionna-mimo-csi-feedback` ergänzt zwei Fälle
 für Unterphase 3.4. Der Feedbackfall prüft HE und EHT, beide SU-Codebücher,
 Bitbreiten und Payloadgrößen, exakt rekonstruierte Grenzindizes, deterministische
@@ -1808,25 +1951,34 @@ Werte und mittlere normierte Leistung eins. Die übrigen sieben Servertests
 decken den unveränderten 1x1-Pfad, Mobilität, Kohärenzzeit und Mehrnutzer-
 Anfragen ab.
 
-Die ExampleAsTest-Suites enthalten fünf Integrationsprozesse. Der Positivlauf
-führt 1x1, Vollrang-2x2, Rang-1-2x2, Identitäts-Precoding und
-2x1-Streamauswahl über UDP/SpectrumWifiPhy aus. Er prüft die analytischen
-Metriken exakt und die gemessenen UDP-Raten gegen deterministische
-Referenzwerte. Drei frühe Negativläufe prüfen
-widersprüchliches NSS, ein fehlendes MCS-Beta im MCS-bezogenen Apply-Aufruf
-und den reservierten Beamforming-Modus. Ein weiterer Negativlauf installiert
-die 2x2-Konfiguration über SionnaMimoHelper, liefert aber eine 1x1-CFR und
-erreicht nachweislich den Dimensionsguard im SpectrumWifiPhy-Adapter.
+Die ExampleAsTest-Suites enthalten nun zwölf Integrationsprozesse. Die fünf
+bestehenden Prozesse führen 1x1, Vollrang-2x2, Rang-1-2x2,
+Identitäts-Precoding und 2x1-Streamauswahl über UDP/SpectrumWifiPhy aus und
+prüfen widersprüchliches NSS, fehlendes MCS-Beta sowie den
+CFR-/PHY-Dimensionsguard. Beamforming ist dabei nicht länger pauschal
+reserviert.
+
+Drei neue positive Prozesse führen das Phasenbeispiel mit idealer Auswahl,
+grob quantisiertem und drei Millisekunden altem CSI sowie räumlicher
+Wasserfüllung vollständig auf der CPU aus. Die Referenzlogs vergleichen alle
+maschinenlesbaren Felder. Vier neue negative Prozesse prüfen fehlende
+SelectPrecoding-Auswahl, Wasserfüllung mit Quantisierung, MRT mit Alterung und
+einen nicht zum Aktualisierungsraster passenden CSI-Zeitstempel. Sie enden
+jeweils früh mit Status 2 und einer stabilen configuration_error-Zeile.
 
 ### 7.1 Ausgeführte CPU-Validierung
 
-Am 2. August 2026 wurden nach Abschluss der Unterphase 3.4 folgende Prüfungen
+Am 15. August 2026 wurden nach Abschluss der Unterphase 3.5 folgende Prüfungen
 auf einem CPU-System erfolgreich ausgeführt:
 
-- gezielter Build von Bibliothek, nativer Testsuite, SU-MIMO-Beispiel und
-  beiden unveränderten Legacybeispielen unter GCC 13.3
-- native ns-3-Suite sionna: 25 von 25 Fällen bestanden. Der neue
-  SVD-/Leistungsallokationsfall prüft zwei frequenzselektive diagonale Moden,
+- gezielter Build von Bibliothek, nativer Testsuite, neuem
+  Precoding-Vergleich und bestehendem SU-MIMO-Beispiel unter GCC 13.3
+- native ns-3-Suite sionna: 26 von 26 Fällen bestanden. Der neue Helperfall
+  vergleicht MRT und SVD einschließlich Feedback, Alterung und Wasserfüllung
+  direkt mit den bereits vorhandenen wertbasierten Fabriken, prüft die
+  installierten Koeffizienten und Leistungsanteile sowie die Invalidierung
+  einer alten Auswahl. Der bestehende SVD-/Leistungsallokationsfall prüft
+  zwei frequenzselektive diagonale Moden,
   unitäre Rotation, gleiche Singularwerte, 1x1-Parität, explizite
   Stream-/Rangfehler und nicht endliche Eingaben. Wasserfüllung aktiviert bei
   \(\rho=0{,}5\) nur die starke Mode und bei \(\rho=4\) beide Moden mit den
@@ -1848,8 +2000,16 @@ auf einem CPU-System erfolgreich ausgeführt:
   erreicht bei PER 1 erwartungsgemäß 0 Mbit/s; Identitäts-Precoding
   reproduziert die analytischen Vollrangwerte und die 2x1-Auswahl erreicht
   23,010300 dB bei voller Gesamtleistung
+- ExampleAsTest sionna-example-sumimo-precoding: drei von drei Prozessen
+  bestanden; idealer Vergleich, grob quantisiertes und drei Millisekunden
+  altes CSI sowie Wasserfüllung liefern die vollständigen stabilen
+  Diagnostikzeilen und validation=PASS
+- ExampleAsTest sionna-example-sumimo-precoding-negative: vier von vier
+  Prozessen bestanden; fehlende Precoder-Auswahl, Wasserfüllung mit
+  Quantisierung, MRT mit Alterung und ein off-grid CSI-Zeitstempel liefern
+  jeweils die erwartete configuration_error-Zeile
 - ExampleAsTest sionna-example-mimo-helper-configuration-negative: drei von
-  drei Fällen bestanden; ungültiges NSS, reservierter Beamforming-Modus und
+  drei Fällen bestanden; ungültiges NSS, nicht unterstütztes MU-MIMO und
   fehlendes MCS-Beta brechen jeweils früh mit Status 2 und eindeutiger Meldung
   ab
 - ExampleAsTest sionna-example-mimo-helper-runtime-negative: ein von einem
@@ -1880,15 +2040,21 @@ nicht betroffen. Eine Korrektur gehört in eine eigene kleine Baseline-Subphase.
 - Nicht explizit orientierte Knoten behalten die alte Serverorientierung
   [0, -180, 0]. Explizite Winkel werden in beiden Servermodi an Sionna
   übertragen.
-- Der integrierte MIMO-Pfad unterstützt HE SU ohne Precoding mit einem
-  Open-Loop-Stream je TX-Antenne oder mit festem, benutzergegebenem
-  \(W[k]\). Nicht-HE-Kontrollrahmen verwenden das erste Antennenpaar;
-  automatische kanaladaptive Precoderwahl, Beamformingmodi und MU-MIMO sind
-  nicht implementiert. Die idealen MRT- und SVD-Fabriken erzeugen außerhalb
-  dieses Laufzeitpfads einen festen W[k]-Schnappschuss aus einer explizit
-  übergebenen perfekten CFR. Quantisiertes HE-/EHT-SU-Feedback und
-  CSI-Alterung erzeugen ebenfalls außerhalb dieses Laufzeitpfads einen festen
-  W[k]-Schnappschuss; die automatische Helper-/PHY-Auswahl ist Unterphase 3.5.
+- Der integrierte MIMO-Pfad unterstützt HE SU ohne Precoding, festes
+  benutzergegebenes \(W[k]\) und die explizite Helperwahl von MRT oder SVD.
+  Nicht-HE-Kontrollrahmen verwenden weiterhin das erste Antennenpaar.
+  SelectPrecoding benötigt eine bereits vorliegende CSI-Matrix und Zeitstempel;
+  automatische Kanalschätzung, Sounding, periodische Simulatorereignisse,
+  MAC-Feedbackframes, per-Paket-Aktualisierung und MU-MIMO sind nicht
+  implementiert.
+- MRT bleibt der eindeutige perfekte 2x1-MISO-Ein-Stream-Fall. Quantisierung
+  und positives CSI-Alter gelten nur für gleichleistungs-SVD. Wasserfüllung
+  bleibt auf unquantisiertes aktuelles CSI beschränkt, weil die semantische
+  Winkelrückmeldung einen semi-unitären Gleichleistungs-Precoder verlangt.
+- Die Auswahl speichert einen einzelnen unveränderlichen W[k]-Schnappschuss
+  pro Helper. Der Anwender muss die aktuelle Sendekanal-Matrix weiterhin
+  getrennt für SINR und PER bereitstellen und bei neuer CSI SelectPrecoding
+  erneut aufrufen. Das ist kein per-Link- oder per-Paket-Precodercache.
 - Zeitvariable externe Interferenz wird nach der MMSE-/EESM-Abstraktion durch
   InterferenceHelper skalar berücksichtigt. Eine frequenz- und
   antennenabhängige Interferenzkovarianz im MMSE-Detektor ist noch nicht
@@ -1914,21 +2080,23 @@ nicht betroffen. Eine Korrektur gehört in eine eigene kleine Baseline-Subphase.
 - Die MI-Kompression bleibt eine Diagnosemetrik; nur die explizit konfigurierte
   EESM-Ausgabe wird an ErrorRateModel übergeben.
 - Die bestehende Rohkanal-Cache-Schlüsselbildung nimmt weiterhin Reziprozität
-  an. Die neue Precoder-Zustandsidentität enthält dagegen gerichtete TX-/RX-
-  Knoten, beide Arraykonfigurationen, Modus, Feedbackkonfiguration und
-  CSI-Zeitpunkt. Ihre Anbindung an einen automatischen Laufzeitcache gehört zu
-  Unterphase 3.5.
+  an. Die Precoder-Zustandsidentität enthält dagegen gerichtete TX-/RX-Knoten,
+  beide Arraykonfigurationen, Modus, Feedbackkonfiguration und CSI-Zeitpunkt.
+  Der Helper gibt diese Identität maschinenlesbar weiter, bindet sie aber
+  bewusst nicht an einen automatischen Laufzeitcache.
+- Der deterministische Beispielkanal ist eine gerichtete, normalisierte
+  Vorwärts-CFR. Das Ad-hoc-UDP-Beispiel setzt deshalb den ARP-Eintrag am Sender
+  statisch; so erzeugt die Infrastruktur keine rückwärts gerichtete HE-
+  Datennachricht mit inkompatiblen 2x1-Dimensionen. Normale Sionna-Cachepfade
+  sind davon nicht betroffen.
 
-Unterphase 3.4 ist abgeschlossen: Der deterministische SVD-Pfad liefert den
-festen semi-unitären W[k]-Schnappschuss für HE-/EHT-SU-Rückmeldung. Die
-Codebücher werden über fest definierte Winkelreihenfolge und Mittelpunkt-
-Quantisierung bitgenau komprimiert, deterministisch rekonstruiert und auf
-Gesamtleistung N_s renormiert; Bitbedarf, Leistung und Fehler werden explizit
-diagnostiziert. Der Alterungspfad trennt CSI- von Sende-CFR, berechnet
-CSI-Zeitpunkt und Alter aus Aktualisierungsintervall und Rückmeldedauer und
-verwendet eine gerichtete, konfigurationsvollständige Zustandsidentität. Der
-1x1-Grenzfall bleibt exakt kompatibel. Automatische Laufzeitintegration,
-MAC-Feedbacktransport, MU-MIMO und Phase 3.5 wurden nicht begonnen.
+Phase 3 ist mit Unterphase 3.5 abgeschlossen. Der Helper führt die
+unveränderten festen, MRT-, SVD-, Wasserfüllungs-, Feedback- und
+Alterungsverträge durch eine explizite Auswahl zusammen, installiert das
+Ergebnis über den bestehenden festen-W[k]-Pfad und stellt die ursprünglichen
+Diagnosen bereit. Der 1x1-Grenzfall und alle Phase-1-/2-Pfade bleiben
+kompatibel. Automatische Sounding-/Feedbackabläufe, ein Laufzeitcache,
+MU-MIMO und sämtliche Arbeiten der Phase 4 wurden nicht begonnen.
 
 ## 9. Ausführung
 
@@ -1941,7 +2109,12 @@ Vom ns-3.40-Verzeichnis:
     ./test.py -s sionna-example-sumimo-minimal
     ./test.py -s sionna-example-mimo-helper-configuration-negative
     ./test.py -s sionna-example-mimo-helper-runtime-negative
+    ./test.py -s sionna-example-sumimo-precoding
+    ./test.py -s sionna-example-sumimo-precoding-negative
     ./ns3 run "ns3_wifi_sumimo_minimal --eesmBetaLinear=2"
+    ./ns3 run "ns3_wifi_sumimo_precoding --eesmBetaLinear=2"
+    ./ns3 run "ns3_wifi_sumimo_precoding --eesmBetaLinear=2 \
+      --quantization=coarse --csiUpdateIntervalMs=5 --feedbackDelayMs=2"
 
 Python-Vertrag und Server vom Verzeichnis contrib/sionna/model/ns3sionna:
 

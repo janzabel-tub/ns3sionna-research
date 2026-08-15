@@ -112,3 +112,89 @@ class SionnaMimoHelperRuntimeNegativeSuite : public ns3::TestSuite
 };
 
 static SionnaMimoHelperRuntimeNegativeSuite g_sionnaMimoHelperRuntimeNegativeSuite;
+
+class SionnaSuMimoPrecodingTest : public ns3::ExampleAsTestCase
+{
+  public:
+    SionnaSuMimoPrecodingTest(const std::string& name, const std::string& arguments)
+        : ExampleAsTestCase(name,
+                            "ns3_wifi_sumimo_precoding",
+                            NS_TEST_SOURCEDIR,
+                            "--mcs=5 --referenceSnrDb=16 --packetSize=1200 "
+                            "--eesmBetaLinear=2 " +
+                                arguments)
+    {
+    }
+
+    std::string GetPostProcessingCommand() const override
+    {
+        return "| sed '/^Env: /d'";
+    }
+};
+
+class SionnaSuMimoPrecodingSuite : public ns3::TestSuite
+{
+  public:
+    SionnaSuMimoPrecodingSuite()
+        : TestSuite("sionna-example-sumimo-precoding", EXAMPLE)
+    {
+        AddTestCase(new SionnaSuMimoPrecodingTest("sionna-example-sumimo-precoding", ""),
+                    QUICK);
+        AddTestCase(new SionnaSuMimoPrecodingTest(
+                        "sionna-example-sumimo-precoding-feedback-aging",
+                        "--quantization=coarse --csiUpdateIntervalMs=5 --feedbackDelayMs=2 "
+                        "--transmissionTimeMs=13 --agingRotationDegrees=25"),
+                    QUICK);
+        AddTestCase(new SionnaSuMimoPrecodingTest(
+                        "sionna-example-sumimo-precoding-water-filling",
+                        "--svdStreams=2 --waterFilling=1"),
+                    QUICK);
+    }
+};
+
+static SionnaSuMimoPrecodingSuite g_sionnaSuMimoPrecodingSuite;
+
+class SionnaSuMimoPrecodingFailureTest : public ns3::ExampleAsTestCase
+{
+  public:
+    SionnaSuMimoPrecodingFailureTest(const std::string& name, const std::string& failureCase)
+        : ExampleAsTestCase(name,
+                            "ns3_wifi_sumimo_precoding",
+                            NS_TEST_SOURCEDIR,
+                            "--mcs=5 --eesmBetaLinear=2 --failureCase=" + failureCase,
+                            false)
+    {
+    }
+
+    std::string GetPostProcessingCommand() const override
+    {
+        return "| sed -e '/^Env: /d' -e '/^Command /d'";
+    }
+};
+
+class SionnaSuMimoPrecodingNegativeSuite : public ns3::TestSuite
+{
+  public:
+    SionnaSuMimoPrecodingNegativeSuite()
+        : TestSuite("sionna-example-sumimo-precoding-negative", EXAMPLE)
+    {
+        AddTestCase(new SionnaSuMimoPrecodingFailureTest(
+                        "sionna-example-sumimo-precoding-unselected-beamforming",
+                        "unselected-beamforming"),
+                    QUICK);
+        AddTestCase(new SionnaSuMimoPrecodingFailureTest(
+                        "sionna-example-sumimo-precoding-water-filling-quantized",
+                        "water-filling-quantized"),
+                    QUICK);
+        AddTestCase(new SionnaSuMimoPrecodingFailureTest(
+                        "sionna-example-sumimo-precoding-mrt-aging",
+                        "mrt-aging"),
+                    QUICK);
+        AddTestCase(new SionnaSuMimoPrecodingFailureTest(
+                        "sionna-example-sumimo-precoding-stale-timestamp",
+                        "stale-timestamp"),
+                    QUICK);
+    }
+};
+
+static SionnaSuMimoPrecodingNegativeSuite g_sionnaSuMimoPrecodingNegativeSuite;

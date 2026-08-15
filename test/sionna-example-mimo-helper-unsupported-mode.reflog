@@ -1,1 +1,1 @@
-configuration_error=SionnaMimoHelper: only SISO and open-loop SU-MIMO spatial multiplexing are supported
+configuration_error=SionnaMimoHelper: only SISO, SU-MIMO spatial multiplexing, and SU beamforming are supported

@@ -154,6 +154,12 @@ class SionnaMimoHelperDefaultsTest : public TestCase
         NS_TEST_ASSERT_MSG_EQ(configuration.precodingMatrix.has_value(),
                               false,
                               "The default must preserve the Phase-2 path without precoding");
+        NS_TEST_ASSERT_MSG_EQ(configuration.beamforming.has_value(),
+                              false,
+                              "The default must not configure channel-dependent beamforming");
+        NS_TEST_ASSERT_MSG_EQ(helper.HasSelectedPrecoding(),
+                              false,
+                              "The default helper unexpectedly reports selected precoding");
         NS_TEST_ASSERT_MSG_EQ(helper.HasPrecodingMatrix(),
                               false,
                               "The default helper unexpectedly reports fixed precoding");
@@ -173,7 +179,7 @@ class SionnaMimoHelperDefaultsTest : public TestCase
                                   "Default roll is not zero");
 
         const auto& supportedModes = SionnaMimoHelper::GetSupportedModes();
-        NS_TEST_ASSERT_MSG_EQ(supportedModes.size(), 2, "Unexpected number of supported modes");
+        NS_TEST_ASSERT_MSG_EQ(supportedModes.size(), 3, "Unexpected number of supported modes");
         NS_TEST_ASSERT_MSG_EQ(SionnaMimoHelper::IsModeSupported(SionnaMimoMode::SISO),
                               true,
                               "SISO is not reported as supported");
@@ -184,8 +190,8 @@ class SionnaMimoHelperDefaultsTest : public TestCase
             "Open-loop SU-MIMO is not reported as supported");
         NS_TEST_ASSERT_MSG_EQ(
             SionnaMimoHelper::IsModeSupported(SionnaMimoMode::SU_BEAMFORMING),
-            false,
-            "Beamforming is falsely reported as supported");
+            true,
+            "Completed SU beamforming is not reported as supported");
         NS_TEST_ASSERT_MSG_EQ(SionnaMimoHelper::IsModeSupported(SionnaMimoMode::MU_MIMO),
                               false,
                               "MU-MIMO is falsely reported as supported");
@@ -268,6 +274,161 @@ class SionnaMimoHelperValidConfigurationTest : public TestCase
         selectedConfiguration.rxArray.numColumns = 1;
         selectedConfiguration.numRxAntennas = 1;
         SionnaMimoHelper::Validate(selectedConfiguration);
+    }
+};
+
+class SionnaMimoHelperBeamformingSelectionTest : public TestCase
+{
+  public:
+    SionnaMimoHelperBeamformingSelectionTest()
+        : TestCase("SionnaMimoHelper selects MRT, SVD feedback and aging, and water-filling W[k]")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        SionnaMimoConfiguration mrtConfiguration;
+        mrtConfiguration.mode = SionnaMimoMode::SU_BEAMFORMING;
+        mrtConfiguration.txArray.numColumns = 2;
+        mrtConfiguration.numTxAntennas = 2;
+        mrtConfiguration.beamforming = SionnaMimoBeamformingConfiguration{};
+        mrtConfiguration.beamforming->method = SionnaMimoBeamformingMethod::MRT;
+
+        MimoChannelMatrix miso(2, 1, 2);
+        miso.Set(0, 0, 0, {1.0, 1.0});
+        miso.Set(0, 0, 1, {2.0, -1.0});
+        miso.Set(1, 0, 0, {-1.0, 0.5});
+        miso.Set(1, 0, 1, {0.5, 2.0});
+
+        SionnaMimoHelper mrtHelper(mrtConfiguration);
+        const auto& mrtSelection =
+            mrtHelper.SelectPrecoding(miso, 4, 7, MilliSeconds(3), MilliSeconds(3));
+        const auto directMrt = MimoPrecodingMatrix::MaximumRatioTransmission(miso);
+        NS_TEST_ASSERT_MSG_EQ(static_cast<int>(mrtSelection.GetMethod()),
+                              static_cast<int>(SionnaMimoBeamformingMethod::MRT),
+                              "The helper did not report MRT");
+        NS_TEST_ASSERT_MSG_EQ(mrtSelection.HasSvdResult(),
+                              false,
+                              "MRT unexpectedly has SVD diagnostics");
+        NS_TEST_ASSERT_MSG_EQ(mrtSelection.GetCsiAge().GetNanoSeconds(),
+                              0,
+                              "Current MRT CSI did not have zero age");
+        NS_TEST_ASSERT_MSG_EQ(mrtHelper.HasSelectedPrecoding(),
+                              true,
+                              "The helper did not retain MRT");
+        for (std::size_t i = 0; i < directMrt.GetCoefficients().size(); ++i)
+        {
+            NS_TEST_ASSERT_MSG_EQ(mrtSelection.GetPrecodingMatrix().GetCoefficients().at(i),
+                                  directMrt.GetCoefficients().at(i),
+                                  "Helper MRT changed the completed factory result");
+        }
+
+        SionnaMimoConfiguration svdConfiguration = MakeOpenLoop2x2Configuration();
+        svdConfiguration.mode = SionnaMimoMode::SU_BEAMFORMING;
+        svdConfiguration.maxNss = 1;
+        svdConfiguration.beamforming = SionnaMimoBeamformingConfiguration{};
+        svdConfiguration.beamforming->feedback.codebook = MimoFeedbackCodebook::SU_FINE;
+        svdConfiguration.beamforming->csiTiming.updateInterval = MilliSeconds(5);
+        svdConfiguration.beamforming->csiTiming.feedbackDelay = MilliSeconds(2);
+        svdConfiguration.nodeOrientations.emplace(
+            4,
+            SionnaMimoOrientation{15.0, -5.0, 2.0});
+
+        MimoChannelMatrix mimo(2, 2, 2);
+        for (uint32_t sc = 0; sc < 2; ++sc)
+        {
+            mimo.Set(sc, 0, 0, {2.0, 0.0});
+            mimo.Set(sc, 1, 1, {1.0, 0.0});
+        }
+
+        SionnaMimoHelper svdHelper(svdConfiguration);
+        const auto& svdSelection =
+            svdHelper.SelectPrecoding(mimo, 4, 7, MilliSeconds(10), MilliSeconds(13));
+        NS_TEST_ASSERT_MSG_EQ(svdSelection.HasSvdResult(),
+                              true,
+                              "SVD diagnostics were not retained");
+        NS_TEST_ASSERT_MSG_EQ(svdSelection.HasCsiSelectionResult(),
+                              true,
+                              "Feedback/aging diagnostics were not retained");
+        NS_TEST_ASSERT_MSG_EQ(svdSelection.GetCsiAge().GetMilliSeconds(),
+                              3,
+                              "The configured CSI age is wrong");
+        NS_TEST_ASSERT_MSG_EQ(
+            svdSelection.GetCsiSelectionResult().GetDiagnostics().GetFeedbackBitCount(),
+            20,
+            "Two fine-codebook 2x1 subcarriers should use twenty angle bits");
+        NS_TEST_ASSERT_MSG_EQ(
+            svdSelection.GetCsiSelectionResult().GetStateIdentity().txNodeId,
+            4,
+            "The directed TX identity was lost");
+        NS_TEST_ASSERT_MSG_EQ_TOL(svdSelection.GetPrecodingMatrix().GetPower(0),
+                                  1.0,
+                                  1e-12,
+                                  "Quantized SVD changed total transmit power");
+        NS_TEST_ASSERT_MSG_EQ_TOL(svdSelection.GetPowerFraction(0, 0),
+                                  1.0,
+                                  1e-12,
+                                  "Single-stream SVD did not receive all power");
+
+        SionnaHelper sionna("", "inproc://sionna-mimo-phase35-selection");
+        SpectrumWifiPhyHelper txPhy;
+        SpectrumWifiPhyHelper rxPhy;
+        auto adapter = CreateObject<SionnaSpectrumPropagationLossModel>();
+        svdHelper.Apply(sionna, txPhy, rxPhy, adapter);
+        const auto& adapterCoefficients =
+            adapter->GetPrecodingMatrix().GetCoefficients();
+        const auto& selectedCoefficients =
+            svdSelection.GetPrecodingMatrix().GetCoefficients();
+        NS_TEST_ASSERT_MSG_EQ(adapterCoefficients.size(),
+                              selectedCoefficients.size(),
+                              "Apply changed the selected W[k] size");
+        for (std::size_t i = 0; i < adapterCoefficients.size(); ++i)
+        {
+            NS_TEST_ASSERT_MSG_EQ(adapterCoefficients.at(i),
+                                  selectedCoefficients.at(i),
+                                  "Apply changed a selected fixed W[k] coefficient");
+        }
+
+        SionnaMimoConfiguration waterConfiguration = svdConfiguration;
+        waterConfiguration.maxNss = 2;
+        waterConfiguration.nodeOrientations.clear();
+        waterConfiguration.beamforming->feedback.codebook =
+            MimoFeedbackCodebook::UNQUANTIZED;
+        waterConfiguration.beamforming->csiTiming = {};
+        waterConfiguration.beamforming->svd.powerAllocation =
+            MimoPowerAllocationMode::WATER_FILLING;
+        waterConfiguration.beamforming->svd.referenceSnrLinear = 0.5;
+        SionnaMimoHelper waterHelper(waterConfiguration);
+        const auto& water =
+            waterHelper.SelectPrecoding(mimo, 4, 7, MilliSeconds(0), MilliSeconds(0));
+        NS_TEST_ASSERT_MSG_EQ(water.HasSvdResult(),
+                              true,
+                              "Water-filling lost the SVD diagnostics");
+        NS_TEST_ASSERT_MSG_EQ(water.HasCsiSelectionResult(),
+                              false,
+                              "Water-filling was incorrectly encoded as compressed feedback");
+        NS_TEST_ASSERT_MSG_EQ(water.GetSvdResult().GetNumActiveModes(0),
+                              1,
+                              "Low-SNR water-filling should activate only the strong mode");
+        NS_TEST_ASSERT_MSG_EQ_TOL(water.GetPowerFraction(0, 0),
+                                  1.0,
+                                  1e-12,
+                                  "Water-filling strong-mode fraction is wrong");
+        NS_TEST_ASSERT_MSG_EQ_TOL(water.GetPowerFraction(0, 1),
+                                  0.0,
+                                  1e-12,
+                                  "Water-filling weak mode should be inactive");
+        NS_TEST_ASSERT_MSG_EQ_TOL(water.GetPrecodingMatrix().GetPower(0),
+                                  2.0,
+                                  1e-12,
+                                  "Water-filling created or removed transmit power");
+
+        svdHelper.SetNodeOrientation(4, {16.0, -5.0, 2.0});
+        NS_TEST_ASSERT_MSG_EQ(svdHelper.HasSelectedPrecoding(),
+                              false,
+                              "Changing a CSI identity field retained a stale selection");
+        Simulator::Destroy();
     }
 };
 
@@ -364,7 +525,47 @@ class SionnaMimoHelperInvalidConfigurationTest : public TestCase
 
         configuration = {};
         configuration.mode = SionnaMimoMode::SU_BEAMFORMING;
-        expectRejected(configuration, "Phase-3 beamforming was accepted");
+        expectRejected(configuration, "Beamforming without an explicit method was accepted");
+        configuration = MakeOpenLoop2x2Configuration();
+        configuration.mode = SionnaMimoMode::SU_BEAMFORMING;
+        configuration.maxNss = 1;
+        configuration.beamforming = SionnaMimoBeamformingConfiguration{};
+        configuration.precodingMatrix = MimoPrecodingMatrix::FrequencyFlat(
+            1,
+            2,
+            1,
+            {{1.0, 0.0}, {0.0, 0.0}});
+        expectRejected(configuration,
+                       "Beamforming combined with user-provided fixed W[k] was accepted");
+
+        configuration.precodingMatrix.reset();
+        configuration.beamforming->svd.powerAllocation =
+            MimoPowerAllocationMode::WATER_FILLING;
+        configuration.beamforming->feedback.codebook = MimoFeedbackCodebook::SU_COARSE;
+        expectRejected(configuration,
+                       "Water-filling combined with quantized feedback was accepted");
+
+        configuration.beamforming->feedback.codebook = MimoFeedbackCodebook::UNQUANTIZED;
+        configuration.beamforming->csiTiming.feedbackDelay = MilliSeconds(1);
+        expectRejected(configuration,
+                       "Water-filling combined with CSI aging was accepted");
+
+        configuration = MakeOpenLoop2x2Configuration();
+        configuration.mode = SionnaMimoMode::SU_BEAMFORMING;
+        configuration.maxNss = 1;
+        configuration.beamforming = SionnaMimoBeamformingConfiguration{};
+        configuration.beamforming->method = SionnaMimoBeamformingMethod::MRT;
+        expectRejected(configuration, "MRT with more than one RX antenna was accepted");
+
+        configuration.rxArray.numColumns = 1;
+        configuration.numRxAntennas = 1;
+        configuration.beamforming->feedback.codebook = MimoFeedbackCodebook::SU_FINE;
+        expectRejected(configuration, "Quantized MRT feedback was accepted");
+
+        configuration = MakeOpenLoop2x2Configuration();
+        configuration.beamforming = SionnaMimoBeamformingConfiguration{};
+        expectRejected(configuration,
+                       "Spatial multiplexing with channel-dependent options was accepted");
 
         configuration = {};
         configuration.mode = SionnaMimoMode::MU_MIMO;
@@ -2221,6 +2422,7 @@ class SionnaTestSuite : public TestSuite
     {
         AddTestCase(new SionnaMimoHelperDefaultsTest, TestCase::QUICK);
         AddTestCase(new SionnaMimoHelperValidConfigurationTest, TestCase::QUICK);
+        AddTestCase(new SionnaMimoHelperBeamformingSelectionTest, TestCase::QUICK);
         AddTestCase(new SionnaMimoHelperInvalidConfigurationTest, TestCase::QUICK);
         AddTestCase(new SionnaMimoHelperIntegrationTest(HelperIntegrationCase::SISO),
                     TestCase::QUICK);

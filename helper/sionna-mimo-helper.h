@@ -7,6 +7,7 @@
 #ifndef SIONNA_MIMO_HELPER_H
 #define SIONNA_MIMO_HELPER_H
 
+#include "ns3/mimo-csi-feedback.h"
 #include "ns3/mimo-precoding-matrix.h"
 #include "ns3/ptr.h"
 
@@ -68,6 +69,28 @@ enum class SionnaMimoEffectiveSinrModel
     MUTUAL_INFORMATION
 };
 
+/** Channel-dependent SU beamforming algorithms exposed by the helper. */
+enum class SionnaMimoBeamformingMethod
+{
+    MRT,
+    SVD
+};
+
+/**
+ * Explicit options for channel-dependent SU beamforming.
+ *
+ * MRT is restricted to current perfect MISO CSI. SVD uses the completed
+ * power-allocation, SU-feedback, and CSI-timing contracts. Compressed
+ * feedback and non-zero CSI timing remain equal-power-only.
+ */
+struct SionnaMimoBeamformingConfiguration
+{
+    SionnaMimoBeamformingMethod method{SionnaMimoBeamformingMethod::SVD};
+    MimoSvdPrecodingOptions svd;
+    MimoFeedbackConfiguration feedback;
+    MimoCsiTimingConfiguration csiTiming;
+};
+
 /**
  * Geometry and element configuration of one Sionna planar array.
  *
@@ -124,6 +147,52 @@ struct SionnaMimoConfiguration
     std::map<uint8_t, double> eesmBetaLinear;
     std::map<uint32_t, SionnaMimoOrientation> nodeOrientations;
     std::optional<MimoPrecodingMatrix> precodingMatrix;
+    std::optional<SionnaMimoBeamformingConfiguration> beamforming;
+};
+
+/**
+ * Immutable helper result for one channel-dependent precoder selection.
+ *
+ * The selected matrix always obeys the existing fixed-W[k] contract. SVD,
+ * feedback, quantization-error, and CSI-age details remain available through
+ * the original Phase-3 result objects rather than being reinterpreted here.
+ */
+class SionnaMimoPrecodingSelection
+{
+  public:
+    SionnaMimoBeamformingMethod GetMethod() const;
+    const MimoPrecodingMatrix& GetPrecodingMatrix() const;
+    Time GetCsiTimestamp() const;
+    Time GetTransmissionTimestamp() const;
+    Time GetCsiAge() const;
+
+    bool HasSvdResult() const;
+    const MimoSvdPrecodingResult& GetSvdResult() const;
+
+    bool HasCsiSelectionResult() const;
+    const MimoCsiSelectionResult& GetCsiSelectionResult() const;
+
+    /** Return a stream's transmitted-power fraction on one subcarrier. */
+    double GetPowerFraction(uint32_t subcarrier, uint32_t stream) const;
+
+  private:
+    friend class SionnaMimoHelper;
+
+    SionnaMimoPrecodingSelection(SionnaMimoBeamformingMethod method,
+                                 MimoPrecodingMatrix precoding,
+                                 Time csiTimestamp,
+                                 Time transmissionTimestamp);
+    explicit SionnaMimoPrecodingSelection(MimoSvdPrecodingResult svd,
+                                          Time csiTimestamp,
+                                          Time transmissionTimestamp);
+    explicit SionnaMimoPrecodingSelection(MimoCsiSelectionResult csiSelection);
+
+    SionnaMimoBeamformingMethod m_method;
+    MimoPrecodingMatrix m_precoding;
+    Time m_csiTimestamp;
+    Time m_transmissionTimestamp;
+    std::optional<MimoSvdPrecodingResult> m_svd;
+    std::optional<MimoCsiSelectionResult> m_csiSelection;
 };
 
 /**
@@ -224,10 +293,41 @@ class SionnaMimoHelper
     /** Return the configured fixed precoding tensor, throwing if absent. */
     const MimoPrecodingMatrix& GetPrecodingMatrix() const;
 
-    /** Return the modes that are functional through Phase 3.1. */
-    static const std::array<SionnaMimoMode, 2>& GetSupportedModes();
+    /**
+     * Select and retain an MRT or SVD precoder from an explicit CSI snapshot.
+     *
+     * The selected immutable W[k] is subsequently installed by Apply() through
+     * the existing fixed-precoding path. For periodic CSI, csiTimestamp must be
+     * the newest sample available at transmissionTimestamp according to the
+     * configured update interval and feedback delay.
+     *
+     * \param csiTimeChannelEstimate channel estimate used only for W[k] selection
+     * \param txNodeId directed transmitter identity
+     * \param rxNodeId directed receiver identity
+     * \param csiTimestamp timestamp of csiTimeChannelEstimate
+     * \param transmissionTimestamp timestamp at which the selected W[k] is used
+     * \return the retained immutable selection and original Phase-3 diagnostics
+     */
+    const SionnaMimoPrecodingSelection& SelectPrecoding(
+        const MimoChannelMatrix& csiTimeChannelEstimate,
+        uint32_t txNodeId,
+        uint32_t rxNodeId,
+        Time csiTimestamp,
+        Time transmissionTimestamp);
 
-    /** Return whether a mode is functional through Phase 3.1. */
+    /** Clear a channel-dependent selection without changing the configuration. */
+    void ClearSelectedPrecoding();
+
+    /** Return whether channel-dependent beamforming has been selected. */
+    bool HasSelectedPrecoding() const;
+
+    /** Return the selected beamforming result, throwing if absent. */
+    const SionnaMimoPrecodingSelection& GetSelectedPrecoding() const;
+
+    /** Return the modes that are functional through Phase 3.5. */
+    static const std::array<SionnaMimoMode, 3>& GetSupportedModes();
+
+    /** Return whether a mode is functional through Phase 3.5. */
     static bool IsModeSupported(SionnaMimoMode mode);
 
     /**
@@ -240,13 +340,15 @@ class SionnaMimoHelper
     /**
      * Validate the configuration for use with a particular HE MCS.
      *
-     * Open-loop SU-MIMO requires an explicit EESM beta. SISO preserves the
-     * Phase-1 scalar path and therefore does not require one.
+     * Open-loop SU-MIMO and SU beamforming require an explicit EESM beta.
+     * SISO preserves the Phase-1 scalar path and therefore does not require
+     * one.
      */
     static void ValidateForHeMcs(const SionnaMimoConfiguration& configuration, uint8_t mcs);
 
   private:
     SionnaMimoConfiguration m_configuration;
+    std::optional<SionnaMimoPrecodingSelection> m_selectedPrecoding;
 };
 
 } // namespace ns3
