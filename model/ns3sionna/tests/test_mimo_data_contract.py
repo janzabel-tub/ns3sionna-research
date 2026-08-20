@@ -8,14 +8,34 @@ from mimo_data_contract import (
     RX_ARRAY_DEFAULTS,
     TX_ARRAY_DEFAULTS,
     append_cfr_to_message,
+    append_user_channel_identity,
     extract_link_cfr,
     normalize_link_cfr,
     resolve_array_config,
     resolve_node_orientation,
+    validate_multi_user_snapshot,
 )
 
 
 class MimoDataContractTest(unittest.TestCase):
+    @staticmethod
+    def _make_multi_user_snapshot():
+        state = message_pb2.ChannelStateResponse.ChannelState()
+        state.start_time = 1234
+        state.end_time = 2234
+        state.tx_node.id = 42
+        for user_id, num_rx, array_config, phase_offset in (
+            (9, 2, {**RX_ARRAY_DEFAULTS, "num_cols": 2}, 10),
+            (3, 1, RX_ARRAY_DEFAULTS, 0),
+        ):
+            node = state.rx_nodes.add()
+            node.id = user_id
+            node.wb_loss = 70.0 + user_id
+            phases = np.arange(num_rx * 2 * 2).reshape(num_rx, 2, 2) + phase_offset
+            append_cfr_to_message(node, [-10, 10], np.exp(1j * phases))
+            append_user_channel_identity(node, user_id, 42, 1234, array_config)
+        return state
+
     def test_legacy_array_defaults_and_explicit_configuration(self):
         self.assertEqual(resolve_array_config(None, TX_ARRAY_DEFAULTS), TX_ARRAY_DEFAULTS)
         self.assertEqual(resolve_array_config(None, RX_ARRAY_DEFAULTS), RX_ARRAY_DEFAULTS)
@@ -106,6 +126,56 @@ class MimoDataContractTest(unittest.TestCase):
         self.assertAlmostEqual(wideband_loss_db, -10 * np.log10(expected_power))
         self.assertAlmostEqual(np.mean(np.abs(normalized) ** 2), 1.0)
         self.assertEqual(normalized.shape, cfr.shape)
+
+    def test_multi_user_snapshot_round_trip_orders_identity_and_keeps_heterogeneous_rx(self):
+        wire = self._make_multi_user_snapshot().SerializeToString()
+        parsed = message_pb2.ChannelStateResponse.ChannelState()
+        parsed.ParseFromString(wire)
+
+        users = validate_multi_user_snapshot(parsed)
+
+        self.assertEqual([user.user_identity.user_id for user in users], [3, 9])
+        self.assertEqual([user.num_rx_antennas or 1 for user in users], [1, 2])
+        self.assertEqual([user.num_tx_antennas for user in users], [2, 2])
+        self.assertEqual([user.user_identity.rx_array.num_cols for user in users], [1, 2])
+        self.assertTrue(
+            all(
+                user.user_identity.direction == message_pb2.CHANNEL_DIRECTION_DOWNLINK
+                and user.user_identity.tx_node_id == 42
+                and user.user_identity.rx_node_id == user.id
+                and user.user_identity.csi_timestamp == 1234
+                for user in users
+            )
+        )
+        self.assertAlmostEqual(users[1].csi_real[2], np.cos(14.0))
+        self.assertAlmostEqual(users[1].csi_imag[2], np.sin(14.0))
+
+    def test_multi_user_snapshot_rejects_inconsistent_identity_before_use(self):
+        mutations = {
+            "duplicate user": lambda state: setattr(
+                state.rx_nodes[1].user_identity, "user_id", 9
+            ),
+            "mixed timestamp": lambda state: setattr(
+                state.rx_nodes[1].user_identity, "csi_timestamp", 1235
+            ),
+            "wrong direction": lambda state: setattr(
+                state.rx_nodes[1].user_identity,
+                "direction",
+                message_pb2.CHANNEL_DIRECTION_UPLINK,
+            ),
+            "frequency grid": lambda state: state.rx_nodes[1].frequencies.__setitem__(
+                1, 11
+            ),
+            "RX array": lambda state: setattr(
+                state.rx_nodes[0].user_identity.rx_array, "num_cols", 3
+            ),
+        }
+        for name, mutate in mutations.items():
+            with self.subTest(name=name):
+                snapshot = self._make_multi_user_snapshot()
+                mutate(snapshot)
+                with self.assertRaises(ValueError):
+                    validate_multi_user_snapshot(snapshot)
 
 
 if __name__ == "__main__":

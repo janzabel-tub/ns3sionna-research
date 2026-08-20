@@ -125,6 +125,16 @@ class TestServer(unittest.TestCase):
 
         return sim_info
 
+    def _assert_multi_user_snapshot(self, snapshot, tx_node, rx_nodes):
+        self.assertEqual([node.id for node in snapshot.rx_nodes], sorted(rx_nodes))
+        for node in snapshot.rx_nodes:
+            identity = node.user_identity
+            self.assertEqual(identity.user_id, node.id)
+            self.assertEqual(identity.tx_node_id, tx_node)
+            self.assertEqual(identity.rx_node_id, node.id)
+            self.assertEqual(identity.direction, message_pb2.CHANNEL_DIRECTION_DOWNLINK)
+            self.assertEqual(identity.csi_timestamp, snapshot.start_time)
+
 
     #@unittest.skip("Not yet")
     def test_init(self):
@@ -188,6 +198,7 @@ class TestServer(unittest.TestCase):
         self.env.compute_cfr(csi_req, csi_resp)
 
         rx_info = csi_resp.channel_state_response.csi[0].rx_nodes[0]
+        self.assertFalse(rx_info.HasField("user_identity"))
         self.assertEqual(rx_info.num_rx_antennas, 2)
         self.assertEqual(rx_info.num_tx_antennas, 2)
         self.assertEqual(len(rx_info.frequencies), 256)
@@ -217,6 +228,7 @@ class TestServer(unittest.TestCase):
         prev_entry = None
         for csi_id in range(len(csi_resp.channel_state_response.csi)):
             csi_entry = csi_resp.channel_state_response.csi[csi_id]
+            self._assert_multi_user_snapshot(csi_entry, 0, [1, 2])
 
             for rx_id in range(len(csi_entry.rx_nodes)):
                 rx_entry = csi_entry.rx_nodes[rx_id]
@@ -318,7 +330,10 @@ class TestServer(unittest.TestCase):
             csi_resp = self._create_channel_state_response()
             self.env.compute_cfr(csi_req, csi_resp)
 
-            csi_ts.append(csi_resp.channel_state_response.csi[0].start_time)
+            snapshot = csi_resp.channel_state_response.csi[0]
+            self._assert_multi_user_snapshot(snapshot, tx_node, rx_nodes)
+
+            csi_ts.append(snapshot.start_time)
 
             for rx_idx in range(len(csi_resp.channel_state_response.csi[0].rx_nodes)):
 

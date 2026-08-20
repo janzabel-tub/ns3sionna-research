@@ -19,9 +19,11 @@ import math
 from millify import millify
 
 from mimo_data_contract import (RX_ARRAY_DEFAULTS, TX_ARRAY_DEFAULTS,
-                                append_cfr_to_message, extract_link_cfr,
+                                append_cfr_to_message, append_user_channel_identity,
+                                extract_link_cfr,
                                 normalize_link_cfr, resolve_array_config,
-                                resolve_node_orientation)
+                                resolve_node_orientation,
+                                validate_multi_user_snapshot)
 
 from ns3sionna_utils import subcarrier_frequencies, compute_coherence_time, SECOND, MILLISECOND, coherence_from_velocities, \
     MAX_COHERENCE_TIME
@@ -192,6 +194,7 @@ class SionnaEnv:
         rx_array_msg = sim_init_msg.rx_array if sim_init_msg.HasField("rx_array") else None
         tx_array_config = resolve_array_config(tx_array_msg, TX_ARRAY_DEFAULTS)
         rx_array_config = resolve_array_config(rx_array_msg, RX_ARRAY_DEFAULTS)
+        self.rx_array_config = rx_array_config
 
         self.scene.tx_array = PlanarArray(**tx_array_config)
         self.scene.rx_array = PlanarArray(**rx_array_config)
@@ -247,7 +250,7 @@ class SionnaEnv:
         # execute mobility
 
         # update position of all nodes
-        nodes_to_update = list(self.node_info.keys())
+        nodes_to_update = sorted(self.node_info)
 
         # compute look-ahead
         look_ahead = math.floor(self.sub_mode / (len(nodes_to_update) - 1))
@@ -324,6 +327,7 @@ class SionnaEnv:
 
         # Create ZMQ response
         chan_response = reply_wrapper.channel_state_response
+        multi_user_snapshot = self.est_csi and len(rx_nodes) > 1
 
         Tc_p2mp_lah = []
         for lah_time_idx, lah_time in enumerate(lah_time_vec): # iterate over time
@@ -367,6 +371,10 @@ class SionnaEnv:
 
                 if self.est_csi:
                     append_cfr_to_message(rx_node_info, self.frequencies, h_normalized)
+                if multi_user_snapshot:
+                    append_user_channel_identity(rx_node_info, curr_rx_node,
+                                                 tx_node_id, csi.start_time,
+                                                 self.rx_array_config)
 
                 tc = coherence_from_velocities(self.node_info[curr_rx_node].get_velo_at(lah_time),
                                                 self.node_info[tx_node_id].velocity, self.fc,
@@ -375,6 +383,9 @@ class SionnaEnv:
 
                 rx_node_info.end_time2 = csi.start_time + tc
                 csi_tc_arr.append(tc)
+
+            if multi_user_snapshot:
+                validate_multi_user_snapshot(csi)
 
             # take the worst case Tc from all RX nodes
             Tc_p2mp = int(np.min(np.asarray(csi_tc_arr)))
@@ -454,6 +465,7 @@ class SionnaEnv:
         csi.tx_node.position.y = tx_pos[1]
         csi.tx_node.position.z = tx_pos[2]
 
+        multi_user_snapshot = self.est_csi and len(rx_nodes) > 1
         csi_tc_arr = []
         # for all rx nodes
         for idx, comp_rx_node_id in enumerate(rx_nodes):
@@ -468,6 +480,10 @@ class SionnaEnv:
 
             if self.est_csi:
                 append_cfr_to_message(rx_node_info, self.frequencies, h_normalized[idx])
+            if multi_user_snapshot:
+                append_user_channel_identity(rx_node_info, comp_rx_node_id,
+                                             tx_node_id, csi.start_time,
+                                             self.rx_array_config)
 
             # compute coherence time: with direction vectors you can compute the radial (projected) relative
             # speed directly and from that the Doppler and coherence time.
@@ -477,6 +493,9 @@ class SionnaEnv:
                                             pos_rx=self.node_info[tx_node_id].pos)
             rx_node_info.end_time2 = tc
             csi_tc_arr.append(tc)
+
+        if multi_user_snapshot:
+            validate_multi_user_snapshot(csi)
 
         # take the worst case Tc from all RX nodes
         Tc_p2mp = int(np.min(np.asarray(csi_tc_arr)))
@@ -599,7 +618,7 @@ class SionnaEnv:
             nodes_to_update = [tx_node, rx_node] # only TX and RX
         else:
             # both P2MP and P2MP_LAH
-            nodes_to_update = list(self.node_info.keys())
+            nodes_to_update = sorted(self.node_info)
 
         for node_id in nodes_to_update:
             self._walk(node_id, dt)
@@ -826,4 +845,3 @@ if __name__ == '__main__':
 
         if args.single_run:
             break
-

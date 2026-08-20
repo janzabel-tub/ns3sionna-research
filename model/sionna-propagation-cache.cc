@@ -15,10 +15,59 @@
 #include "ns3/log.h"
 #include "ns3/node.h"
 #include "ns3/simulator.h"
+#include <algorithm>
+#include <cmath>
+#include <limits>
+#include <set>
 #include <sstream>
+#include <stdexcept>
+#include <utility>
 
 namespace ns3
 {
+
+namespace
+{
+
+[[noreturn]] void
+RejectSnapshot(const std::string& reason)
+{
+    throw std::invalid_argument("Invalid multi-user channel snapshot: " + reason);
+}
+
+uint32_t
+GetArrayAntennaCount(const ns3sionna::AntennaArrayConfig& array)
+{
+    if (array.num_rows() == 0 || array.num_cols() == 0 ||
+        !std::isfinite(array.vertical_spacing()) || array.vertical_spacing() <= 0.0 ||
+        !std::isfinite(array.horizontal_spacing()) || array.horizontal_spacing() <= 0.0 ||
+        array.pattern().empty())
+    {
+        RejectSnapshot("invalid RX-array identity");
+    }
+    uint32_t polarizations;
+    if (array.polarization() == "V" || array.polarization() == "H")
+    {
+        polarizations = 1;
+    }
+    else if (array.polarization() == "VH")
+    {
+        polarizations = 2;
+    }
+    else
+    {
+        RejectSnapshot("invalid RX-array polarization");
+    }
+    const uint64_t count = static_cast<uint64_t>(array.num_rows()) * array.num_cols() *
+                           polarizations;
+    if (count > std::numeric_limits<uint32_t>::max())
+    {
+        RejectSnapshot("RX-array antenna count overflows uint32_t");
+    }
+    return static_cast<uint32_t>(count);
+}
+
+} // namespace
 
 NS_LOG_COMPONENT_DEFINE("SionnaPropagationCache");
 
@@ -194,6 +243,127 @@ SionnaPropagationCache::DeserializeChannelMatrix(
                              coefficients);
 }
 
+MultiUserChannelSnapshot
+SionnaPropagationCache::DeserializeMultiUserChannelSnapshot(
+    const ns3sionna::ChannelStateResponse::ChannelState& message)
+{
+    if (message.rx_nodes_size() == 0)
+    {
+        RejectSnapshot("no users");
+    }
+
+    std::set<uint32_t> userIds;
+    std::vector<int> sharedFrequencies;
+    uint32_t sharedNumTxAntennas = 0;
+    for (const auto& user : message.rx_nodes())
+    {
+        if (!user.has_user_identity())
+        {
+            RejectSnapshot("missing user identity");
+        }
+        const auto& identity = user.user_identity();
+        if (!userIds.insert(identity.user_id()).second)
+        {
+            RejectSnapshot("duplicate user identity");
+        }
+        if (identity.user_id() != user.id() || identity.tx_node_id() != message.tx_node().id() ||
+            identity.rx_node_id() != user.id())
+        {
+            RejectSnapshot("inconsistent directed endpoints");
+        }
+        if (identity.direction() != ns3sionna::CHANNEL_DIRECTION_DOWNLINK)
+        {
+            RejectSnapshot("Phase 4.1 accepts only downlink channels");
+        }
+        if (identity.csi_timestamp() != message.start_time())
+        {
+            RejectSnapshot("mixed CSI timestamps");
+        }
+        if (!identity.has_rx_array())
+        {
+            RejectSnapshot("missing RX-array identity");
+        }
+
+        const uint32_t numRxAntennas = user.num_rx_antennas() == 0 ? 1 : user.num_rx_antennas();
+        const uint32_t numTxAntennas = user.num_tx_antennas() == 0 ? 1 : user.num_tx_antennas();
+        if (numRxAntennas != GetArrayAntennaCount(identity.rx_array()))
+        {
+            RejectSnapshot("RX-array identity does not match the CFR dimension");
+        }
+        const int numSubcarriers = user.frequencies_size();
+        const uint64_t expectedCount = static_cast<uint64_t>(numSubcarriers) * numRxAntennas *
+                                       numTxAntennas;
+        if (numSubcarriers == 0 || user.csi_real_size() != user.csi_imag_size() ||
+            static_cast<uint64_t>(user.csi_real_size()) != expectedCount)
+        {
+            RejectSnapshot("CFR coefficient count does not match sc/rx/tx dimensions");
+        }
+
+        std::vector<int> frequencies(user.frequencies().begin(), user.frequencies().end());
+        if (sharedFrequencies.empty())
+        {
+            sharedFrequencies = frequencies;
+            sharedNumTxAntennas = numTxAntennas;
+        }
+        else if (frequencies != sharedFrequencies || numTxAntennas != sharedNumTxAntennas)
+        {
+            RejectSnapshot("inconsistent frequency grid or TX dimension");
+        }
+
+        double meanPower = 0.0;
+        for (int i = 0; i < user.csi_real_size(); ++i)
+        {
+            if (!std::isfinite(user.csi_real(i)) || !std::isfinite(user.csi_imag(i)))
+            {
+                RejectSnapshot("non-finite CFR coefficient");
+            }
+            meanPower += std::norm(std::complex<double>(user.csi_real(i), user.csi_imag(i)));
+        }
+        meanPower /= user.csi_real_size();
+        if (!std::isfinite(user.wb_loss()) || std::abs(meanPower - 1.0) > 1e-3)
+        {
+            RejectSnapshot("invalid wideband loss or CFR normalization");
+        }
+    }
+
+    std::vector<const ns3sionna::ChannelStateResponse::ChannelState::RxNodeInfo*> ordered;
+    ordered.reserve(message.rx_nodes_size());
+    for (const auto& user : message.rx_nodes())
+    {
+        ordered.push_back(&user);
+    }
+    std::sort(ordered.begin(), ordered.end(), [](const auto* lhs, const auto* rhs) {
+        return lhs->user_identity().user_id() < rhs->user_identity().user_id();
+    });
+
+    MultiUserChannelSnapshot snapshot{NanoSeconds(message.start_time()),
+                                      MultiUserChannelDirection::DOWNLINK,
+                                      {}};
+    snapshot.users.reserve(ordered.size());
+    for (const auto* user : ordered)
+    {
+        const auto& identity = user->user_identity();
+        const auto& array = identity.rx_array();
+        MultiUserReceiveArrayIdentity arrayIdentity{array.num_rows(),
+                                                    array.num_cols(),
+                                                    array.vertical_spacing(),
+                                                    array.horizontal_spacing(),
+                                                    array.pattern(),
+                                                    array.polarization()};
+        snapshot.users.push_back({identity.user_id(),
+                                  identity.tx_node_id(),
+                                  identity.rx_node_id(),
+                                  MultiUserChannelDirection::DOWNLINK,
+                                  snapshot.csiTimestamp,
+                                  std::move(arrayIdentity),
+                                  std::vector<int>(user->frequencies().begin(),
+                                                   user->frequencies().end()),
+                                  user->wb_loss(),
+                                  DeserializeChannelMatrix(*user)});
+    }
+    return snapshot;
+}
+
 void
 SionnaPropagationCache::SetSionnaHelper(SionnaHelper &sionnaHelper)
 {
@@ -272,7 +442,9 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
             for (CacheEntry c_entry : it->second) {
                 //NS_LOG_INFO(" " << c_entry.m_start_time << " " << c_entry.m_end_time << " " << current_time);
                 // If delay and loss exist in the cache, check if the entry is not outdated
-                if (c_entry.m_end_time >= current_time && c_entry.m_start_time <= current_time)
+                if (c_entry.m_end_time >= current_time && c_entry.m_start_time <= current_time &&
+                    (!c_entry.m_directed ||
+                     (c_entry.m_a == node_a->GetId() && c_entry.m_b == node_b->GetId())))
                 {
                     NS_LOG_DEBUG("\t: Cache hit for lnk: " << node_a->GetId() << " to " << node_b->GetId());
                     m_cache_hits += 1;
@@ -321,8 +493,20 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
 
     NS_LOG_INFO("ns3sionna::Req CSI data from sionna: #samples=" << csi_response.csi_size());
 
-    // result contains also future CSI; fill-up the cache
+    // Validate and decode every sample before committing any cache entry.
+    std::vector<std::pair<CacheKey, CacheEntry>> pendingEntries;
     for (int csi_i=0; csi_i < csi_response.csi_size(); csi_i++) {
+        const auto& csiMessage = csi_response.csi(csi_i);
+        bool hasUserIdentity = false;
+        for (const auto& rxMessage : csiMessage.rx_nodes())
+        {
+            hasUserIdentity = hasUserIdentity || rxMessage.has_user_identity();
+        }
+        if (hasUserIdentity)
+        {
+            DeserializeMultiUserChannelSnapshot(csiMessage);
+        }
+
         Time start_time = NanoSeconds(csi_response.csi(csi_i).start_time());
         Time end_time = NanoSeconds(csi_response.csi(csi_i).end_time());
 
@@ -355,7 +539,7 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
             CacheKey otherkey = CacheKey(txId, rxId);
             CacheEntry entry = CacheEntry(delay, wb_loss, start_time, end_time, channel,
                 txId, rxId, Vector(txPos.x(), txPos.y(), txPos.z()),
-                Vector(rxPos.x(), rxPos.y(), rxPos.z()));
+                Vector(rxPos.x(), rxPos.y(), rxPos.z()), rxMessage.has_user_identity());
 
             // Frequencies remain one value per subcarrier, independent of antennas.
             for (int i = 0; i < rxMessage.frequencies_size(); i++)
@@ -363,18 +547,13 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
                 entry.m_freq.emplace_back(rxMessage.frequencies(i));
             }
 
-            auto cache_it = m_cache.find(otherkey);
-
-            if (cache_it != m_cache.end()) {
-                // pair already known
-                cache_it->second.push_back(entry);
-            } else {
-                // create new entry with zero vector
-                m_cache.insert(std::make_pair(otherkey, std::vector<CacheEntry>()));
-                cache_it = m_cache.find(otherkey);
-                cache_it->second.push_back(entry);
-            }
+            pendingEntries.emplace_back(otherkey, std::move(entry));
         }
+    }
+
+    for (auto& pending : pendingEntries)
+    {
+        m_cache[pending.first].push_back(std::move(pending.second));
     }
 
     // get result from cache
@@ -385,7 +564,9 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
         // iterate over all stored entries for that link
         for (CacheEntry c_entry : cache_it->second) {
             // If delay and loss exist in the cache, check if the entry is not outdated
-            if (c_entry.m_end_time >= current_time && c_entry.m_start_time <= current_time)
+            if (c_entry.m_end_time >= current_time && c_entry.m_start_time <= current_time &&
+                (!c_entry.m_directed ||
+                 (c_entry.m_a == node_a->GetId() && c_entry.m_b == node_b->GetId())))
             {
                 // Return cache entry as the value is still fresh
                 return c_entry;

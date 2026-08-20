@@ -2228,6 +2228,150 @@ class MimoProtobufDeserializationTest : public TestCase
     }
 };
 
+using ChannelStateMessage = ns3sionna::ChannelStateResponse::ChannelState;
+
+void
+AddMultiUserChannel(ChannelStateMessage& state, uint32_t userId, uint32_t numRx, double phase)
+{
+    auto* user = state.add_rx_nodes();
+    user->set_id(userId);
+    user->set_wb_loss(70.0 + userId);
+    user->add_frequencies(-10);
+    user->add_frequencies(10);
+    user->set_num_rx_antennas(numRx);
+    user->set_num_tx_antennas(2);
+    for (uint32_t i = 0; i < 2 * numRx * 2; ++i)
+    {
+        user->add_csi_real(std::cos(phase + i));
+        user->add_csi_imag(std::sin(phase + i));
+    }
+    auto* identity = user->mutable_user_identity();
+    identity->set_user_id(userId);
+    identity->set_tx_node_id(42);
+    identity->set_rx_node_id(userId);
+    identity->set_direction(ns3sionna::CHANNEL_DIRECTION_DOWNLINK);
+    identity->set_csi_timestamp(1234);
+    auto* array = identity->mutable_rx_array();
+    array->set_num_rows(1);
+    array->set_num_cols(numRx);
+    array->set_vertical_spacing(0.5);
+    array->set_horizontal_spacing(0.5);
+    array->set_pattern("dipole");
+    array->set_polarization("V");
+}
+
+ChannelStateMessage
+MakeMultiUserChannelSnapshotMessage()
+{
+    ChannelStateMessage state;
+    state.set_start_time(1234);
+    state.set_end_time(2234);
+    state.mutable_tx_node()->set_id(42);
+    AddMultiUserChannel(state, 9, 2, 10.0);
+    AddMultiUserChannel(state, 3, 1, 0.0);
+    return state;
+}
+
+class MultiUserChannelSnapshotContractTest : public TestCase
+{
+  public:
+    MultiUserChannelSnapshotContractTest()
+        : TestCase("multi-user snapshot preserves stable ordering, dimensions, and RX arrays")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        ns3sionna::Wrapper outgoing;
+        outgoing.mutable_channel_state_response()->add_csi()->CopyFrom(
+            MakeMultiUserChannelSnapshotMessage());
+        std::string wire;
+        outgoing.SerializeToString(&wire);
+        ns3sionna::Wrapper incoming;
+        incoming.ParseFromString(wire);
+
+        const auto snapshot = SionnaPropagationCache::DeserializeMultiUserChannelSnapshot(
+            incoming.channel_state_response().csi(0));
+        NS_TEST_ASSERT_MSG_EQ(snapshot.users.size(), 2, "Wrong number of users");
+        NS_TEST_ASSERT_MSG_EQ(snapshot.users[0].userId, 3, "Users were not stably ordered");
+        NS_TEST_ASSERT_MSG_EQ(snapshot.users[1].userId, 9, "Users were not stably ordered");
+        NS_TEST_ASSERT_MSG_EQ(snapshot.users[0].txNodeId, 42, "TX identity changed");
+        NS_TEST_ASSERT_MSG_EQ(snapshot.users[1].rxNodeId, 9, "RX identity changed");
+        NS_TEST_ASSERT_MSG_EQ(static_cast<int>(snapshot.direction),
+                              static_cast<int>(MultiUserChannelDirection::DOWNLINK),
+                              "Snapshot direction changed");
+        NS_TEST_ASSERT_MSG_EQ(snapshot.csiTimestamp.GetNanoSeconds(),
+                              1234,
+                              "Shared CSI timestamp changed");
+        NS_TEST_ASSERT_MSG_EQ(snapshot.users[0].channel.GetNumRxAntennas(),
+                              1,
+                              "First heterogeneous RX dimension changed");
+        NS_TEST_ASSERT_MSG_EQ(snapshot.users[1].channel.GetNumRxAntennas(),
+                              2,
+                              "Second heterogeneous RX dimension changed");
+        NS_TEST_ASSERT_MSG_EQ(snapshot.users[1].rxArray.numColumns,
+                              2,
+                              "Per-user RX geometry changed");
+        NS_TEST_ASSERT_MSG_EQ(snapshot.users[1].frequencies[1],
+                              10,
+                              "Shared frequency grid changed");
+        NS_TEST_ASSERT_MSG_EQ_TOL(
+            std::abs(snapshot.users[1].channel.Get(1, 0, 1) -
+                     std::polar(1.0, 15.0)),
+            0.0,
+            1e-12,
+            "Subcarrier/RX/TX tensor index changed");
+    }
+};
+
+class MultiUserChannelSnapshotRejectionTest : public TestCase
+{
+  public:
+    MultiUserChannelSnapshotRejectionTest()
+        : TestCase("inconsistent multi-user snapshots are rejected before cache use")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        auto expectRejected = [this](const ChannelStateMessage& state, const std::string& reason) {
+            bool rejected = false;
+            try
+            {
+                SionnaPropagationCache::DeserializeMultiUserChannelSnapshot(state);
+            }
+            catch (const std::invalid_argument&)
+            {
+                rejected = true;
+            }
+            NS_TEST_ASSERT_MSG_EQ(rejected, true, reason);
+        };
+
+        auto duplicate = MakeMultiUserChannelSnapshotMessage();
+        duplicate.mutable_rx_nodes(1)->mutable_user_identity()->set_user_id(9);
+        expectRejected(duplicate, "Duplicate user was accepted");
+
+        auto timestamp = MakeMultiUserChannelSnapshotMessage();
+        timestamp.mutable_rx_nodes(1)->mutable_user_identity()->set_csi_timestamp(1235);
+        expectRejected(timestamp, "Mixed CSI timestamps were accepted");
+
+        auto direction = MakeMultiUserChannelSnapshotMessage();
+        direction.mutable_rx_nodes(1)->mutable_user_identity()->set_direction(
+            ns3sionna::CHANNEL_DIRECTION_UPLINK);
+        expectRejected(direction, "Mixed directions were accepted");
+
+        auto frequencies = MakeMultiUserChannelSnapshotMessage();
+        frequencies.mutable_rx_nodes(1)->set_frequencies(1, 11);
+        expectRejected(frequencies, "Inconsistent frequency grids were accepted");
+
+        auto array = MakeMultiUserChannelSnapshotMessage();
+        array.mutable_rx_nodes(0)->mutable_user_identity()->mutable_rx_array()->set_num_cols(3);
+        expectRejected(array, "RX geometry inconsistent with its tensor was accepted");
+    }
+};
+
 class SuMimoChannelRankTest : public TestCase
 {
   public:
@@ -2450,6 +2594,8 @@ class SionnaTestSuite : public TestSuite
         AddTestCase(new SpectrumWifiPhyMimoAdapterTest, TestCase::QUICK);
         AddTestCase(new LegacySisoDeserializationTest, TestCase::QUICK);
         AddTestCase(new MimoProtobufDeserializationTest, TestCase::QUICK);
+        AddTestCase(new MultiUserChannelSnapshotContractTest, TestCase::QUICK);
+        AddTestCase(new MultiUserChannelSnapshotRejectionTest, TestCase::QUICK);
     }
 };
 

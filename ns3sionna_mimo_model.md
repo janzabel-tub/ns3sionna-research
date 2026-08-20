@@ -1,6 +1,6 @@
 # ns3sionna: MIMO-Abstraktionsmodell für IEEE 802.11ax/be
 
-Stand: 20. August 2026, Phase 3 abgeschlossen, Phase 4 konkretisiert und Sionna 2.0.1 validiert
+Stand: 20. August 2026, Unterphase 4.1 abgeschlossen und Sionna 2.0.1 validiert
 
 Arbeitszweig: feature/su-mimo-minimal
 
@@ -15,7 +15,7 @@ Precoding und MU-MIMO, wird ausschließlich in ns-3 ausgeführt.
 
 Die Entwicklung erfolgt in kleinen, einzeln testbaren Schritten. Der aktuelle
 Stand umfasst die Unterphasen 1.1 bis 1.4, die vollständige Phase 2 sowie
-die Unterphasen 3.1 bis 3.5: den numerischen SU-MIMO-Kern, konfigurierbare
+die Unterphasen 3.1 bis 3.5 sowie 4.1: den numerischen SU-MIMO-Kern, konfigurierbare
 Sionna-Arrays, einen
 dimensionssicheren MIMO-Datenvertrag, explizit kalibrierbare
 802.11ax-EESM-/PER-Abbildung und die
@@ -53,7 +53,12 @@ Semantik durch denselben festen SpectrumWifiPhy-Adapterpfad. Das neue
 CPU-End-to-End-Beispiel vergleicht Open Loop, festen 2x1-Precoder, MRT und SVD
 bei gleicher Gesamtleistung und gibt Konfiguration, Durchsatz, PER,
 Stream-SINR, Rang, Precodingnorm, Leistungsanteile, Feedbackdiagnostik und
-CSI-Alter maschinenlesbar aus. MU-MIMO und Phase 4 wurden nicht begonnen.
+CSI-Alter maschinenlesbar aus.
+Der additive Mehrnutzer-Kanalvertrag ordnet nun gerichtete, zeitgleiche CFRs
+stabil nach Nutzer-ID, trägt die RX-Geometrie je Nutzer und übernimmt erst
+nach vollständiger Snapshotprüfung Einträge in den bestehenden Cache. Festes
+MU-Precoding, Inter-User-Interferenz und alle Unterphasen ab 4.2 wurden nicht
+begonnen.
 
 ## 2. Reproduzierbare Ausgangsbasis
 
@@ -403,7 +408,7 @@ Unterphasen geteilt. Die Unterphasen 4.1 bis 4.6 liefern zuerst einen
 vollständig nutzbaren Downlink-MU-MIMO-Pfad; 4.7 und 4.8 ergänzen danach den
 Uplink, ohne den Abschluss des Downlink-Pfads zu blockieren.
 
-#### Unterphase 4.1: Mehrnutzer-Kanalschnappschuss und Identität
+#### Unterphase 4.1: Mehrnutzer-Kanalschnappschuss und Identität (implementiert)
 
 - Einen dimensionssicheren Vertrag für gerichtete CFRs
   \(\{H_u[k]\}_{u=1}^{U}\) mit stabiler Nutzer-ID, Sender, Empfänger,
@@ -423,6 +428,14 @@ Abnahmekriterium: Synthetische Mehrnutzer-CFRs kommen unabhängig von ihrer
 Eingabereihenfolge nutzer- und indexgenau in ns-3 an; jeder inkonsistente
 Schnappschuss wird früh abgelehnt und alle bisherigen SU-Verträge bleiben
 unverändert erfolgreich.
+
+Dieses Kriterium ist erfüllt: Die vorhandene `ChannelState`-/`RxNodeInfo`-
+Bündelung trägt eine additive `UserChannelIdentity`; Python und C++ prüfen den
+gesamten Schnappschuss vor Verwendung, C++ sortiert nach stabiler Nutzer-ID
+und der Cache übernimmt erst danach alle Links gemeinsam. Die neuen
+synthetischen Verträge decken heterogene RX-Arrays ab. Sämtliche Phase-1- bis
+Phase-3-SU-Regressionen bleiben bestanden; Unterphase 4.2 wurde nicht
+vorweggenommen.
 
 #### Unterphase 4.2: Festes Downlink-MU-Precoding und Interferenzmodell
 
@@ -698,6 +711,78 @@ abgeleitet und berücksichtigen damit auch die Polarisation. CacheEntry hält di
 CFR nun als MimoChannelMatrix. GetPropagationChannelMatrix erhält die
 Dimensionen; GetPropagationCSI bleibt als flache, für 1x1 unveränderte
 Kompatibilitätsansicht bestehen.
+
+### 4.5 Mehrnutzer-Snapshot und gerichtete Identität der Unterphase 4.1
+
+Die bestehende gebündelte Antwort bleibt der Transportcontainer. Eine
+`ChannelState`-Nachricht bezeichnet genau einen CSI-Zeitpunkt und enthält
+weiterhin einen gemeinsamen Sender sowie mehrere `RxNodeInfo`-Nachrichten.
+Feld 11 von `RxNodeInfo` ergänzt additiv die Nachricht
+`UserChannelIdentity` mit
+
+\[
+  I_u=(u, n_{\mathrm{tx}}, n_{\mathrm{rx}}, d, t_{\mathrm{csi}}, A_{\mathrm{rx},u}).
+\]
+
+Hier sind $u$ die stabile Nutzer-ID, $n_{\mathrm{tx}}$ und
+$n_{\mathrm{rx}}$ die gerichteten Endpunkte, $d$ die explizite Richtung
+und $A_{\mathrm{rx},u}$ die vollständige Empfangsarraygeometrie. Unterphase
+4.1 erzeugt ausschließlich `CHANNEL_DIRECTION_DOWNLINK`; Uplink wird damit
+nicht vorweggenommen. Fehlt `UserChannelIdentity`, bleibt die vorhandene
+SU-/Legacy-Deserialisierung unverändert.
+
+Für einen gültigen Snapshot gelten gleichzeitig
+
+\[
+  t_{\mathrm{csi},u}=t_{\mathrm{start}},\qquad
+  f_{u,k}=f_k,\qquad
+  N_{\mathrm{sc},u}=N_{\mathrm{sc}},\qquad
+  N_{\mathrm{tx},u}=N_{\mathrm{tx}}.
+\]
+
+Die Empfangsdimension darf dagegen nutzerabhängig sein. Für ein planares
+Array mit $R_u$ Zeilen, $C_u$ Spalten und $P_u\in\{1,2\}$
+Polarisationsports gilt verbindlich
+
+\[
+  N_{\mathrm{rx},u}=R_u C_u P_u.
+\]
+
+Jeder Nutzer trägt sein eigenes $A_{\mathrm{rx},u}$; die bisherige globale
+RX-Konfiguration wird nicht mehr stillschweigend aus einem anderen Link
+abgeleitet. Der aktuelle Server schreibt für jeden von ihm erzeugten
+Mehrnutzer-Link die tatsächlich konfigurierte globale Geometrie explizit aus;
+Einzelnutzerantworten bleiben identitätsfrei. Der IPC- und
+C++-Vertrag kann bereits unterschiedliche Geometrien und
+$N_{\mathrm{rx},u}$ innerhalb desselben synthetischen Snapshots abbilden;
+eine knotenbezogene High-Level-Konfiguration des Sionna-Raytracings gehört
+nicht zu dieser Unterphase.
+
+Die CFR jedes Nutzers verwendet unverändert die Reihenfolge
+$i_u(k,r,t)=(kN_{\mathrm{rx},u}+r)N_{\mathrm{tx}}+t$, einen eigenen skalaren
+Wideband-Pfadverlust und die Einheitsleistungsnormalisierung
+
+\[
+  \frac{1}{N_{\mathrm{sc}}N_{\mathrm{rx},u}N_{\mathrm{tx}}}
+  \sum_{k,r,t}|H_u[k,r,t]|^2=1.
+\]
+
+`validate_multi_user_snapshot` prüft denselben Vertrag auf der Python-Seite.
+`DeserializeMultiUserChannelSnapshot` prüft in C++ zunächst sämtliche Nutzer,
+ohne Cachezustand zu verändern, und baut erst danach
+`MultiUserChannelSnapshot` auf. Dessen Nutzervektor ist unabhängig von der
+Eingabereihenfolge streng aufsteigend nach $u$ sortiert. Gemischte oder
+fehlende Identitäten, doppelte Nutzer, falsche Endpunkte/Richtungen,
+Zeitstempel, Frequenzraster, TX-Dimensionen, nicht passende RX-Geometrien,
+nicht endliche Werte und abweichende Normalisierung werden abgelehnt.
+
+Auch Antworten mit mehreren Look-ahead-Zeitpunkten werden vollständig in
+temporäre Einträge dekodiert, bevor der bestehende Cache einen davon
+übernimmt. Explizit identifizierte Einträge dürfen nur in ihrer gespeicherten
+TX-RX-Richtung getroffen werden. Identitätsfreie alte SU-Einträge behalten
+dagegen die bisherige reziproke Schlüsselverwendung. Damit bleibt der
+SU-Datenpfad erhalten, während Mehrnutzerzustände weder partiell noch in
+umgekehrter Richtung sichtbar werden.
 
 ## 5. SU-MIMO-Minimalmodell
 
@@ -2025,9 +2110,9 @@ Simulator-Timer, keine implizite CSI-Abfrage und keinen MAC-Feedbacktransport;
 diese Grenzen verhindern, dass das explizite Forschungsmodell eine
 vollständige 802.11-Soundingprozedur vortäuscht.
 
-## 7. Validierung der Unterphasen 1.1 bis 3.5
+## 7. Validierung der Unterphasen 1.1 bis 4.1
 
-Die native Suite sionna enthält nun 26 schnelle Fälle:
+Die native Suite sionna enthält nun 28 schnelle Fälle:
 
 1. API-Defaulttest für den vollständigen legacy-kompatiblen SISO-Vertrag,
    leere EESM-Kalibrierung, fehlendes W[k] und exakt drei gemeldete
@@ -2108,6 +2193,15 @@ Die native Suite sionna enthält nun 26 schnelle Fälle:
     Gesamtleistung, weist nach, dass Apply exakt dieselben Koeffizienten am
     Adapter installiert, und verwirft die Auswahl nach einer
     Orientierungsänderung.
+27. Protocol-Buffer-Rundlauf eines absichtlich umgekehrt eingegebenen
+    Zweinutzer-Snapshots. Er prüft die sortierte Nutzerfolge 3, 9, gerichtete
+    TX-/RX-Identität, gemeinsamen Zeitstempel und Frequenzraster,
+    sc/rx/tx-Indizes sowie heterogene 1x1- und 1x2-RX-Arrays bei gemeinsamem
+    Zweiantennensender.
+28. Atomare Negativmatrix für doppelte Nutzer, gemischte Zeitstempel und
+    Richtungen, abweichende Frequenzraster sowie eine RX-Geometrie, die nicht
+    zur CFR-Dimension passt. Jeder Fall wird vor Cacheverwendung als
+    `invalid_argument` abgelehnt.
 
 Die eigenständige native Suite `sionna-mimo-csi-feedback` ergänzt zwei Fälle
 für Unterphase 3.4. Der Feedbackfall prüft HE und EHT, beide SU-Codebücher,
@@ -2119,10 +2213,12 @@ CSI- und Sende-CFR, Rasterung mit Aktualisierungsintervall und Rückmeldedauer,
 statische und orthogonal gedrehte Kanäle, den daraus folgenden SINR-/PER-Abfall,
 frische CSI, vollständige Zustandsidentität und den unveränderten 1x1-Fall.
 
-Die fünf reinen Python-Vertragstests prüfen Standard- und explizite
+Die sieben reinen Python-Vertragstests prüfen Standard- und explizite
 Arraykonfiguration, bytegleiche 1x1-Serialisierung, die sc/rx/tx-Reihenfolge
 einer synthetischen 2x2-CFR, die gemeinsame MIMO-Normalisierung sowie die
-legacy-kompatible und explizite Knotenorientierung. Diese
+legacy-kompatible und explizite Knotenorientierung. Zwei Phase-4.1-Fälle
+ergänzen denselben Zweinutzer-Rundlauf und die Negativmatrix für Identität,
+Richtung, Zeitpunkt, Frequenzraster und heterogene RX-Geometrien. Diese
 Tests benötigen weder Raytracing, ZMQ noch eine GPU. Die analytischen
 Vergleiche des numerischen Kerns verwenden weiterhin eine absolute Toleranz
 von 1e-10; dies gilt auch für Identitäts-Precoding und synthetische
@@ -2256,12 +2352,33 @@ Look-ahead-Zeitpunkt. Dadurch wird kein Receiver angelegt und Sionna meldet
 ValueError: Scene has no receivers. Der explizite P2P-Beispielpfad ist davon
 nicht betroffen. Eine Korrektur gehört in eine eigene kleine Baseline-Subphase.
 
+### 7.3 Validierung der Unterphase 4.1
+
+Am 20. August 2026 wurden nach der Implementierung von Unterphase 4.1
+folgende gezielte Prüfungen erfolgreich ausgeführt:
+
+- Build des Ziels `sionna-test` einschließlich neu erzeugter
+  Protocol-Buffer-Bindings
+- native ns-3-Suite `sionna` mit allen 28 registrierten Fällen; die zwei neuen
+  Fälle decken Rundlauf, Sortierung, Identität, Richtung, heterogene
+  RX-Dimensionen und die atomare Negativmatrix ab
+- reine Python-Vertragssuite mit sieben von sieben Fällen in 0,004 s
+- gesamte Sionna-CPU-Serversuite mit acht von acht Fällen in 171,865 s,
+  einschließlich der vorhandenen Mehrnutzer-, 1x1- und 2x2-Pfade
+- unveränderte SU-Suites `sionna-mimo-csi-feedback`,
+  `sionna-example-sumimo-minimal` und
+  `sionna-example-sumimo-precoding`; alle Fälle bestanden
+- `sionna-example-mimo-helper-configuration-negative` mit allen drei Fällen;
+  insbesondere bleibt der MU-MIMO-Modus des Helpers abgelehnt und nimmt damit
+  Unterphase 4.2 nicht vorweg
+
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 
 - SionnaMimoHelper überträgt eine gemeinsame TX- und RX-Geometrie für die
   jeweilige integrierte Verbindung. Knoten können unterschiedliche
-  Orientierungen besitzen; heterogene Arraygeometrien pro Knoten sind im
-  aktuellen Vertrag nicht repräsentiert.
+  Orientierungen besitzen. Der Snapshotvertrag aus Unterphase 4.1
+  repräsentiert heterogene RX-Geometrien pro Nutzer; die aktuelle
+  Sionna-Raytracing-Konfiguration verwendet weiterhin ein gemeinsames RX-Array.
 - Nicht explizit orientierte Knoten behalten die alte Serverorientierung
   [0, -180, 0]. Explizite Winkel werden in beiden Servermodi an Sionna
   übertragen.
@@ -2270,8 +2387,9 @@ nicht betroffen. Eine Korrektur gehört in eine eigene kleine Baseline-Subphase.
   Nicht-HE-Kontrollrahmen verwenden weiterhin das erste Antennenpaar.
   SelectPrecoding benötigt eine bereits vorliegende CSI-Matrix und Zeitstempel;
   automatische Kanalschätzung, Sounding, periodische Simulatorereignisse,
-  MAC-Feedbackframes, per-Paket-Aktualisierung und MU-MIMO sind nicht
-  implementiert.
+  MAC-Feedbackframes und per-Paket-Aktualisierung sind nicht implementiert.
+  Unterphase 4.1 stellt nur den Mehrnutzer-Kanalsnapshot bereit; gemeinsames
+  MU-Precoding und Inter-User-Interferenz beginnen erst mit Unterphase 4.2.
 - MRT bleibt der eindeutige perfekte 2x1-MISO-Ein-Stream-Fall. Quantisierung
   und positives CSI-Alter gelten nur für gleichleistungs-SVD. Wasserfüllung
   bleibt auf unquantisiertes aktuelles CSI beschränkt, weil die semantische
@@ -2304,8 +2422,10 @@ nicht betroffen. Eine Korrektur gehört in eine eigene kleine Baseline-Subphase.
   \(1\leq N_s\leq\min(N_\mathrm{tx},N_\mathrm{rx})\) implementiert.
 - Die MI-Kompression bleibt eine Diagnosemetrik; nur die explizit konfigurierte
   EESM-Ausgabe wird an ErrorRateModel übergeben.
-- Die bestehende Rohkanal-Cache-Schlüsselbildung nimmt weiterhin Reziprozität
-  an. Die Precoder-Zustandsidentität enthält dagegen gerichtete TX-/RX-Knoten,
+- Explizit identifizierte Phase-4.1-Rohkanaleinträge werden nur in ihrer
+  gespeicherten TX-/RX-Richtung getroffen. Nur identitätsfreie Legacy-Einträge
+  behalten die bisherige reziproke Cacheverwendung. Die
+  Precoder-Zustandsidentität enthält ebenfalls gerichtete TX-/RX-Knoten,
   beide Arraykonfigurationen, Modus, Feedbackkonfiguration und CSI-Zeitpunkt.
   Der Helper gibt diese Identität maschinenlesbar weiter, bindet sie aber
   bewusst nicht an einen automatischen Laufzeitcache.
@@ -2315,13 +2435,15 @@ nicht betroffen. Eine Korrektur gehört in eine eigene kleine Baseline-Subphase.
   Datennachricht mit inkompatiblen 2x1-Dimensionen. Normale Sionna-Cachepfade
   sind davon nicht betroffen.
 
-Phase 3 ist mit Unterphase 3.5 abgeschlossen. Der Helper führt die
+Phase 3 ist mit Unterphase 3.5 abgeschlossen; Unterphase 4.1 ergänzt den
+gerichteten, atomar validierten Mehrnutzer-Kanalsnapshot. Der Helper führt die
 unveränderten festen, MRT-, SVD-, Wasserfüllungs-, Feedback- und
 Alterungsverträge durch eine explizite Auswahl zusammen, installiert das
 Ergebnis über den bestehenden festen-W[k]-Pfad und stellt die ursprünglichen
 Diagnosen bereit. Der 1x1-Grenzfall und alle Phase-1-/2-Pfade bleiben
-kompatibel. Automatische Sounding-/Feedbackabläufe, ein Laufzeitcache,
-MU-MIMO und sämtliche Arbeiten der Phase 4 wurden nicht begonnen.
+kompatibel. Automatische Sounding-/Feedbackabläufe, ein Precoder-Laufzeitcache,
+gemeinsames MU-Precoding, Inter-User-Interferenz und sämtliche Unterphasen ab
+4.2 wurden nicht begonnen.
 
 ## 9. Ausführung
 

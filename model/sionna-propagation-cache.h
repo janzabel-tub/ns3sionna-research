@@ -29,12 +29,54 @@
 #include "../helper/sionna-helper.h"
 
 #include <map>
+#include <string>
+#include <vector>
 
 #include <ns3/propagation-delay-model.h>
 #include "ns3/propagation-loss-model.h"
 
 namespace ns3
 {
+
+/** Direction carried by a validated Phase-4.1 user-channel snapshot. */
+enum class MultiUserChannelDirection
+{
+    DOWNLINK,
+    UPLINK
+};
+
+/** Explicit receive-array geometry for one user channel. */
+struct MultiUserReceiveArrayIdentity
+{
+    uint32_t numRows;
+    uint32_t numColumns;
+    double verticalSpacing;
+    double horizontalSpacing;
+    std::string pattern;
+    std::string polarization;
+};
+
+/** One directed, normalized user CFR and its separate wideband loss. */
+struct MultiUserChannel
+{
+    uint32_t userId;
+    uint32_t txNodeId;
+    uint32_t rxNodeId;
+    MultiUserChannelDirection direction;
+    Time csiTimestamp;
+    MultiUserReceiveArrayIdentity rxArray;
+    std::vector<int> frequencies;
+    double widebandLossDb;
+    MimoChannelMatrix channel;
+};
+
+/** A complete snapshot whose users are always ordered by stable user ID. */
+struct MultiUserChannelSnapshot
+{
+    Time csiTimestamp;
+    MultiUserChannelDirection direction;
+    std::vector<MultiUserChannel> users;
+};
 
 /**
  * All CSI values are cached within ns3sionna framework for faster simulation time.
@@ -65,6 +107,10 @@ class SionnaPropagationCache : public ns3::Object
          */
         static MimoChannelMatrix DeserializeChannelMatrix(
             const ns3sionna::ChannelStateResponse::ChannelState::RxNodeInfo& message);
+
+        /** Validate and decode a complete Phase-4.1 batch without changing cache state. */
+        static MultiUserChannelSnapshot DeserializeMultiUserChannelSnapshot(
+            const ns3sionna::ChannelStateResponse::ChannelState& message);
 
         // frequency of subcarriers
         std::vector<int> GetPropagationFreq(Ptr<const MobilityModel> a, Ptr<const MobilityModel> b) const;
@@ -118,13 +164,14 @@ class SionnaPropagationCache : public ns3::Object
             */
             CacheEntry(Time delay, double loss, Time start_time, Time end_time,
                 const MimoChannelMatrix& channel, uint32_t a, uint32_t b,
-                Vector a_position, Vector b_position)
+                Vector a_position, Vector b_position, bool directed)
                 : m_delay(delay),
                   m_loss(loss),
                   m_start_time(start_time),
                   m_end_time(end_time),
                   m_a(a),
                   m_b(b),
+                  m_directed(directed),
                   m_a_position(a_position),
                   m_b_position(b_position),
                   m_cfr(channel)
@@ -141,6 +188,7 @@ class SionnaPropagationCache : public ns3::Object
             Time m_end_time;
             uint32_t m_a;
             uint32_t m_b;
+            bool m_directed{false};
             Vector m_a_position;
             Vector m_b_position;
             // optional

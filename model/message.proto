@@ -16,6 +16,24 @@ message AntennaArrayConfig {
     string polarization = 6;
 }
 
+// Direction of one explicitly identified user channel. Phase 4.1 only emits
+// downlink snapshots; the enum keeps accidental direction changes visible.
+enum ChannelDirection {
+    CHANNEL_DIRECTION_UNSPECIFIED = 0;
+    CHANNEL_DIRECTION_DOWNLINK = 1;
+    CHANNEL_DIRECTION_UPLINK = 2;
+}
+
+// Stable identity carried by every link in a multi-user channel snapshot.
+message UserChannelIdentity {
+    uint32 user_id = 1;
+    uint32 tx_node_id = 2;
+    uint32 rx_node_id = 3;
+    ChannelDirection direction = 4;
+    uint64 csi_timestamp = 5; // simulation time (in ns)
+    AntennaArrayConfig rx_array = 6;
+}
+
 message SimInitMessage {
     string scene_fname = 1; // the scene to be loaded
     int32 seed = 2; // random seed
@@ -163,6 +181,10 @@ message ChannelStateResponse {
             // legacy messages and is interpreted as one antenna.
             uint32 num_rx_antennas = 9;
             uint32 num_tx_antennas = 10;
+
+            // Present for Phase-4.1 snapshots. Its absence preserves legacy
+            // SU responses and their existing decoding behavior.
+            UserChannelIdentity user_identity = 11;
         }
 
         TxNodeInfo tx_node = 3;
