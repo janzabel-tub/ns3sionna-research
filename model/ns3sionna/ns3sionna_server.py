@@ -1,4 +1,4 @@
-import sionna.rt # must be the first import as otherwise Python crashes
+import sionna.rt  # Must run before importing Mitsuba so Sionna selects its RT backend.
 
 import os
 import argparse
@@ -14,7 +14,6 @@ from common.message_debug import *
 from collections import deque
 import warnings
 
-import tensorflow as tf
 import mitsuba as mi
 import math
 from millify import millify
@@ -27,7 +26,6 @@ from mimo_data_contract import (RX_ARRAY_DEFAULTS, TX_ARRAY_DEFAULTS,
 from ns3sionna_utils import subcarrier_frequencies, compute_coherence_time, SECOND, MILLISECOND, coherence_from_velocities, \
     MAX_COHERENCE_TIME
 
-import sionna
 from sionna.rt import load_scene, Camera, Transmitter, Receiver, PlanarArray, PathSolver
 
 # import mobility models
@@ -89,13 +87,14 @@ class SionnaEnv:
         self.VERBOSE = VERBOSE
         self.CHECKS_ENABLED = CHECKS_ENABLED
 
-        # check GPU support
-        self.gpus = tf.config.list_physical_devices("GPU")
+        # Sionna RT 2.x selects a CUDA or LLVM Mitsuba variant during import.
+        self.rt_backend = mi.variant()
+        self.uses_gpu = self.rt_backend is not None and self.rt_backend.startswith("cuda")
 
-        if len(self.gpus) > 0:
-            print("GPU support detected; no GPUs:", self.gpus)
+        if self.uses_gpu:
+            print("Using GPU ray-tracing backend:", self.rt_backend)
         else:
-            print("Using CPU backend")
+            print("Using CPU ray-tracing backend:", self.rt_backend)
 
         self.disp_r = 10
         # storing information about every node under simulation
@@ -161,7 +160,6 @@ class SionnaEnv:
 
         # Set the random seed for reproducibility
         np.random.seed(sim_init_msg.seed)
-        tf.random.set_seed(sim_init_msg.seed)
         self.my_seed = sim_init_msg.seed
 
         # configure mobility models
@@ -303,7 +301,8 @@ class SionnaEnv:
                          synthetic_array=self.rt_synthetic_array,
                          diffraction=self.rt_diffraction,  # costly
                          edge_diffraction=self.rt_edge_diffraction,  # rays that bend around edges
-                         diffraction_lit_region=self.rt_diffraction_lit_region)  # higher physical accuracy
+                         diffraction_lit_region=self.rt_diffraction_lit_region,  # higher physical accuracy
+                         seed=self.my_seed)
 
         # AZU: sampling_frequency is only used if num_time_steps > 1
         # a: shape [num_rx, num_rx_ant, num_tx, num_tx_ant, num_paths, num_time_steps],
@@ -627,7 +626,8 @@ class SionnaEnv:
                          synthetic_array=self.rt_synthetic_array,
                          diffraction=self.rt_diffraction,  # costly
                          edge_diffraction=self.rt_edge_diffraction,  # rays that bend around edges
-                         diffraction_lit_region=self.rt_diffraction_lit_region)  # higher physical accuracy
+                         diffraction_lit_region=self.rt_diffraction_lit_region,  # higher physical accuracy
+                         seed=self.my_seed)
 
         # AZU: sampling_frequency is only used if num_time_steps > 1
         # a: shape [num_rx, num_rx_ant, num_tx, num_tx_ant, num_paths, num_time_steps],
@@ -783,7 +783,7 @@ class SionnaEnv:
                     print("t=%.9fs: average event processing time: %.2f sec"
                           % (ns3_msg.channel_state_request.time/1e9, avg_call_time))
                     # show GPU load
-                    if len(self.gpus) > 0:
+                    if self.uses_gpu:
                         GPUtil.showUtilization()
 
             elif ns3_msg.HasField("sim_close_request"):

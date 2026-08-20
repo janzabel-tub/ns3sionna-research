@@ -1,10 +1,10 @@
 # ns3sionna: MIMO-Abstraktionsmodell für IEEE 802.11ax/be
 
-Stand: 15. August 2026, Unterphase 3.5 und damit Phase 3 abgeschlossen
+Stand: 20. August 2026, Phase 3 abgeschlossen, Phase 4 konkretisiert und Sionna 2.0.1 validiert
 
 Arbeitszweig: feature/su-mimo-minimal
 
-Basis: ns-3.40, ns3sionna c896b858; Auftragsbasis 46d73fa; Sionna 1.2.1
+Basis: ns-3.40, ns3sionna c896b858; Auftragsbasis 46d73fa; Sionna und Sionna RT 2.0.1
 
 ## 1. Ziel und Abgrenzung
 
@@ -62,8 +62,9 @@ Die lokale Referenzplattform ist CPU-only:
 - Ubuntu 24.04, GCC 13.3, CMake 3.28
 - ns-3.40 mit Tests und Beispielen
 - ZeroMQ 4.3.5 und Protocol Buffers 3.21.12
-- Python 3.12.12, Sionna 1.2.1, NumPy 1.26.4
-- TensorFlow erkennt keine GPU und verwendet den CPU-Pfad
+- Python 3.12.12, Sionna 2.0.1, Sionna RT 2.0.1 und NumPy 2.5.2
+- Mitsuba 3.8.0, Dr.Jit 1.3.1 und LLVM-Backend llvm_ad_mono_polarized
+- PyTorch 2.9.1+cpu; TensorFlow ist keine Laufzeitabhängigkeit mehr
 
 Ohne explizite Arraykonfiguration verwendet der Server weiterhin exakt die
 bisherige 1x1-Sende- und Empfangsantenne. Die normalisierte SISO-CFR erfüllt
@@ -388,16 +389,202 @@ decken die alten sowie die neuen Pfade ab.
 
 ### Phase 4: MU-MIMO
 
-Unterphasen:
+Sionna liefert auch in Phase 4 ausschließlich gerichtete komplexe CFRs
+\(H_u[k]\) für die einzelnen Verbindungen. Gemeinsame Nutzerwahl, Precoding,
+Leistungsaufteilung, Inter-User-Interferenz, Scheduling, Empfängermodell und
+PER-Abbildung bleiben vollständig in ns-3. Eine MU-Übertragung darf nur
+Kanäle aus einem konsistenten gemeinsamen Zeitschnappschuss verwenden.
 
-1. mehrere CFR-Matrizen H_u[k] in einem gemeinsamen Zeitstempel
-2. Downlink-ZF und regularisiertes ZF
-3. Inter-User-Interferenz in der Stream-SINR
-4. RU/NSS-Zuordnung für HE/EHT und Scheduler-Schnittstelle
-5. Uplink-MU-MIMO
+Phase 4 ist größer als die vorherigen Einzelphasen. Insbesondere sind
+Downlink und Uplink nicht symmetrisch: Im Downlink sendet ein AP mit einem
+gemeinsamen Precoder, während im Uplink mehrere unabhängige Sender am AP
+gemeinsam detektiert werden. Die Phase wird daher in acht vertikale
+Unterphasen geteilt. Die Unterphasen 4.1 bis 4.6 liefern zuerst einen
+vollständig nutzbaren Downlink-MU-MIMO-Pfad; 4.7 und 4.8 ergänzen danach den
+Uplink, ohne den Abschluss des Downlink-Pfads zu blockieren.
 
-Das Phasenbeispiel ns3_wifi_mumimo.cc vergleicht SU-Round-Robin mit MU-ZF bei
-unterschiedlicher räumlicher Nutzerkorrelation.
+#### Unterphase 4.1: Mehrnutzer-Kanalschnappschuss und Identität
+
+- Einen dimensionssicheren Vertrag für gerichtete CFRs
+  \(\{H_u[k]\}_{u=1}^{U}\) mit stabiler Nutzer-ID, Sender, Empfänger,
+  Richtung und gemeinsamem CSI-Zeitstempel definieren.
+- Subcarrierzahl, Frequenzraster, Normalisierung und die Trennung zwischen
+  CFR und skalarem Wideband-Pfadverlust über alle Nutzer konsistent halten.
+- Unterschiedliche Empfangsarraygeometrien und Antennenzahlen je Nutzer
+  repräsentieren; die bisherige gemeinsame RX-Geometrie darf nicht
+  stillschweigend auf alle Stationen übertragen werden.
+- Vorhandene gebündelte Sionna-Anfragen und Cachepfade soweit möglich
+  wiederverwenden und gemischte Zeitstempel, doppelte Nutzer, inkonsistente
+  Dimensionen oder Richtungen vor jeder Zustandsänderung ablehnen.
+- Python- und C++-Vertragstests für Nutzerreihenfolge, Serialisierung,
+  Tensorindizes, heterogene RX-Dimensionen und Zeitidentität ergänzen.
+
+Abnahmekriterium: Synthetische Mehrnutzer-CFRs kommen unabhängig von ihrer
+Eingabereihenfolge nutzer- und indexgenau in ns-3 an; jeder inkonsistente
+Schnappschuss wird früh abgelehnt und alle bisherigen SU-Verträge bleiben
+unverändert erfolgreich.
+
+#### Unterphase 4.2: Festes Downlink-MU-Precoding und Interferenzmodell
+
+- Einen festen gemeinsamen Precoder
+
+  \[
+    W[k] = \left[W_1[k],\ldots,W_U[k]\right]
+  \]
+
+  mit expliziter Zuordnung seiner Spalten zu Nutzer und Stream definieren.
+- Die Phase-3-Leistungskonvention auf die Gesamtzahl
+  \(N_{s,\mathrm{ges}}\) aller gleichzeitig gesendeten Streams erweitern:
+  \(\lVert W[k]\rVert_F^2=N_{s,\mathrm{ges}}\), sodass \(P\) weiterhin die
+  gesamte AP-Sendeleistung bezeichnet. Jede abweichende Nutzer- oder
+  Streamgewichtung muss explizit sein und in Summe dieselbe Gesamtleistung
+  erhalten.
+- Für jeden Nutzer gewünschten Anteil und Inter-User-Interferenz getrennt
+  berechnen:
+
+  \[
+    y_u[k] = H_u[k]W_u[k]x_u[k]
+      + \sum_{v\ne u} H_u[k]W_v[k]x_v[k] + n_u[k].
+  \]
+
+- Den bestehenden linearen Empfänger mit der vollständigen
+  Interferenzkovarianz auswerten und gewünschte Leistung,
+  Interferenzleistung sowie Post-Processing-SINR je Nutzer, Subcarrier und
+  Stream ausgeben.
+- EESM und PER anschließend separat mit dem MCS und der Paketgröße des
+  jeweiligen Nutzers bestimmen.
+
+Abnahmekriterium: Ein einzelner Nutzer reproduziert Phase 3 innerhalb
+\(10^{-10}\); orthogonale Nutzer erzeugen keine Inter-User-Interferenz,
+korrelierte Referenzkanäle liefern die analytische Interferenz und die
+Gesamtsendeleistung bleibt invariant.
+
+#### Unterphase 4.3: Ideales Downlink-ZF und regularisiertes ZF
+
+- Zunächst den eindeutigen Minimalfall mit einem Stream je Nutzer und
+  perfekter gleichzeitiger CSI implementieren.
+- ZF aus dem gestapelten Mehrnutzerkanal und RZF mit explizit
+  konfigurierbarem Regularisierungsparameter berechnen; es gibt keinen
+  versteckten Regularisierungsdefault.
+- Rangschwelle, Nutzerreihenfolge, Pseudoinverse und deterministische
+  Behandlung gleicher beziehungsweise nahezu gleicher Singulärwerte
+  dokumentieren.
+- Den gemeinsamen Precoder nach jeder Auswahl auf die Konvention aus
+  Unterphase 4.2 normalisieren und überlastete oder rangdefiziente
+  Nutzergruppen eindeutig ablehnen beziehungsweise als nicht planbar melden.
+- Orthogonale, korrelierte, überlastete und rangdefiziente analytische
+  Referenzkanäle testen.
+
+Abnahmekriterium: ZF unterdrückt auf vollrangigen Referenzkanälen die
+Inter-User-Interferenz innerhalb der numerischen Toleranz; RZF bleibt auf
+schlecht konditionierten Kanälen endlich, deterministisch und
+leistungsnormalisiert. Mehrere Streams je Nutzer werden erst nach einem
+explizit dokumentierten Blockdiagonalisierungs- oder gemeinsamen
+Transceiververtrag freigeschaltet und bis dahin klar abgelehnt.
+
+#### Unterphase 4.4: HE-Downlink-MU-PHY-Integration
+
+- Den gemeinsamen MU-Zustand in den schmalsten geeigneten
+  SpectrumWifiPhy-Pfad für `WIFI_PREAMBLE_HE_MU` einkoppeln.
+- Die vorhandenen STA-ID-, RU-, MCS- und NSS-Angaben aus
+  `WifiTxVector::HeMuUserInfoMap` verwenden, anstatt parallele
+  Wi-Fi-Metadaten im Sionna-Modul einzuführen.
+- Inter-User-Interferenz nur zwischen räumlich gemultiplexten Nutzern
+  innerhalb derselben RU berücksichtigen; verschiedene RUs bleiben
+  orthogonal.
+- Für jeden Empfänger erst nach der matrixwertigen MU-Berechnung auf dessen
+  skalare äquivalente Empfangs-PSD komprimieren. Pfadverlust, AP-Sendeleistung,
+  Rauschen und Empfangsgewinn dürfen dabei jeweils genau einmal eingehen.
+- Positive und negative Adaptertests für Nutzer-/STA-ID-Zuordnung, RU, NSS,
+  Antennendimensionen und unbekannte Empfänger ergänzen.
+
+Abnahmekriterium: Ein echter HE-DL-MU-PPDU liefert je adressiertem Empfänger
+die analytisch erwartete SINR und PER; nicht adressierte oder inkonsistente
+Empfänger verändern keinen MU-Zustand. Der bestehende SU-Pfad bleibt
+bit- und funktionskompatibel. EHT bleibt bis zu einer expliziten
+EHT-Link-/PER-Abstraktion als nicht unterstützt gekennzeichnet.
+
+#### Unterphase 4.5: Laufzeit-CSI und Scheduler-Schnittstelle
+
+- Einen gerichteten, zeitgestempelten CSI- und Precoderzustand pro AP,
+  Nutzergruppe, RU und Übertragungsrichtung verwalten; veraltete oder für eine
+  andere Gruppe erzeugte Zustände dürfen nicht wiederverwendet werden.
+- An die vorhandene ns-3-`MultiUserScheduler`-Schnittstelle anbinden und
+  zunächst deterministische Nutzergruppen sowie RU-/NSS-Zuordnungen
+  unterstützen.
+- Danach eine explizit auswählbare korrelationsbasierte Gruppierung ergänzen,
+  welche unbelegbare Gruppen verwirft und ihre Auswahlmetrik ausgibt.
+- CSI-Aktualisierungsintervall, Feedbackverzögerung und den tatsächlichen
+  Sendezeitpunkt aus Phase 3 übernehmen. Quantisierte MU-Rückmeldung erhält
+  einen eigenen Vertrag; ein rekonstruierter SU-Precoder darf nicht
+  stillschweigend als vollständige MU-Kanalschätzung behandelt werden.
+- Wiederholte Läufe mit identischen Seeds sowie kontrollierte Änderungen von
+  Nutzerreihenfolge, Korrelation und CSI-Alter testen.
+
+Abnahmekriterium: Scheduler und PHY verwenden nachweislich denselben
+gerichteten Kanalschnappschuss; unpassende oder veraltete Zustände werden
+erkannt und identische Eingaben erzeugen exakt dieselbe Nutzergruppe,
+RU-/NSS-Zuordnung und denselben Precoder.
+
+#### Unterphase 4.6: Downlink-Benutzbarkeit und Phasenvalidierung
+
+- `SionnaMimoHelper` den Modus `MU_MIMO` erst nach erfolgreicher
+  End-to-End-Integration als unterstützt melden lassen.
+- Das Beispiel `ns3_wifi_mumimo.cc` anlegen und SU-Round-Robin, festes
+  MU-Precoding, MU-ZF und MU-RZF bei gleicher Gesamtleistung und vergleichbarer
+  Sendezeit gegenüberstellen.
+- Orthogonale und stark korrelierte Nutzergruppen sowie aktuelles und
+  veraltetes CSI vergleichen.
+- Pro Nutzer Durchsatz, PER, Stream-SINR, gewünschte Leistung,
+  Inter-User-Interferenz, RU, NSS und CSI-Alter sowie für die Gruppe Rang,
+  Precodingnorm, Gesamtleistung und Fairness maschinenlesbar ausgeben.
+- Vollständige CPU-End-to-End- und Negativtests sowie alle Regressionen der
+  Phasen 1 bis 3 ausführen.
+
+Abnahmekriterium: MU-ZF erzielt bei ausreichend unkorrelierten Nutzern den
+erwarteten gleichzeitigen Übertragungsgewinn gegenüber SU-Round-Robin, ohne
+zusätzliche AP-Sendeleistung zu erzeugen; bei hoher Korrelation verschlechtert
+sich das Ergebnis nachvollziehbar oder die Gruppe wird abgelehnt. Beispiele
+benötigen keine manuelle Verdrahtung interner Objekte.
+
+#### Unterphase 4.7: Uplink-MU-Numerikkern
+
+- Das Uplink-Signalmodell
+
+  \[
+    y[k] = \sum_{u=1}^{U} H_u[k]x_u[k] + n[k]
+  \]
+
+  mit getrennten Nutzer-Sendeleistungen, Pfadverlusten und Streamzuordnungen
+  definieren.
+- Zunächst ideale Zeit- und Frequenzsynchronisation sowie einen Stream je
+  Nutzer annehmen und diese Grenze ausdrücklich dokumentieren.
+- Gemeinsame ZF- und lineare MMSE-Detektion am AP implementieren und
+  Post-Processing-SINR, Inter-User-Interferenz und PER je Nutzer bestimmen.
+- Nah-Fern-Fälle, orthogonale Nutzer, Rangverlust, unterschiedliche
+  Sendeleistungen und den Einzelnutzer-Grenzfall analytisch testen.
+
+Abnahmekriterium: Der Einzelnutzerfall reproduziert die vorhandene
+SU-Empfangsabstraktion; analytische Mehrnutzerkanäle und Nah-Fern-Fälle
+liefern die erwarteten ZF-/MMSE-SINRs, ohne Nutzerleistungen zu vermischen.
+
+#### Unterphase 4.8: Uplink-PHY-Integration und Gesamtabschluss
+
+- Den Uplink-Kern an koordinierte HE-TB-/UL-MU-Übertragungen, Triggerrahmen,
+  STA-ID-, RU- und MCS-Zuordnungen anbinden.
+- Sicherstellen, dass nur tatsächlich gleichzeitig empfangene Nutzer in
+  denselben Detektionszustand eingehen; fehlende, verspätete oder
+  inkonsistent konfigurierte Teilnehmer werden explizit behandelt.
+- Das Phasenbeispiel um UL-MU gegenüber sequenziellen SU-Übertragungen
+  erweitern und die ideale Synchronisationsannahme in der Ausgabe sichtbar
+  machen.
+- Alle API-, Numerik-, PHY-, Scheduler-, CPU-End-to-End- und Legacytests
+  ausführen sowie Dokumentation und PDF abschließend aktualisieren.
+
+Abnahmekriterium: Eine koordinierte UL-MU-Gruppe liefert pro Nutzer
+reproduzierbare SINR-, PER- und Durchsatzwerte; der erwartete
+Gleichzeitigkeitsgewinn sowie Nah-Fern- und Rangverlusteffekte sind sichtbar,
+und alle Phase-1- bis Phase-3-Regressionen bleiben erfolgreich.
 
 ### Phase 5: Kalibrierung, Skalierung und Reproduzierbarkeit
 
@@ -443,7 +630,7 @@ alte Empfänger ignorieren die unbekannten neuen Felder einer MIMO-Antwort.
 
 ### 4.2 Transformation aus Sionna
 
-Sionna 1.2.1 liefert die CFR in der Form
+Sionna RT 2.0.1 liefert die CFR weiterhin in der Form
 
 \[
   H_\mathrm{raw}
@@ -2025,6 +2212,44 @@ auf einem CPU-System erfolgreich ausgeführt:
   drei 1 x 1 x 3072-CFR-Antworten, zwei empfangene UDP-Pakete zu je 1024 Byte
   und Cache-Hit-Rate 0,993056
 
+### 7.2 Migration und Validierung mit Sionna 2.0.1
+
+Am 20. August 2026 wurde die Python-Serverumgebung auf Sionna 2.0.1 und
+Sionna RT 2.0.1 aktualisiert. Die reproduzierbare Abhängigkeitsbasis lautet:
+
+- `requirements.txt` fixiert Sionna 2.0.1, Sionna RT 2.0.1,
+  Mitsuba 3.8.0, Dr.Jit 1.3.1 und PyTorch 2.9.1; die von Sionna geforderte
+  NumPy-Untergrenze ist 2.2.6.
+- `requirements_cpuonly.txt` wählt zusätzlich das offizielle CPU-Rad
+  PyTorch 2.9.1+cpu.
+- TensorFlow wurde aus beiden Requirements und aus dem Server entfernt.
+  Der Server erkennt den tatsächlich von Sionna RT gewählten
+  Mitsuba-Variantennamen und unterscheidet darüber CUDA- und LLVM-Ausführung.
+- Der ns-3-Seed wird bei beiden Raytracing-Pfaden nun mit `seed` explizit
+  an `PathSolver` weitergegeben. Damit steuert der Simulationsseed auch die
+  stochastische Strahlabtastung; zuvor blieb dort implizit Sionnas
+  Standardwert aktiv.
+- `Paths.cir()`, `Paths.cfr()`, `PlanarArray` und `PathSolver` behalten
+  in Sionna RT 2.0.1 die hier verwendete API. Die CFR-Dimension
+  [num_rx, num_rx_ant, num_tx, num_tx_ant, num_time_steps, num_subcarriers]
+  und damit der bestehende sc/rx/tx-Datenvertrag bleiben unverändert.
+
+Die aktualisierte CPU-Umgebung bestand folgende Prüfungen:
+
+- strikte Importprüfung für Sionna 2.0.1 und Sionna RT 2.0.1 sowie
+  Mitsuba 3.8.0, Dr.Jit 1.3.1, NumPy 2.5.2, PyTorch 2.9.1+cpu und ZeroMQ
+- Python-Vertragssuite: fünf von fünf Fällen in 0,003 s bestanden
+- gesamte Sionna-CPU-Serversuite: acht von acht Fällen in 155,993 s bestanden;
+  der reale MIMO-Fall lieferte auf dem LLVM-Backend erneut eine endliche,
+  gemeinsam über alle Antennenpaare normalisierte 2 x 2 x 256-CFR
+- native ns-3-Suite `sionna`: 26 von 26 Fällen bestanden
+- native ns-3-Suite `sionna-mimo-csi-feedback`: zwei von zwei Fällen bestanden
+
+Damit ist die Sionna-RT-Schnittstelle für 1x1 und 2x2 unter 2.0.1 validiert.
+Der Wechsel von TensorFlow zu PyTorch betrifft den vorhandenen RT-Kanalpfad
+nicht; TensorFlow ist für ns3sionna nach der Migration keine
+Runtimeabhängigkeit mehr.
+
 Der ältere Beispielpfad example-sionna ist in der unveränderten Basis defekt:
 Er startet standardmäßig Mode 3 mit Submode 1, berechnet aber keinen
 Look-ahead-Zeitpunkt. Dadurch wird kein Receiver angelegt und Sionna meldet
@@ -2118,6 +2343,8 @@ Vom ns-3.40-Verzeichnis:
 
 Python-Vertrag und Server vom Verzeichnis contrib/sionna/model/ns3sionna:
 
+    python -m pip install --upgrade -r requirements_cpuonly.txt
+    python tests/test_imports.py
     conda run -n sionna-venv python -m unittest -v tests.test_mimo_data_contract
     conda run -n sionna-venv python -m unittest -v tests.unit_tests
 

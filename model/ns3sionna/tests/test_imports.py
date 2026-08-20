@@ -1,50 +1,46 @@
-try:
-    import sionna
-    print("Package sionna is installed")
-    print(sionna.__version__)
+"""Validate the packages required by the ns3sionna Python server."""
 
-except ImportError:
-    print("Package sionna is not installed")
+from importlib.metadata import PackageNotFoundError, version
 
-try:
-    import mitsuba as mi
-    print("Package mitsuba is installed")
-    print(mi.__version__)
-except ImportError:
-    print("Package mitsuba is not installed")
 
-try:
-    import numpy as np
-    print("Package numpy is installed")
-    print(np.__version__)
-except ImportError:
-    print("Package numpy is not installed")
+EXPECTED_VERSIONS = {
+    "sionna": "2.0.1",
+    "sionna-rt": "2.0.1",
+    "mitsuba": "3.8.0",
+    "drjit": "1.3.1",
+}
 
-try:
-    import os
-    import tensorflow as tf
-    print("Package tensorflow is installed")
 
-    gpu_num = 0 # Use "" to use the CPU
-    os.environ["CUDA_VISIBLE_DEVICES"] = f"{gpu_num}"
-    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+def installed_version(distribution):
+    """Return a distribution version and fail with a useful package name."""
+    try:
+        return version(distribution)
+    except PackageNotFoundError as error:
+        raise RuntimeError("Package {} is not installed".format(distribution)) from error
 
-    gpus = tf.config.list_physical_devices('GPU')
-    if gpus:
-        try:
-            tf.config.experimental.set_memory_growth(gpus[0], True)
-        except RuntimeError as e:
-            print(e)
-    tf.get_logger().setLevel('ERROR')
 
-    print("gpus_num:", gpu_num)
-    print("gpus:", gpus)
+for package, expected in EXPECTED_VERSIONS.items():
+    actual = installed_version(package)
+    if actual != expected:
+        raise RuntimeError(
+            "Expected {}=={}, found {}".format(package, expected, actual)
+        )
+    print("{} {} is installed".format(package, actual))
 
-except ImportError:
-    print("Package tensorflow is not installed")
+# Import Sionna RT first so that it selects the supported Mitsuba variant.
+import sionna.rt as rt  # noqa: E402
+import mitsuba as mi  # noqa: E402
+import drjit as dr  # noqa: E402
+import numpy as np  # noqa: E402
+import torch  # noqa: E402
+import zmq  # noqa: E402
 
-try:
-    import zmq
-    print("Package zmq is installed")
-except ImportError:
-    print("Package zmq is not installed")
+
+print("Sionna RT module:", rt.__version__)
+print("Mitsuba:", mi.__version__)
+print("Dr.Jit:", dr.__version__)
+print("Mitsuba variant:", mi.variant())
+print("NumPy:", np.__version__)
+print("PyTorch:", torch.__version__)
+print("PyTorch CUDA available:", torch.cuda.is_available())
+print("ZeroMQ:", zmq.zmq_version())
