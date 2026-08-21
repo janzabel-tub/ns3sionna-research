@@ -45,6 +45,8 @@ set(proto_source_files model/message.proto)
 
 # Module sources and headers
 set(SOURCE_FILES
+        model/dl-mu-mimo-link-model.cc
+        model/he-dl-mu-mimo-link-abstraction.cc
         model/he-su-mimo-link-abstraction.cc
         model/mimo-channel-matrix.cc
         model/mimo-csi-feedback.cc
@@ -64,6 +66,8 @@ set(SOURCE_FILES
 )
 
 set(HEADER_FILES
+        model/dl-mu-mimo-link-model.h
+        model/he-dl-mu-mimo-link-abstraction.h
         model/he-su-mimo-link-abstraction.h
         model/mimo-channel-matrix.h
         model/mimo-csi-feedback.h

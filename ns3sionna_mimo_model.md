@@ -1,6 +1,6 @@
 # ns3sionna: MIMO-Abstraktionsmodell für IEEE 802.11ax/be
 
-Stand: 20. August 2026, Unterphase 4.1 abgeschlossen und Sionna 2.0.1 validiert
+Stand: 21. August 2026, Unterphase 4.2 abgeschlossen und validiert
 
 Arbeitszweig: feature/su-mimo-minimal
 
@@ -56,9 +56,13 @@ Stream-SINR, Rang, Precodingnorm, Leistungsanteile, Feedbackdiagnostik und
 CSI-Alter maschinenlesbar aus.
 Der additive Mehrnutzer-Kanalvertrag ordnet nun gerichtete, zeitgleiche CFRs
 stabil nach Nutzer-ID, trägt die RX-Geometrie je Nutzer und übernimmt erst
-nach vollständiger Snapshotprüfung Einträge in den bestehenden Cache. Festes
-MU-Precoding, Inter-User-Interferenz und alle Unterphasen ab 4.2 wurden nicht
-begonnen.
+nach vollständiger Snapshotprüfung Einträge in den bestehenden Cache. Darauf
+wertet der neue native Downlink-MU-Kern einen festen gemeinsamen Precoder mit
+expliziter Spaltenzuordnung aus. Er erhält die gesamte AP-Sendeleistung,
+trennt gewünschte Leistung und Inter-User-Interferenz je Nutzer, Subcarrier und
+Stream und berechnet EESM sowie PER mit den nutzerspezifischen MCS- und
+Paketgrößenangaben. Precoderwahl, ZF/RZF, Scheduler, High-Level-Helper- und
+HE-MU-PHY-Integration aus Unterphase 4.3 und später wurden nicht begonnen.
 
 ## 2. Reproduzierbare Ausgangsbasis
 
@@ -437,7 +441,7 @@ synthetischen Verträge decken heterogene RX-Arrays ab. Sämtliche Phase-1- bis
 Phase-3-SU-Regressionen bleiben bestanden; Unterphase 4.2 wurde nicht
 vorweggenommen.
 
-#### Unterphase 4.2: Festes Downlink-MU-Precoding und Interferenzmodell
+#### Unterphase 4.2: Festes Downlink-MU-Precoding und Interferenzmodell (implementiert)
 
 - Einen festen gemeinsamen Precoder
 
@@ -471,6 +475,14 @@ Abnahmekriterium: Ein einzelner Nutzer reproduziert Phase 3 innerhalb
 \(10^{-10}\); orthogonale Nutzer erzeugen keine Inter-User-Interferenz,
 korrelierte Referenzkanäle liefern die analytische Interferenz und die
 Gesamtsendeleistung bleibt invariant.
+
+Dieses Kriterium ist erfüllt: `DlMuMimoPrecodingMatrix` ordnet jede
+Spalte des unveränderten Phase-3-Precoders explizit einem Nutzer und lokalen
+Stream zu. `DlMuMimoLinkModel` wertet die vollständige Empfangskovarianz
+aus und weist gewünschte Leistung, Inter-User-Interferenz und SINR getrennt
+aus. `HeDlMuMimoLinkAbstraction` wendet den bestehenden EESM- und
+ErrorRateModel-Vertrag anschließend nutzerweise an. Analytische native Tests
+erfüllen alle vier Invarianten; Unterphase 4.3 wurde nicht vorweggenommen.
 
 #### Unterphase 4.3: Ideales Downlink-ZF und regularisiertes ZF
 
@@ -784,7 +796,7 @@ dagegen die bisherige reziproke Schlüsselverwendung. Damit bleibt der
 SU-Datenpfad erhalten, während Mehrnutzerzustände weder partiell noch in
 umgekehrter Richtung sichtbar werden.
 
-## 5. SU-MIMO-Minimalmodell
+## 5. Numerisches SU- und Downlink-MU-MIMO-Modell
 
 ### 5.1 Signalmodell
 
@@ -1709,6 +1721,113 @@ anschließend den vorhandenen festen-W[k]-Pfad. Periodische Ereignisse oder
 MAC-Feedbackframes werden dadurch nicht vorgetäuscht.
 
 
+### 5.13 Festes Downlink-MU-Precoding und Interferenzmodell der Unterphase 4.2
+
+`DlMuMimoPrecodingMatrix` bettet den unveränderten,
+leistungsvalidierten `MimoPrecodingMatrix`-Tensor ein. Der Index eines
+Eintrags im Zuordnungsvektor ist die globale Precoder-Spalte $c$; der Eintrag
+
+\[
+  a_c=(u,s_u)
+\]
+
+nennt die stabile Nutzer-ID $u$ und den nutzerlokalen Stream $s_u$. Die lokalen
+Streamindizes jedes Nutzers beginnen bei null und sind lückenlos. Jeder Nutzer
+des Phase-4.1-Snapshots erhält mindestens einen Stream, und kein Stream darf
+auf einen nicht vorhandenen Nutzer zeigen.
+
+Die Phase-3-Normierung gilt jetzt über alle gleichzeitig gesendeten Spalten:
+
+\[
+  \Vert W[k]\Vert_F^2=N_{s,\mathrm{ges}}.
+\]
+
+Mit der expliziten Spaltenleistung
+
+\[
+  q_c[k]=\sum_t |W_{t,c}[k]|^2,\qquad
+  \sum_c q_c[k]=N_{s,\mathrm{ges}}
+\]
+
+beträgt der Anteil der gesamten AP-Leistung für Spalte $c$ genau
+$q_c[k]/N_{s,\mathrm{ges}}$. Gleiche Spaltennormen ergeben gleiche Leistung;
+abweichende Nutzer- oder Streamgewichte stehen sichtbar in $W[k]$, ohne die
+Gesamtleistung zu ändern.
+
+Für Nutzer $u$ wird zunächst der vollständige effektive Kanal gebildet:
+
+\[
+  G_u[k]=H_u[k]W[k]
+    =\left[g_{u,0}[k],\ldots,g_{u,N_{s,\mathrm{ges}}-1}[k]\right].
+\]
+
+Die nutzerspezifische Referenz-SNR $\rho_u$ enthält den getrennten
+Wideband-Pfadverlust und die Empfängerrauschleistung. Für jede globale Spalte
+gilt derselbe Symbolleistungsfaktor
+
+\[
+  \alpha_u=\frac{\rho_u}{N_{s,\mathrm{ges}}}.
+\]
+
+Der lineare Empfänger verwendet die vollständige Kovarianz aller gewünschten
+und fremden Spalten,
+
+\[
+  R_u[k]=I+\alpha_u G_u[k]G_u^H[k],
+  \qquad
+  f_{u,c}[k]=R_u^{-1}[k]g_{u,c}[k].
+\]
+
+Die Skalierung von $f_{u,c}$ ist für die SINR ohne Bedeutung. Der ausgegebene
+gewünschte Anteil und die Inter-User-Interferenz nach Kombination lauten
+
+\[
+  D_{u,c}[k]=\alpha_u|f_{u,c}^H[k]g_{u,c}[k]|^2,
+\]
+
+\[
+  I_{u,c}^{\mathrm{MU}}[k]
+    =\alpha_u\sum_{d:a_d=(v,\cdot),\,v\ne u}
+      |f_{u,c}^H[k]g_{u,d}[k]|^2.
+\]
+
+Mit dem analogen Intra-User-Anteil über die anderen Streams desselben Nutzers
+und $N_{u,c}[k]=\Vert f_{u,c}[k]\Vert_2^2$ folgt
+
+\[
+  \gamma_{u,c}[k]
+    =\frac{D_{u,c}[k]}
+      {N_{u,c}[k]+I_{u,c}^{\mathrm{intra}}[k]
+       +I_{u,c}^{\mathrm{MU}}[k]}.
+\]
+
+Für genau einen Nutzer ist dies algebraisch derselbe lineare MMSE-Vertrag wie
+in Phase 3. Das gilt auch für den 1x1-Grenzfall und für null SNR
+beziehungsweise einen verschwindenden effektiven Kanal.
+
+`HeDlMuMimoLinkAbstraction` komprimiert anschließend ausschließlich die
+SINR-Werte des jeweiligen Nutzers:
+
+\[
+  \gamma_{\mathrm{eff},u}
+   =-\beta_{m_u}\ln\left(
+      \frac{1}{N_{\mathrm{sc}}N_{s,u}}
+      \sum_{k,s_u}\exp\left(-\frac{\gamma_{u,s_u}[k]}{\beta_{m_u}}\right)
+    \right).
+\]
+
+MCS $m_u$, EESM-$\beta_{m_u}$, `WifiTxVector` und Paketgröße gehören
+explizit zum Nutzer. Die anschließende ErrorRateModel-Abfrage ist daher
+getrennt und kann für zwei Nutzer unterschiedliche PER liefern.
+
+Vor der Berechnung werden Snapshotrichtung und -ordnung, CSI-Zeitidentität,
+Frequenzraster, CFR-/Precoderdimensionen, endliche Koeffizienten, die
+vollständige Spaltenzuordnung, nutzerweise Stream-/RX-Grenzen sowie genau eine
+SNR- und HE-Eingabe je Nutzer geprüft. Konstruktion und Berechnung sind
+wertbasiert; eine Ablehnung verändert weder Snapshot noch Precoder oder
+EESM-Konfiguration. Der Kern konsumiert den Phase-4.1-Snapshot nur lesend und
+ändert weder Protocol Buffers, Batching noch Cache.
+
 ## 6. High-Level-API-Vertrag bis Unterphase 3.5
 
 ### 6.1 Typen, Besitz und Defaults
@@ -2110,9 +2229,9 @@ Simulator-Timer, keine implizite CSI-Abfrage und keinen MAC-Feedbacktransport;
 diese Grenzen verhindern, dass das explizite Forschungsmodell eine
 vollständige 802.11-Soundingprozedur vortäuscht.
 
-## 7. Validierung der Unterphasen 1.1 bis 4.1
+## 7. Validierung der Unterphasen 1.1 bis 4.2
 
-Die native Suite sionna enthält nun 28 schnelle Fälle:
+Die native Suite sionna enthält nun 31 schnelle Fälle:
 
 1. API-Defaulttest für den vollständigen legacy-kompatiblen SISO-Vertrag,
    leere EESM-Kalibrierung, fehlendes W[k] und exakt drei gemeldete
@@ -2202,6 +2321,21 @@ Die native Suite sionna enthält nun 28 schnelle Fälle:
     Richtungen, abweichende Frequenzraster sowie eine RX-Geometrie, die nicht
     zur CFR-Dimension passt. Jeder Fall wird vor Cacheverwendung als
     `invalid_argument` abgelehnt.
+29. Fester-Downlink-MU-Referenzfall mit expliziter Nutzer-/Streamzuordnung,
+    exakter Gesamtleistung bei gleichen und ungleichen Spaltengewichten,
+    Einzelnutzerparität zu Phase 3 einschließlich 1x1, null Interferenz für
+    orthogonale Nutzer und analytischer gewünschter Leistung,
+    Inter-User-Interferenz sowie SINR für korrelierte Kanäle.
+30. Nutzerspezifischer HE-Vertrag mit zwei MCS, EESM-Beta, Link Budgets und
+    Paketgrößen. Beide effektiven SINRs und Paketwahrscheinlichkeiten werden
+    gegen direkte Aufrufe des bestehenden EESM- und ErrorRateModel-Vertrags
+    geprüft.
+31. Atomare Phase-4.2-Negativmatrix für doppelte oder lückenhafte
+    Nutzer-/Streamzuordnung, fehlende oder unbekannte Nutzer, Uplinkrichtung,
+    abweichendes Frequenzraster, fehlende oder nicht endliche SNR,
+    unvollständige HE-Eingaben, NSS-Widerspruch und Paketgröße null. Ein danach
+    ausgeführter gültiger Referenzfall weist den unveränderten Vertrag nach.
+
 
 Die eigenständige native Suite `sionna-mimo-csi-feedback` ergänzt zwei Fälle
 für Unterphase 3.4. Der Feedbackfall prüft HE und EHT, beide SU-Codebücher,
@@ -2227,6 +2361,9 @@ Precoderleistung, Phaseninvarianz, effektiver MRT-Kanal, deterministische
 SVD-Basis, Leistungsanteile, Wasserstand, KKT-Gleichheit und die neue
 Feedback-Leistungsidentität werden innerhalb 1e-12 geprüft. Die
 Link-Budget-/EESM-Vergleiche verwenden ebenfalls 1e-12.
+Die Phase-4.2-Parität und Post-MMSE-SINR verwenden ebenfalls $10^{-10}$;
+gewünschte Leistung, Inter-User-Interferenz, Precoderleistung, EESM und
+ErrorRateModel-Parität werden innerhalb $10^{-12}$ geprüft.
 
 Der reale Server-Integrationstest konfiguriert 1x2-PlanarArrays an TX und RX,
 führt Sionna RT auf der CPU aus und prüft die Form 2 x 2 x 256, 1024 komplexe
@@ -2372,6 +2509,33 @@ folgende gezielte Prüfungen erfolgreich ausgeführt:
   insbesondere bleibt der MU-MIMO-Modus des Helpers abgelehnt und nimmt damit
   Unterphase 4.2 nicht vorweg
 
+### 7.4 Validierung der Unterphase 4.2
+
+Am 21. August 2026 wurden nach der Implementierung von Unterphase 4.2
+folgende Prüfungen auf der CPU-Referenzplattform erfolgreich ausgeführt:
+
+- gezielter Build des Ziels `sionna-test` mit den vier neuen nativen
+  Quelldateien
+- native ns-3-Suite `sionna` mit allen 31 registrierten Fällen; die drei
+  neuen Fälle decken den festen MU-Precoder, Einzelnutzer- und 1x1-Parität,
+  orthogonale und korrelierte Referenzkanäle, Gesamtleistung, nutzerweise
+  EESM/PER und die Negativmatrix ab
+- reine Python-Vertragssuite mit sieben von sieben Fällen in 0,005 s; damit
+  bleiben Serialisierung, Snapshotordnung und heterogene RX-Dimensionen
+  unverändert
+- unveränderte Suite `sionna-mimo-csi-feedback` erfolgreich
+- unveränderte ExampleAsTest-Suites `sionna-example-sumimo-minimal`,
+  `sionna-example-sumimo-precoding` mit allen drei positiven Prozessen,
+  `sionna-example-sumimo-precoding-negative`,
+  `sionna-example-mimo-helper-configuration-negative` und
+  `sionna-example-mimo-helper-runtime-negative` erfolgreich
+- `git diff --check` ohne Befund
+
+Die Server- und Raytracing-Suites wurden bewusst nicht erneut ausgeführt:
+Unterphase 4.2 ändert weder Python noch Protocol Buffers, Serialisierung,
+Batching, Cache, ZMQ oder Sionna RT. Die schnelle Python-Vertragssuite und die
+nativen Phase-4.1-Fälle prüfen die unveränderten Grenzen direkt.
+
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 
 - SionnaMimoHelper überträgt eine gemeinsame TX- und RX-Geometrie für die
@@ -2388,8 +2552,10 @@ folgende gezielte Prüfungen erfolgreich ausgeführt:
   SelectPrecoding benötigt eine bereits vorliegende CSI-Matrix und Zeitstempel;
   automatische Kanalschätzung, Sounding, periodische Simulatorereignisse,
   MAC-Feedbackframes und per-Paket-Aktualisierung sind nicht implementiert.
-  Unterphase 4.1 stellt nur den Mehrnutzer-Kanalsnapshot bereit; gemeinsames
-  MU-Precoding und Inter-User-Interferenz beginnen erst mit Unterphase 4.2.
+  Unterphase 4.2 stellt den festen gemeinsamen MU-Precoder und die
+  Inter-User-Interferenz als direkte native API bereit. Installation durch
+  SionnaMimoHelper, HE-MU-PHY-Metadaten, Scheduler und automatische
+  Precoderwahl beginnen frühestens mit Unterphase 4.3 beziehungsweise 4.4.
 - MRT bleibt der eindeutige perfekte 2x1-MISO-Ein-Stream-Fall. Quantisierung
   und positives CSI-Alter gelten nur für gleichleistungs-SVD. Wasserfüllung
   bleibt auf unquantisiertes aktuelles CSI beschränkt, weil die semantische
@@ -2398,10 +2564,12 @@ folgende gezielte Prüfungen erfolgreich ausgeführt:
   pro Helper. Der Anwender muss die aktuelle Sendekanal-Matrix weiterhin
   getrennt für SINR und PER bereitstellen und bei neuer CSI SelectPrecoding
   erneut aufrufen. Das ist kein per-Link- oder per-Paket-Precodercache.
-- Zeitvariable externe Interferenz wird nach der MMSE-/EESM-Abstraktion durch
-  InterferenceHelper skalar berücksichtigt. Eine frequenz- und
-  antennenabhängige Interferenzkovarianz im MMSE-Detektor ist noch nicht
-  modelliert.
+- Die Inter-User-Interferenz der gleichzeitig durch denselben festen
+  MU-Precoder gesendeten Streams geht in Unterphase 4.2 frequenz- und
+  antennenabhängig in die MMSE-Kovarianz ein. Andere zeitvariable externe
+  Interferenz wird weiterhin erst nach der MMSE-/EESM-Abstraktion durch
+  InterferenceHelper skalar berücksichtigt; ihre räumliche Kovarianz ist
+  nicht modelliert.
 - SionnaMimoHelper übernimmt die Rauschzahl einmalig und setzt sie identisch am
   Adapter sowie an beiden PHY-Helpern. Code ohne High-Level-API muss beide
   Werte weiterhin manuell konsistent halten, da ns-3.40 das PHY-Attribut nicht
@@ -2419,7 +2587,9 @@ folgende gezielte Prüfungen erfolgreich ausgeführt:
   Helper existiert noch nicht.
 - Ohne W[k] gilt weiterhin genau ein Stream je TX-Antenne. Mit festem W[k]
   sind kontrollierte Streamauswahl und
-  \(1\leq N_s\leq\min(N_\mathrm{tx},N_\mathrm{rx})\) implementiert.
+  \(1\leq N_s\leq\min(N_\mathrm{tx},N_\mathrm{rx})\) für SU implementiert.
+  Im festen MU-Kern gilt zusätzlich
+  \(N_{s,\mathrm{ges}}\leq N_\mathrm{tx}\) und \(N_{s,u}\leq N_{\mathrm{rx},u}\).
 - Die MI-Kompression bleibt eine Diagnosemetrik; nur die explizit konfigurierte
   EESM-Ausgabe wird an ErrorRateModel übergeben.
 - Explizit identifizierte Phase-4.1-Rohkanaleinträge werden nur in ihrer
@@ -2436,14 +2606,15 @@ folgende gezielte Prüfungen erfolgreich ausgeführt:
   sind davon nicht betroffen.
 
 Phase 3 ist mit Unterphase 3.5 abgeschlossen; Unterphase 4.1 ergänzt den
-gerichteten, atomar validierten Mehrnutzer-Kanalsnapshot. Der Helper führt die
-unveränderten festen, MRT-, SVD-, Wasserfüllungs-, Feedback- und
-Alterungsverträge durch eine explizite Auswahl zusammen, installiert das
-Ergebnis über den bestehenden festen-W[k]-Pfad und stellt die ursprünglichen
-Diagnosen bereit. Der 1x1-Grenzfall und alle Phase-1-/2-Pfade bleiben
-kompatibel. Automatische Sounding-/Feedbackabläufe, ein Precoder-Laufzeitcache,
-gemeinsames MU-Precoding, Inter-User-Interferenz und sämtliche Unterphasen ab
-4.2 wurden nicht begonnen.
+gerichteten, atomar validierten Mehrnutzer-Kanalsnapshot. Unterphase 4.2
+verwendet ihn nun für einen festen, explizit zugeordneten gemeinsamen
+Downlink-Precoder, erhält die gesamte AP-Leistung und liefert gewünschte
+Leistung, Inter-User-Interferenz, Post-MMSE-SINR, EESM und PER je Nutzer. Der
+Helper führt parallel die unveränderten SU-Verträge durch den bisherigen
+festen-W[k]-Pfad. Einzelnutzer- und 1x1-Grenzfall sowie alle Phase-1-/2-/3-
+Pfade bleiben kompatibel. Automatische Sounding-/Feedbackabläufe,
+Precoderwahl einschließlich ZF/RZF, ein MU-Precoder-Laufzeitcache, Scheduler,
+HE-MU-PHY-Integration und sämtliche Unterphasen ab 4.3 wurden nicht begonnen.
 
 ## 9. Ausführung
 

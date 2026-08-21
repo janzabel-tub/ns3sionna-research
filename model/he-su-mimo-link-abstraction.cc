@@ -122,28 +122,42 @@ HeSuMimoLinkAbstraction::CalculateEffectiveSinr(const SuMimoLinkResult& mimoResu
     NS_ABORT_MSG_IF(mimoResult.GetNumSubcarriers() == 0 || mimoResult.GetNumStreams() == 0,
                     "EESM requires at least one SINR sample");
 
-    const double beta = GetEesmBeta(mcs);
-    double minimumSinr = std::numeric_limits<double>::infinity();
+    std::vector<double> sinrLinear;
+    sinrLinear.reserve(static_cast<std::size_t>(mimoResult.GetNumSubcarriers()) *
+                       mimoResult.GetNumStreams());
     for (uint32_t sc = 0; sc < mimoResult.GetNumSubcarriers(); ++sc)
     {
         for (uint32_t stream = 0; stream < mimoResult.GetNumStreams(); ++stream)
         {
-            minimumSinr = std::min(minimumSinr, mimoResult.GetSinrLinear(sc, stream));
+            sinrLinear.push_back(mimoResult.GetSinrLinear(sc, stream));
         }
+    }
+
+    return CalculateEffectiveSinr(sinrLinear, mcs);
+}
+
+double
+HeSuMimoLinkAbstraction::CalculateEffectiveSinr(const std::vector<double>& sinrLinear,
+                                                uint8_t mcs) const
+{
+    NS_ABORT_MSG_IF(sinrLinear.empty(), "EESM requires at least one SINR sample");
+
+    const double beta = GetEesmBeta(mcs);
+    double minimumSinr = std::numeric_limits<double>::infinity();
+    for (const double sinr : sinrLinear)
+    {
+        NS_ABORT_MSG_IF(!std::isfinite(sinr) || sinr < 0.0,
+                        "EESM SINR samples must be finite and non-negative");
+        minimumSinr = std::min(minimumSinr, sinr);
     }
 
     double exponentialSum = 0.0;
-    for (uint32_t sc = 0; sc < mimoResult.GetNumSubcarriers(); ++sc)
+    for (const double sinr : sinrLinear)
     {
-        for (uint32_t stream = 0; stream < mimoResult.GetNumStreams(); ++stream)
-        {
-            const double sinr = mimoResult.GetSinrLinear(sc, stream);
-            exponentialSum += std::exp(-(sinr - minimumSinr) / beta);
-        }
+        exponentialSum += std::exp(-(sinr - minimumSinr) / beta);
     }
 
-    const double numSamples =
-        static_cast<double>(mimoResult.GetNumSubcarriers()) * mimoResult.GetNumStreams();
+    const double numSamples = static_cast<double>(sinrLinear.size());
     const double effectiveSinr =
         minimumSinr - beta * std::log(exponentialSum / numSamples);
     NS_ABORT_MSG_IF(!std::isfinite(effectiveSinr) || effectiveSinr < 0.0,

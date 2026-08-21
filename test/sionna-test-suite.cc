@@ -4,8 +4,10 @@
  * Copyright (c) 2026
  */
 
+#include "ns3/dl-mu-mimo-link-model.h"
 #include "ns3/double.h"
 #include "ns3/error-rate-model.h"
+#include "ns3/he-dl-mu-mimo-link-abstraction.h"
 #include "ns3/he-phy.h"
 #include "ns3/he-su-mimo-link-abstraction.h"
 #include "ns3/mimo-channel-matrix.h"
@@ -2372,6 +2374,391 @@ class MultiUserChannelSnapshotRejectionTest : public TestCase
     }
 };
 
+MultiUserChannel
+MakeDlMuUser(uint32_t userId, const MimoChannelMatrix& channel)
+{
+    std::vector<int> frequencies;
+    for (uint32_t sc = 0; sc < channel.GetNumSubcarriers(); ++sc)
+    {
+        frequencies.push_back(static_cast<int>(sc));
+    }
+    return {userId,
+            42,
+            userId,
+            MultiUserChannelDirection::DOWNLINK,
+            NanoSeconds(1234),
+            {1, channel.GetNumRxAntennas(), 0.5, 0.5, "dipole", "V"},
+            std::move(frequencies),
+            0.0,
+            channel};
+}
+
+MultiUserChannelSnapshot
+MakeDlMuSnapshot(const std::vector<std::pair<uint32_t, MimoChannelMatrix>>& users)
+{
+    MultiUserChannelSnapshot snapshot{NanoSeconds(1234),
+                                      MultiUserChannelDirection::DOWNLINK,
+                                      {}};
+    for (const auto& user : users)
+    {
+        snapshot.users.push_back(MakeDlMuUser(user.first, user.second));
+    }
+    return snapshot;
+}
+
+DlMuMimoPrecodingMatrix
+MakeIdentityDlMuPrecoding(uint32_t numSubcarriers)
+{
+    return DlMuMimoPrecodingMatrix(
+        MimoPrecodingMatrix::FrequencyFlat(
+            numSubcarriers,
+            2,
+            2,
+            {{1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {1.0, 0.0}}),
+        {{3, 0}, {9, 0}});
+}
+
+class DlMuMimoFixedPrecodingAnalyticalTest : public TestCase
+{
+  public:
+    DlMuMimoFixedPrecodingAnalyticalTest()
+        : TestCase("fixed downlink MU precoding preserves SU, power, and analytical IUI")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        MimoChannelMatrix suChannel(2, 2, 2);
+        suChannel.Set(0, 0, 0, {1.0, 1.0});
+        suChannel.Set(0, 0, 1, {2.0, 0.0});
+        suChannel.Set(0, 1, 0, {0.0, 3.0});
+        suChannel.Set(0, 1, 1, {4.0, -1.0});
+        suChannel.Set(1, 0, 0, {0.5, -0.5});
+        suChannel.Set(1, 0, 1, {-1.0, 2.0});
+        suChannel.Set(1, 1, 0, {3.0, 1.0});
+        suChannel.Set(1, 1, 1, {-2.0, -1.0});
+        const auto suPrecoding = MimoPrecodingMatrix::FrequencyFlat(
+            2,
+            2,
+            2,
+            {{1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {1.0, 0.0}});
+        const DlMuMimoPrecodingMatrix singleUserPrecoding(suPrecoding,
+                                                          {{3, 0}, {3, 1}});
+        const auto singleUserSnapshot = MakeDlMuSnapshot({{3, suChannel}});
+        const auto muSingle = DlMuMimoLinkModel::Calculate(singleUserSnapshot,
+                                                           singleUserPrecoding,
+                                                           {{3, 7.5}});
+        const auto suReference = SuMimoLinkModel::Calculate(suChannel, suPrecoding, 7.5);
+        NS_TEST_ASSERT_MSG_EQ(muSingle.GetNumUsers(), 1, "Single-user MU result changed U");
+        for (uint32_t sc = 0; sc < suChannel.GetNumSubcarriers(); ++sc)
+        {
+            for (uint32_t stream = 0; stream < 2; ++stream)
+            {
+                NS_TEST_ASSERT_MSG_EQ_TOL(
+                    muSingle.GetUserById(3).GetSinrLinear(sc, stream),
+                    suReference.GetSinrLinear(sc, stream),
+                    1e-10,
+                    "One-user downlink MU did not reproduce the Phase-3 fixed-precoder SINR");
+                NS_TEST_ASSERT_MSG_EQ_TOL(
+                    muSingle.GetUserById(3).GetInterUserInterferencePower(sc, stream),
+                    0.0,
+                    1e-12,
+                    "One-user downlink MU reported inter-user interference");
+            }
+        }
+
+        MimoChannelMatrix sisoChannel(1, 1, 1);
+        sisoChannel.Set(0, 0, 0, {2.0, 1.0});
+        const DlMuMimoPrecodingMatrix sisoPrecoding(
+            MimoPrecodingMatrix::FrequencyFlat(1, 1, 1, {{0.0, 1.0}}),
+            {{3, 0}});
+        const auto sisoSnapshot = MakeDlMuSnapshot({{3, sisoChannel}});
+        const auto muSiso =
+            DlMuMimoLinkModel::Calculate(sisoSnapshot, sisoPrecoding, {{3, 10.0}});
+        NS_TEST_ASSERT_MSG_EQ_TOL(
+            muSiso.GetUserById(3).GetSinrLinear(0, 0),
+            SuMimoLinkModel::Calculate(sisoChannel,
+                                       sisoPrecoding.GetPrecodingMatrix(),
+                                       10.0)
+                .GetSinrLinear(0, 0),
+            1e-10,
+            "One-user 1x1 MU did not reproduce the Phase-3 fixed-precoder result");
+
+        MimoChannelMatrix orthogonalUser3(1, 1, 2);
+        orthogonalUser3.Set(0, 0, 0, {1.0, 0.0});
+        MimoChannelMatrix orthogonalUser9(1, 1, 2);
+        orthogonalUser9.Set(0, 0, 1, {1.0, 0.0});
+        const auto orthogonalSnapshot =
+            MakeDlMuSnapshot({{3, orthogonalUser3}, {9, orthogonalUser9}});
+        const auto identity = MakeIdentityDlMuPrecoding(1);
+        const auto orthogonal =
+            DlMuMimoLinkModel::Calculate(orthogonalSnapshot, identity, {{9, 10.0}, {3, 10.0}});
+        NS_TEST_ASSERT_MSG_EQ(orthogonal.GetUser(0).GetUserId(),
+                              3,
+                              "MU results are not ordered by stable user ID");
+        for (const uint32_t userId : {3u, 9u})
+        {
+            const auto& user = orthogonal.GetUserById(userId);
+            NS_TEST_ASSERT_MSG_EQ_TOL(user.GetInterUserInterferencePower(0, 0),
+                                      0.0,
+                                      1e-12,
+                                      "Orthogonal users produced inter-user interference");
+            NS_TEST_ASSERT_MSG_EQ_TOL(user.GetSinrLinear(0, 0),
+                                      5.0,
+                                      1e-10,
+                                      "Orthogonal-user SINR did not use total-stream power");
+        }
+
+        MimoChannelMatrix correlatedUser3(1, 1, 2);
+        correlatedUser3.Set(0, 0, 0, {1.0, 0.0});
+        correlatedUser3.Set(0, 0, 1, {1.0, 0.0});
+        MimoChannelMatrix correlatedUser9 = correlatedUser3;
+        const auto correlatedSnapshot =
+            MakeDlMuSnapshot({{3, correlatedUser3}, {9, correlatedUser9}});
+        const auto correlated =
+            DlMuMimoLinkModel::Calculate(correlatedSnapshot, identity, {{3, 10.0}, {9, 10.0}});
+        constexpr double postCombiningDesired = 5.0 / 121.0;
+        constexpr double postCombiningInterference = 5.0 / 121.0;
+        constexpr double correlatedSinr = 5.0 / 6.0;
+        for (const uint32_t userId : {3u, 9u})
+        {
+            const auto& user = correlated.GetUserById(userId);
+            NS_TEST_ASSERT_MSG_EQ_TOL(user.GetDesiredSignalPower(0, 0),
+                                      postCombiningDesired,
+                                      1e-12,
+                                      "Correlated-user desired power differs from the analytical MMSE value");
+            NS_TEST_ASSERT_MSG_EQ_TOL(
+                user.GetInterUserInterferencePower(0, 0),
+                postCombiningInterference,
+                1e-12,
+                "Correlated-user interference differs from the analytical MMSE value");
+            NS_TEST_ASSERT_MSG_EQ_TOL(user.GetSinrLinear(0, 0),
+                                      correlatedSinr,
+                                      1e-10,
+                                      "Correlated-user post-MMSE SINR is not analytical");
+        }
+
+        const DlMuMimoPrecodingMatrix weighted(
+            MimoPrecodingMatrix::FrequencyFlat(
+                1,
+                2,
+                2,
+                {{std::sqrt(1.5), 0.0},
+                 {0.0, 0.0},
+                 {0.0, 0.0},
+                 {std::sqrt(0.5), 0.0}}),
+            {{3, 0}, {9, 0}});
+        weighted.ValidateForSnapshot(orthogonalSnapshot);
+        NS_TEST_ASSERT_MSG_EQ_TOL(weighted.GetStreamPower(0, 0),
+                                  1.5,
+                                  1e-12,
+                                  "Explicit first-stream power weight changed");
+        NS_TEST_ASSERT_MSG_EQ_TOL(weighted.GetStreamPower(0, 1),
+                                  0.5,
+                                  1e-12,
+                                  "Explicit second-stream power weight changed");
+        NS_TEST_ASSERT_MSG_EQ_TOL(weighted.GetPrecodingMatrix().GetPower(0),
+                                  2.0,
+                                  1e-12,
+                                  "Unequal MU weights changed total AP power");
+        NS_TEST_ASSERT_MSG_EQ(weighted.GetStreamMapping(1).userId,
+                              9,
+                              "Joint column-to-user mapping changed");
+    }
+};
+
+class HeDlMuMimoPerUserContractTest : public TestCase
+{
+  public:
+    HeDlMuMimoPerUserContractTest()
+        : TestCase("downlink MU applies EESM and PER separately per user")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        MimoChannelMatrix user3Channel(2, 1, 2);
+        user3Channel.Set(0, 0, 0, {1.0, 0.0});
+        user3Channel.Set(1, 0, 0, {2.0, 0.0});
+        MimoChannelMatrix user9Channel(2, 1, 2);
+        user9Channel.Set(0, 0, 1, {0.5, 0.0});
+        user9Channel.Set(1, 0, 1, {1.5, 0.0});
+        const auto snapshot = MakeDlMuSnapshot({{3, user3Channel}, {9, user9Channel}});
+        const auto precoding = MakeIdentityDlMuPrecoding(2);
+        const auto budget3 = MakeReferenceSnrBudget(10.0);
+        const auto budget9 = MakeReferenceSnrBudget(6.0);
+        const auto tx3 = MakeHeTxVector(HePhy::GetHeMcs0(), 1);
+        const auto tx9 = MakeHeTxVector(HePhy::GetHeMcs3(), 1);
+
+        auto abstraction = CreateObject<HeDlMuMimoLinkAbstraction>();
+        abstraction->SetEesmBeta(0, 2.0);
+        abstraction->SetEesmBeta(3, 3.0);
+        const auto result = abstraction->Calculate(
+            snapshot,
+            precoding,
+            {{9, budget9, tx9, 1000}, {3, budget3, tx3, 400}});
+
+        auto suEesm = CreateObject<HeSuMimoLinkAbstraction>();
+        suEesm->SetEesmBeta(0, 2.0);
+        suEesm->SetEesmBeta(3, 3.0);
+        for (const auto& input : std::vector<HeDlMuMimoUserTransmission>{
+                 {3, budget3, tx3, 400},
+                 {9, budget9, tx9, 1000}})
+        {
+            const auto& user = result.GetUserById(input.userId);
+            std::vector<double> samples;
+            for (uint32_t sc = 0; sc < user.GetMimoResult().GetNumSubcarriers(); ++sc)
+            {
+                samples.push_back(user.GetMimoResult().GetSinrLinear(sc, 0));
+            }
+            const uint8_t mcs = input.txVector.GetMode().GetMcsValue();
+            const double expectedEesm = suEesm->CalculateEffectiveSinr(samples, mcs);
+            NS_TEST_ASSERT_MSG_EQ_TOL(user.GetEffectiveSinrLinear(),
+                                      expectedEesm,
+                                      1e-12,
+                                      "Per-user EESM did not use that user's MCS");
+            const double expectedSuccess =
+                abstraction->GetErrorRateModel()->GetChunkSuccessRate(
+                    input.txVector.GetMode(),
+                    input.txVector,
+                    expectedEesm,
+                    static_cast<uint64_t>(input.packetSizeBytes) * 8,
+                    1);
+            NS_TEST_ASSERT_MSG_EQ_TOL(user.GetPacketSuccessRate(),
+                                      expectedSuccess,
+                                      1e-12,
+                                      "Per-user PER did not use that user's packet size");
+        }
+    }
+};
+
+class DlMuMimoRejectionTest : public TestCase
+{
+  public:
+    DlMuMimoRejectionTest()
+        : TestCase("inconsistent fixed downlink MU inputs are rejected before calculation")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        MimoChannelMatrix user3Channel(1, 1, 2);
+        user3Channel.Set(0, 0, 0, {1.0, 0.0});
+        MimoChannelMatrix user9Channel(1, 1, 2);
+        user9Channel.Set(0, 0, 1, {1.0, 0.0});
+        const auto snapshot = MakeDlMuSnapshot({{3, user3Channel}, {9, user9Channel}});
+        const auto identityMatrix = MimoPrecodingMatrix::FrequencyFlat(
+            1,
+            2,
+            2,
+            {{1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {1.0, 0.0}});
+        const auto validPrecoding = MakeIdentityDlMuPrecoding(1);
+
+        auto expectRejected = [this](const auto& operation, const std::string& reason) {
+            bool rejected = false;
+            try
+            {
+                operation();
+            }
+            catch (const std::invalid_argument&)
+            {
+                rejected = true;
+            }
+            NS_TEST_ASSERT_MSG_EQ(rejected, true, reason);
+        };
+
+        expectRejected(
+            [&]() {
+                DlMuMimoPrecodingMatrix duplicate(identityMatrix, {{3, 0}, {3, 0}});
+            },
+            "Duplicate user/stream mapping was accepted");
+        expectRejected(
+            [&]() {
+                DlMuMimoPrecodingMatrix skipped(identityMatrix, {{3, 1}, {9, 0}});
+            },
+            "Non-contiguous user-local stream mapping was accepted");
+        expectRejected(
+            [&]() {
+                DlMuMimoPrecodingMatrix missing(
+                    MimoPrecodingMatrix::FrequencyFlat(1, 2, 1, {{1.0, 0.0}, {0.0, 0.0}}),
+                    {{3, 0}});
+                missing.ValidateForSnapshot(snapshot);
+            },
+            "A snapshot user without a mapped stream was accepted");
+        expectRejected(
+            [&]() {
+                DlMuMimoPrecodingMatrix absent(identityMatrix, {{3, 0}, {12, 0}});
+                absent.ValidateForSnapshot(snapshot);
+            },
+            "A stream mapped to an absent user was accepted");
+        expectRejected(
+            [&]() {
+                auto inconsistent = snapshot;
+                inconsistent.direction = MultiUserChannelDirection::UPLINK;
+                validPrecoding.ValidateForSnapshot(inconsistent);
+            },
+            "An uplink snapshot was accepted by the downlink model");
+        expectRejected(
+            [&]() {
+                auto inconsistent = snapshot;
+                inconsistent.users[1].frequencies[0] = 7;
+                validPrecoding.ValidateForSnapshot(inconsistent);
+            },
+            "An inconsistent frequency grid was accepted");
+        expectRejected(
+            [&]() {
+                DlMuMimoLinkModel::Calculate(snapshot, validPrecoding, {{3, 10.0}});
+            },
+            "A missing per-user SNR was accepted");
+        expectRejected(
+            [&]() {
+                DlMuMimoLinkModel::Calculate(
+                    snapshot,
+                    validPrecoding,
+                    {{3, 10.0}, {9, std::numeric_limits<double>::quiet_NaN()}});
+            },
+            "A non-finite per-user SNR was accepted");
+
+        auto he = CreateObject<HeDlMuMimoLinkAbstraction>();
+        he->SetEesmBeta(0, 2.0);
+        const auto budget = MakeReferenceSnrBudget(10.0);
+        const auto tx = MakeHeTxVector(HePhy::GetHeMcs0(), 1);
+        expectRejected(
+            [&]() {
+                he->Calculate(snapshot, validPrecoding, {{3, budget, tx, 400}});
+            },
+            "Missing per-user HE inputs were accepted");
+        expectRejected(
+            [&]() {
+                he->Calculate(
+                    snapshot,
+                    validPrecoding,
+                    {{3, budget, MakeHeTxVector(HePhy::GetHeMcs0(), 2), 400},
+                     {9, budget, tx, 400}});
+            },
+            "A per-user NSS mismatch was accepted");
+        expectRejected(
+            [&]() {
+                he->Calculate(snapshot,
+                              validPrecoding,
+                              {{3, budget, tx, 0}, {9, budget, tx, 400}});
+            },
+            "A zero packet size was accepted");
+
+        const auto afterRejections = DlMuMimoLinkModel::Calculate(
+            snapshot,
+            validPrecoding,
+            {{3, 10.0}, {9, 10.0}});
+        NS_TEST_ASSERT_MSG_EQ_TOL(afterRejections.GetUserById(3).GetSinrLinear(0, 0),
+                                  5.0,
+                                  1e-10,
+                                  "Rejected inputs changed the reusable fixed MU contract");
+    }
+};
+
 class SuMimoChannelRankTest : public TestCase
 {
   public:
@@ -2596,6 +2983,9 @@ class SionnaTestSuite : public TestSuite
         AddTestCase(new MimoProtobufDeserializationTest, TestCase::QUICK);
         AddTestCase(new MultiUserChannelSnapshotContractTest, TestCase::QUICK);
         AddTestCase(new MultiUserChannelSnapshotRejectionTest, TestCase::QUICK);
+        AddTestCase(new DlMuMimoFixedPrecodingAnalyticalTest, TestCase::QUICK);
+        AddTestCase(new HeDlMuMimoPerUserContractTest, TestCase::QUICK);
+        AddTestCase(new DlMuMimoRejectionTest, TestCase::QUICK);
     }
 };
 

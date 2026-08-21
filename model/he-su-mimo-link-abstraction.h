@@ -15,6 +15,7 @@
 
 #include <cstdint>
 #include <map>
+#include <vector>
 
 namespace ns3
 {
@@ -78,6 +79,9 @@ class HeSuMimoLinkAbstraction : public Object
      * Compress every tone and spatial-stream SINR into one effective SINR.
      */
     double CalculateEffectiveSinr(const SuMimoLinkResult& mimoResult, uint8_t mcs) const;
+
+    /** Compress an explicit non-empty collection of SINR samples with EESM. */
+    double CalculateEffectiveSinr(const std::vector<double>& sinrLinear, uint8_t mcs) const;
 
     /**
      * Calculate reference SNR, post-MMSE SINRs, effective SINR and packet PER.
