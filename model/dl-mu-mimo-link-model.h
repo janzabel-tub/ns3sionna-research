@@ -38,6 +38,30 @@ class DlMuMimoPrecodingMatrix
     DlMuMimoPrecodingMatrix(MimoPrecodingMatrix precoding,
                             const std::vector<DlMuMimoStreamMapping>& streamMappings);
 
+    /**
+     * Derive ideal single-stream-per-user zero-forcing from a perfect snapshot.
+     *
+     * Requests must contain exactly user-local stream zero once for every
+     * snapshot user. Their input order is ignored; output columns follow the
+     * snapshot's stable ascending user-ID order.
+     */
+    static DlMuMimoPrecodingMatrix ZeroForcing(
+        const MultiUserChannelSnapshot& snapshot,
+        const std::vector<DlMuMimoStreamMapping>& streamMappings,
+        double rankTolerance = MimoSvdPrecodingOptions::DEFAULT_RANK_TOLERANCE);
+
+    /**
+     * Derive explicitly regularized single-stream-per-user zero-forcing.
+     *
+     * The dimensionless regularization parameter alpha is mandatory, finite,
+     * and strictly positive. No implicit regularization is applied by ZF.
+     */
+    static DlMuMimoPrecodingMatrix RegularizedZeroForcing(
+        const MultiUserChannelSnapshot& snapshot,
+        const std::vector<DlMuMimoStreamMapping>& streamMappings,
+        double alpha,
+        double rankTolerance = MimoSvdPrecodingOptions::DEFAULT_RANK_TOLERANCE);
+
     const MimoPrecodingMatrix& GetPrecodingMatrix() const;
     uint32_t GetNumStreams() const;
     const DlMuMimoStreamMapping& GetStreamMapping(uint32_t column) const;

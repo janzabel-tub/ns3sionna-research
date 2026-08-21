@@ -1,6 +1,6 @@
 # ns3sionna: MIMO-Abstraktionsmodell für IEEE 802.11ax/be
 
-Stand: 21. August 2026, Unterphase 4.2 abgeschlossen und validiert
+Stand: 21. August 2026, Unterphase 4.3 abgeschlossen und validiert
 
 Arbeitszweig: feature/su-mimo-minimal
 
@@ -15,7 +15,7 @@ Precoding und MU-MIMO, wird ausschließlich in ns-3 ausgeführt.
 
 Die Entwicklung erfolgt in kleinen, einzeln testbaren Schritten. Der aktuelle
 Stand umfasst die Unterphasen 1.1 bis 1.4, die vollständige Phase 2 sowie
-die Unterphasen 3.1 bis 3.5 sowie 4.1: den numerischen SU-MIMO-Kern, konfigurierbare
+die Unterphasen 3.1 bis 3.5 sowie 4.1 bis 4.3: den numerischen SU-MIMO-Kern, konfigurierbare
 Sionna-Arrays, einen
 dimensionssicheren MIMO-Datenvertrag, explizit kalibrierbare
 802.11ax-EESM-/PER-Abbildung und die
@@ -61,8 +61,13 @@ wertet der neue native Downlink-MU-Kern einen festen gemeinsamen Precoder mit
 expliziter Spaltenzuordnung aus. Er erhält die gesamte AP-Sendeleistung,
 trennt gewünschte Leistung und Inter-User-Interferenz je Nutzer, Subcarrier und
 Stream und berechnet EESM sowie PER mit den nutzerspezifischen MCS- und
-Paketgrößenangaben. Precoderwahl, ZF/RZF, Scheduler, High-Level-Helper- und
-HE-MU-PHY-Integration aus Unterphase 4.3 und später wurden nicht begonnen.
+Paketgrößenangaben. Die neue wertbasierte Precoderwahl erzeugt für genau einen
+Stream und eine Empfangsantenne je Nutzer aus gleichzeitiger perfekter CSI
+deterministisches ZF oder RZF mit explizitem Regularisierungsparameter. Beide
+Ergebnisse werden auf die gemeinsame Phase-4.2-Gesamtleistung normalisiert;
+überlastete und numerisch rangdefiziente Gruppen werden abgelehnt. Scheduler,
+High-Level-Helper-, HE-MU-PHY-Integration und Unterphase 4.4 oder später
+wurden nicht begonnen.
 
 ## 2. Reproduzierbare Ausgangsbasis
 
@@ -484,7 +489,7 @@ aus. `HeDlMuMimoLinkAbstraction` wendet den bestehenden EESM- und
 ErrorRateModel-Vertrag anschließend nutzerweise an. Analytische native Tests
 erfüllen alle vier Invarianten; Unterphase 4.3 wurde nicht vorweggenommen.
 
-#### Unterphase 4.3: Ideales Downlink-ZF und regularisiertes ZF
+#### Unterphase 4.3: Ideales Downlink-ZF und regularisiertes ZF (implementiert)
 
 - Zunächst den eindeutigen Minimalfall mit einem Stream je Nutzer und
   perfekter gleichzeitiger CSI implementieren.
@@ -506,6 +511,15 @@ schlecht konditionierten Kanälen endlich, deterministisch und
 leistungsnormalisiert. Mehrere Streams je Nutzer werden erst nach einem
 explizit dokumentierten Blockdiagonalisierungs- oder gemeinsamen
 Transceiververtrag freigeschaltet und bis dahin klar abgelehnt.
+
+Dieses Kriterium ist erfüllt: `DlMuMimoPrecodingMatrix::ZeroForcing` bildet
+die Moore-Penrose-Pseudoinverse des nach stabiler Nutzer-ID gestapelten
+Einantennenkanals; `RegularizedZeroForcing` verwendet ausschließlich das
+explizit übergebene positive RZF-$\alpha$. Beide Fabriken prüfen den
+vollständigen Phase-4.1-Snapshot und die Ein-Stream-Zuordnung vor Konstruktion,
+lehnen Überlast und Rangverlust ab und skalieren erst das fertige Ergebnis auf
+die Phase-4.2-Gesamtleistung. Die schnellen nativen Referenzfälle in
+Abschnitt 7.5 erfüllen das Abnahmekriterium; Unterphase 4.4 wurde nicht begonnen.
 
 #### Unterphase 4.4: HE-Downlink-MU-PHY-Integration
 
@@ -1828,6 +1842,98 @@ wertbasiert; eine Ablehnung verändert weder Snapshot noch Precoder oder
 EESM-Konfiguration. Der Kern konsumiert den Phase-4.1-Snapshot nur lesend und
 ändert weder Protocol Buffers, Batching noch Cache.
 
+### 5.14 Ideales Downlink-ZF und regularisiertes ZF der Unterphase 4.3
+
+Die wertbasierten Fabriken `DlMuMimoPrecodingMatrix::ZeroForcing` und
+`RegularizedZeroForcing` konsumieren denselben vollständig validierten
+Phase-4.1-Snapshot wie der feste Phase-4.2-Kern. Der absichtlich schmale
+Vertrag umfasst gleichzeitige perfekte Downlink-CSI, genau eine
+Empfangsantenne und genau den lokalen Stream null je Nutzer. Für $U$ Nutzer
+und $N_\mathrm{tx}$ AP-Antennen gilt $1\leq U\leq N_\mathrm{tx}$.
+Mehrere RX-Antennen oder Streams je Nutzer benötigen eine explizite
+Empfängerauswahl, Blockdiagonalisierung oder einen gemeinsamen
+Transceiververtrag und werden in dieser Unterphase nicht stillschweigend
+angenommen.
+
+Die Nutzer des Snapshots liegen bereits streng aufsteigend nach stabiler
+Nutzer-ID vor. Die als Menge behandelten Streamanforderungen dürfen in
+beliebiger Reihenfolge eingegeben werden, müssen aber exakt $(u,0)$ einmal
+für jeden Snapshotnutzer enthalten. Die ausgegebenen Spalten und
+`DlMuMimoStreamMapping`-Einträge folgen immer der stabilen Snapshotreihenfolge.
+Pro Subcarrier entsteht damit eindeutig
+
+\[
+  \bar H[k]=\begin{bmatrix}H_{u_0}[k]\\ \vdots\\ H_{u_{U-1}}[k]\end{bmatrix}
+  \in\mathbb C^{U\times N_\mathrm{tx}}.
+\]
+
+ns-3 berechnet eine dünne Jacobi-SVD
+
+\[
+  \bar H[k]=U_H[k]\Sigma[k]V_H^H[k],
+  \qquad \sigma_0[k]\geq\ldots\geq\sigma_{U-1}[k]\geq0.
+\]
+
+Wie in Phase 3 ist die dokumentierte Standardrangschwelle
+$\tau_\mathrm{rank}=10^{-12}$; ein expliziter Wert muss endlich und strikt
+in $(0,1)$ liegen. Der numerische Rang zählt genau die Werte
+$\sigma_i[k]>\tau_\mathrm{rank}\sigma_0[k]$. Auf jedem Subcarrier muss er
+$U$ betragen. Es gibt weder abgeschnittene schwache Nutzermoden noch eine
+stille Nutzerreduktion oder versteckte Regularisierung.
+
+Für ZF wird auf dem vollständig akzeptierten Zeilenraum die ungekürzte
+Moore-Penrose-Pseudoinverse verwendet:
+
+\[
+  \widetilde W_\mathrm{ZF}[k]
+    =V_H[k]\,\mathrm{diag}(\sigma_i^{-1}[k])\,U_H^H[k].
+\]
+
+RZF besitzt keinen Defaultparameter. Der Aufrufer muss ein endliches, strikt
+positives dimensionsloses $\alpha$ angeben; für die gemeinsam normierte CFR
+gilt
+
+\[
+  \widetilde W_\mathrm{RZF}[k]
+    =V_H[k]\,\mathrm{diag}\!\left(
+      \frac{\sigma_i[k]}{\sigma_i^2[k]+\alpha}\right)U_H^H[k]
+    =\bar H^H[k]\left(\bar H[k]\bar H^H[k]+\alpha I\right)^{-1}.
+\]
+
+Singulärwerte und zugehörige linke/rechte Vektoren bleiben als gekoppelte,
+absteigend gelieferte Tripel zusammen. Die vollständige Pseudoinversen-
+beziehungsweise Filtermatrix ist bei exakt gleichen Singularwerten invariant
+gegen Basisrotationen und gemeinsame Spaltenphasen; nahezu gleiche, aber
+verschiedene Werte behalten ihren eigenen Filterfaktor. Da keine einzelnen
+Moden als Nutzerstrahlen exportiert werden, gelangt keine beliebige
+SVD-Basiswahl in die Nutzerordnung. Wiederholte Auswahl und umgekehrte
+Anforderungsreihenfolge liefern im nativen Test koeffizientengleiche
+Ergebnisse.
+
+Erst nach vollständiger Auswahl wird pro Subcarrier ein einziger reeller
+Skalierungsfaktor angewendet:
+
+\[
+  W[k]=\sqrt{\frac{U}{\lVert\widetilde W[k]\rVert_F^2}}\,
+       \widetilde W[k],
+  \qquad \lVert W[k]\rVert_F^2=U.
+\]
+
+Damit bleibt $P$ exakt die gesamte AP-Sendeleistung aus Unterphase 4.2. Die
+globale Skalierung erhält die ZF-Nullstellen. RZF bleibt auf vollrangigen,
+schlecht konditionierten Kanälen endlich; auch RZF akzeptiert absichtlich
+keinen numerischen Rangverlust, weil Regularisierung in Unterphase 4.3 keine
+nicht planbare Nutzergruppe kaschiert.
+
+Vor SVD oder Ergebniskonstruktion werden Richtung, Zeit, Nutzerordnung,
+Frequenzraster, Dimensionen, Endlichkeit, Last, Streamanforderungen,
+RX-Antennenzahl, Rangtoleranz und gegebenenfalls $\alpha$ geprüft. Jede
+Ablehnung ist `std::invalid_argument` und verändert keinen Zustand. Das
+fertige Objekt läuft unverändert durch `DlMuMimoLinkModel` sowie die
+bestehenden nutzerweisen MMSE-, EESM- und PER-Pfade. Protocol Buffers,
+Serialisierung, Batching, Cache, ZMQ, Sionna RT und SpectrumWifiPhy werden
+durch Unterphase 4.3 nicht geändert.
+
 ## 6. High-Level-API-Vertrag bis Unterphase 3.5
 
 ### 6.1 Typen, Besitz und Defaults
@@ -2229,9 +2335,9 @@ Simulator-Timer, keine implizite CSI-Abfrage und keinen MAC-Feedbacktransport;
 diese Grenzen verhindern, dass das explizite Forschungsmodell eine
 vollständige 802.11-Soundingprozedur vortäuscht.
 
-## 7. Validierung der Unterphasen 1.1 bis 4.2
+## 7. Validierung der Unterphasen 1.1 bis 4.3
 
-Die native Suite sionna enthält nun 31 schnelle Fälle:
+Die native Suite sionna enthält nun 33 schnelle Fälle:
 
 1. API-Defaulttest für den vollständigen legacy-kompatiblen SISO-Vertrag,
    leere EESM-Kalibrierung, fehlendes W[k] und exakt drei gemeldete
@@ -2335,6 +2441,16 @@ Die native Suite sionna enthält nun 31 schnelle Fälle:
     abweichendes Frequenzraster, fehlende oder nicht endliche SNR,
     unvollständige HE-Eingaben, NSS-Widerspruch und Paketgröße null. Ein danach
     ausgeführter gültiger Referenzfall weist den unveränderten Vertrag nach.
++32. Deterministische ZF-/RZF-Auswahl für orthogonale, korrelierte und
+    schlecht konditionierte Kanäle. Der Fall prüft stabile Nutzer-/Spaltenordnung
+    unabhängig von der Anforderungsreihenfolge, koeffizientengleiche
+    Wiederholung, ZF-Interferenzunterdrückung, endliches explizites RZF,
+    Gesamtleistung, Einzelnutzer-MRT-/Phase-4.2-Parität und den 1x1-Grenzfall.
+33. Atomare ZF-/RZF-Negativmatrix für mehrere Streams je Nutzer, fehlende
+    Nutzer, ungültige Regularisierung oder Rangtoleranz, Überlast, Rangverlust,
+    nicht endliche CFR und den noch nicht definierten Mehrantennenempfänger.
+    Ein gültiger Aufruf vor und nach allen Ablehnungen liefert identische
+    Koeffizienten.
 
 
 Die eigenständige native Suite `sionna-mimo-csi-feedback` ergänzt zwei Fälle
@@ -2364,6 +2480,9 @@ Link-Budget-/EESM-Vergleiche verwenden ebenfalls 1e-12.
 Die Phase-4.2-Parität und Post-MMSE-SINR verwenden ebenfalls $10^{-10}$;
 gewünschte Leistung, Inter-User-Interferenz, Precoderleistung, EESM und
 ErrorRateModel-Parität werden innerhalb $10^{-12}$ geprüft.
+Phase 4.3 prüft ZF-Interferenz und Precoderleistung innerhalb $10^{-12}$ sowie
+Einzelnutzer-/1x1-SINR innerhalb $10^{-10}$; deterministische Wiederholungen
+werden koeffizientengenau verglichen.
 
 Der reale Server-Integrationstest konfiguriert 1x2-PlanarArrays an TX und RX,
 führt Sionna RT auf der CPU aus und prüft die Form 2 x 2 x 256, 1024 komplexe
@@ -2535,6 +2654,35 @@ Die Server- und Raytracing-Suites wurden bewusst nicht erneut ausgeführt:
 Unterphase 4.2 ändert weder Python noch Protocol Buffers, Serialisierung,
 Batching, Cache, ZMQ oder Sionna RT. Die schnelle Python-Vertragssuite und die
 nativen Phase-4.1-Fälle prüfen die unveränderten Grenzen direkt.
++
+### 7.5 Validierung der Unterphase 4.3
+
+Am 21. August 2026 wurden nach der Implementierung von Unterphase 4.3
+folgende Prüfungen auf der CPU-Referenzplattform erfolgreich ausgeführt:
+
+- gezielter Build des Ziels `sionna-test`; die Änderung bleibt auf die
+  bestehenden Phase-4.2-Quell-/Headerdateien und die native Testsuite begrenzt
+- native ns-3-Suite `sionna` mit allen 33 registrierten Fällen in 0,024 s;
+  die zwei neuen Fälle decken orthogonale, korrelierte, schlecht konditionierte,
+  überlastete und rangdefiziente Kanäle, ZF-Unterdrückung, endliches
+  deterministisches RZF, Leistung, Ordnung, Regularisierung, Mehrstrom-
+  ablehnung sowie Einzelnutzer-/1x1-/Phase-4.2-Parität ab
+- reine Python-Vertragssuite mit sieben von sieben Fällen in 0,003 s; damit
+  bleiben Serialisierung, Snapshotordnung und heterogene RX-Dimensionen
+  unverändert
+- unveränderte Suite `sionna-mimo-csi-feedback` erfolgreich
+- unveränderte ExampleAsTest-Suites `sionna-example-sumimo-minimal`,
+  `sionna-example-sumimo-precoding` mit allen drei positiven Prozessen,
+  `sionna-example-sumimo-precoding-negative`,
+  `sionna-example-mimo-helper-configuration-negative` und
+  `sionna-example-mimo-helper-runtime-negative` erfolgreich
+- `git diff --check` ohne Befund
+
+Server- und Raytracing-Suites wurden bewusst nicht erneut ausgeführt:
+Unterphase 4.3 ändert weder Python noch Protocol Buffers, Serialisierung,
+Batching, Cache, ZMQ, Sionna RT oder einen Serverpfad. Die schnelle
+Python-Vertragssuite und die vollständige native Suite prüfen die berührten
+und unveränderten Grenzen direkt.
 
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 
@@ -2553,9 +2701,11 @@ nativen Phase-4.1-Fälle prüfen die unveränderten Grenzen direkt.
   automatische Kanalschätzung, Sounding, periodische Simulatorereignisse,
   MAC-Feedbackframes und per-Paket-Aktualisierung sind nicht implementiert.
   Unterphase 4.2 stellt den festen gemeinsamen MU-Precoder und die
-  Inter-User-Interferenz als direkte native API bereit. Installation durch
-  SionnaMimoHelper, HE-MU-PHY-Metadaten, Scheduler und automatische
-  Precoderwahl beginnen frühestens mit Unterphase 4.3 beziehungsweise 4.4.
+  Inter-User-Interferenz als direkte native API bereit. Unterphase 4.3 ergänzt
+  daran die explizit aufgerufenen ZF-/RZF-Fabriken für vollrangige Gruppen mit
+  einer Empfangsantenne und einem Stream je Nutzer. Installation oder Auswahl
+  durch SionnaMimoHelper, HE-MU-PHY-Metadaten, Scheduler, Laufzeitcache und
+  automatische Ablaufsteuerung beginnen frühestens mit Unterphase 4.4.
 - MRT bleibt der eindeutige perfekte 2x1-MISO-Ein-Stream-Fall. Quantisierung
   und positives CSI-Alter gelten nur für gleichleistungs-SVD. Wasserfüllung
   bleibt auf unquantisiertes aktuelles CSI beschränkt, weil die semantische
@@ -2590,6 +2740,9 @@ nativen Phase-4.1-Fälle prüfen die unveränderten Grenzen direkt.
   \(1\leq N_s\leq\min(N_\mathrm{tx},N_\mathrm{rx})\) für SU implementiert.
   Im festen MU-Kern gilt zusätzlich
   \(N_{s,\mathrm{ges}}\leq N_\mathrm{tx}\) und \(N_{s,u}\leq N_{\mathrm{rx},u}\).
+  Die ZF-/RZF-Auswahl der Unterphase 4.3 ist enger: $N_{s,u}=1$,
+  $N_{\mathrm{rx},u}=1$, $U\leq N_\mathrm{tx}$ und voller numerischer Rang auf
+  jedem Subcarrier.
 - Die MI-Kompression bleibt eine Diagnosemetrik; nur die explizit konfigurierte
   EESM-Ausgabe wird an ErrorRateModel übergeben.
 - Explizit identifizierte Phase-4.1-Rohkanaleinträge werden nur in ihrer
@@ -2610,11 +2763,14 @@ gerichteten, atomar validierten Mehrnutzer-Kanalsnapshot. Unterphase 4.2
 verwendet ihn nun für einen festen, explizit zugeordneten gemeinsamen
 Downlink-Precoder, erhält die gesamte AP-Leistung und liefert gewünschte
 Leistung, Inter-User-Interferenz, Post-MMSE-SINR, EESM und PER je Nutzer. Der
+Phase-4.3-Kern leitet daraus für den dokumentierten Einantennen-/Ein-Stream-
+Fall deterministisches ZF oder explizit regularisiertes RZF ab, erhält die
+Gesamtleistung und lehnt nicht planbare Gruppen ab. Der
 Helper führt parallel die unveränderten SU-Verträge durch den bisherigen
 festen-W[k]-Pfad. Einzelnutzer- und 1x1-Grenzfall sowie alle Phase-1-/2-/3-
-Pfade bleiben kompatibel. Automatische Sounding-/Feedbackabläufe,
-Precoderwahl einschließlich ZF/RZF, ein MU-Precoder-Laufzeitcache, Scheduler,
-HE-MU-PHY-Integration und sämtliche Unterphasen ab 4.3 wurden nicht begonnen.
+Pfade bleiben kompatibel. Automatische Sounding-/Feedbackabläufe, ein
+MU-Precoder-Laufzeitcache, Scheduler, Helper-/HE-MU-PHY-Integration und
+sämtliche Unterphasen ab 4.4 wurden nicht begonnen.
 
 ## 9. Ausführung
 

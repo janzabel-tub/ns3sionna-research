@@ -2634,6 +2634,328 @@ class HeDlMuMimoPerUserContractTest : public TestCase
     }
 };
 
+class DlMuMimoZfRzfAnalyticalTest : public TestCase
+{
+  public:
+    DlMuMimoZfRzfAnalyticalTest()
+        : TestCase("downlink ZF and explicit RZF are deterministic and power normalized")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        MimoChannelMatrix orthogonalUser3(1, 1, 2);
+        orthogonalUser3.Set(0, 0, 0, {1.0, 0.0});
+        MimoChannelMatrix orthogonalUser9(1, 1, 2);
+        orthogonalUser9.Set(0, 0, 1, {1.0, 0.0});
+        const auto orthogonalSnapshot =
+            MakeDlMuSnapshot({{3, orthogonalUser3}, {9, orthogonalUser9}});
+
+        const auto zf = DlMuMimoPrecodingMatrix::ZeroForcing(
+            orthogonalSnapshot,
+            {{9, 0}, {3, 0}});
+        const auto repeatedZf = DlMuMimoPrecodingMatrix::ZeroForcing(
+            orthogonalSnapshot,
+            {{3, 0}, {9, 0}});
+        NS_TEST_ASSERT_MSG_EQ(zf.GetStreamMapping(0).userId,
+                              3,
+                              "ZF did not emit columns in stable user-ID order");
+        NS_TEST_ASSERT_MSG_EQ(zf.GetStreamMapping(1).userId,
+                              9,
+                              "ZF stable user-ID ordering changed");
+        NS_TEST_ASSERT_MSG_EQ_TOL(zf.GetPrecodingMatrix().GetPower(0),
+                                  2.0,
+                                  1e-12,
+                                  "ZF changed the Phase-4.2 total-power contract");
+        for (std::size_t index = 0;
+             index < zf.GetPrecodingMatrix().GetCoefficients().size();
+             ++index)
+        {
+            NS_TEST_ASSERT_MSG_EQ(
+                zf.GetPrecodingMatrix().GetCoefficients().at(index),
+                repeatedZf.GetPrecodingMatrix().GetCoefficients().at(index),
+                "ZF changed with request order or repeated equal-singular-value selection");
+        }
+
+        const auto orthogonalResult =
+            DlMuMimoLinkModel::Calculate(orthogonalSnapshot,
+                                         zf,
+                                         {{9, 10.0}, {3, 10.0}});
+        for (const uint32_t userId : {3u, 9u})
+        {
+            NS_TEST_ASSERT_MSG_EQ_TOL(
+                orthogonalResult.GetUserById(userId).GetInterUserInterferencePower(0, 0),
+                0.0,
+                1e-12,
+                "ZF did not suppress orthogonal-user interference");
+        }
+
+        MimoChannelMatrix correlatedUser3(1, 1, 2);
+        correlatedUser3.Set(0, 0, 0, {1.0, 0.0});
+        correlatedUser3.Set(0, 0, 1, {0.5, 0.0});
+        MimoChannelMatrix correlatedUser9(1, 1, 2);
+        correlatedUser9.Set(0, 0, 0, {0.5, 0.0});
+        correlatedUser9.Set(0, 0, 1, {1.0, 0.0});
+        const auto correlatedSnapshot =
+            MakeDlMuSnapshot({{3, correlatedUser3}, {9, correlatedUser9}});
+        const auto correlatedZf = DlMuMimoPrecodingMatrix::ZeroForcing(
+            correlatedSnapshot,
+            {{3, 0}, {9, 0}});
+        const auto correlatedResult =
+            DlMuMimoLinkModel::Calculate(correlatedSnapshot,
+                                         correlatedZf,
+                                         {{3, 20.0}, {9, 20.0}});
+        NS_TEST_ASSERT_MSG_EQ_TOL(correlatedZf.GetPrecodingMatrix().GetPower(0),
+                                  2.0,
+                                  1e-12,
+                                  "Correlated-channel ZF changed total AP power");
+        for (const uint32_t userId : {3u, 9u})
+        {
+            NS_TEST_ASSERT_MSG_EQ_TOL(
+                correlatedResult.GetUserById(userId).GetInterUserInterferencePower(0, 0),
+                0.0,
+                1e-12,
+                "ZF did not suppress correlated-user interference");
+        }
+
+        MimoChannelMatrix poorUser3(1, 1, 2);
+        poorUser3.Set(0, 0, 0, {1.0, 0.0});
+        MimoChannelMatrix poorUser9(1, 1, 2);
+        poorUser9.Set(0, 0, 0, {1.0, 0.0});
+        poorUser9.Set(0, 0, 1, {1e-8, 0.0});
+        const auto poorSnapshot = MakeDlMuSnapshot({{3, poorUser3}, {9, poorUser9}});
+        const auto rzf = DlMuMimoPrecodingMatrix::RegularizedZeroForcing(
+            poorSnapshot,
+            {{9, 0}, {3, 0}},
+            1e-4);
+        const auto repeatedRzf = DlMuMimoPrecodingMatrix::RegularizedZeroForcing(
+            poorSnapshot,
+            {{3, 0}, {9, 0}},
+            1e-4);
+        NS_TEST_ASSERT_MSG_EQ_TOL(rzf.GetPrecodingMatrix().GetPower(0),
+                                  2.0,
+                                  1e-12,
+                                  "RZF changed the Phase-4.2 total-power contract");
+        for (std::size_t index = 0;
+             index < rzf.GetPrecodingMatrix().GetCoefficients().size();
+             ++index)
+        {
+            const auto coefficient = rzf.GetPrecodingMatrix().GetCoefficients().at(index);
+            NS_TEST_ASSERT_MSG_EQ(std::isfinite(coefficient.real()) &&
+                                      std::isfinite(coefficient.imag()),
+                                  true,
+                                  "RZF produced a non-finite coefficient");
+            NS_TEST_ASSERT_MSG_EQ(
+                coefficient,
+                repeatedRzf.GetPrecodingMatrix().GetCoefficients().at(index),
+                "RZF is not deterministic");
+        }
+
+        MimoChannelMatrix singleUserChannel(1, 1, 2);
+        singleUserChannel.Set(0, 0, 0, {1.0, 1.0});
+        singleUserChannel.Set(0, 0, 1, {2.0, -1.0});
+        const auto singleUserSnapshot = MakeDlMuSnapshot({{3, singleUserChannel}});
+        const auto singleUserZf =
+            DlMuMimoPrecodingMatrix::ZeroForcing(singleUserSnapshot, {{3, 0}});
+        const auto mrt = MimoPrecodingMatrix::MaximumRatioTransmission(singleUserChannel);
+        for (uint32_t tx = 0; tx < 2; ++tx)
+        {
+            NS_TEST_ASSERT_MSG_EQ_TOL(
+                std::abs(singleUserZf.GetPrecodingMatrix().Get(0, tx, 0) -
+                         mrt.Get(0, tx, 0)),
+                0.0,
+                1e-12,
+                "Single-user ZF did not reduce to Phase-3 MRT");
+        }
+        const auto singleUserMu =
+            DlMuMimoLinkModel::Calculate(singleUserSnapshot, singleUserZf, {{3, 6.0}});
+        const auto singleUserSu = SuMimoLinkModel::Calculate(singleUserChannel, mrt, 6.0);
+        NS_TEST_ASSERT_MSG_EQ_TOL(singleUserMu.GetUserById(3).GetSinrLinear(0, 0),
+                                  singleUserSu.GetSinrLinear(0, 0),
+                                  1e-10,
+                                  "Single-user ZF did not preserve the Phase-4.2/SU boundary");
+
+        MimoChannelMatrix sisoChannel(1, 1, 1);
+        sisoChannel.Set(0, 0, 0, {2.0, 1.0});
+        const auto sisoSnapshot = MakeDlMuSnapshot({{3, sisoChannel}});
+        const auto sisoRzf = DlMuMimoPrecodingMatrix::RegularizedZeroForcing(
+            sisoSnapshot,
+            {{3, 0}},
+            0.25);
+        const auto sisoMu =
+            DlMuMimoLinkModel::Calculate(sisoSnapshot, sisoRzf, {{3, 4.0}});
+        NS_TEST_ASSERT_MSG_EQ_TOL(
+            sisoMu.GetUserById(3).GetSinrLinear(0, 0),
+            SuMimoLinkModel::Calculate(sisoChannel, 4.0).GetSinrLinear(0, 0),
+            1e-10,
+            "RZF did not preserve the normalized 1x1 result");
+    }
+};
+
+class DlMuMimoZfRzfRejectionTest : public TestCase
+{
+  public:
+    DlMuMimoZfRzfRejectionTest()
+        : TestCase("downlink ZF and RZF reject unsupported groups atomically")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        MimoChannelMatrix user3Channel(1, 1, 3);
+        user3Channel.Set(0, 0, 0, {1.0, 0.0});
+        MimoChannelMatrix user9Channel(1, 1, 3);
+        user9Channel.Set(0, 0, 1, {1.0, 0.0});
+        const auto snapshot = MakeDlMuSnapshot({{3, user3Channel}, {9, user9Channel}});
+        const auto before =
+            DlMuMimoPrecodingMatrix::ZeroForcing(snapshot, {{3, 0}, {9, 0}});
+
+        auto expectRejected = [this](const auto& operation, const std::string& reason) {
+            bool rejected = false;
+            try
+            {
+                operation();
+            }
+            catch (const std::invalid_argument&)
+            {
+                rejected = true;
+            }
+            NS_TEST_ASSERT_MSG_EQ(rejected, true, reason);
+        };
+
+        expectRejected(
+            [&]() {
+                DlMuMimoPrecodingMatrix::ZeroForcing(
+                    snapshot,
+                    {{3, 0}, {3, 1}, {9, 0}});
+            },
+            "Multiple streams per user were accepted");
+        expectRejected(
+            [&]() {
+                DlMuMimoPrecodingMatrix::ZeroForcing(snapshot, {{3, 0}});
+            },
+            "A missing user stream was accepted");
+        for (const double alpha : {0.0,
+                                   -1.0,
+                                   std::numeric_limits<double>::infinity(),
+                                   std::numeric_limits<double>::quiet_NaN()})
+        {
+            expectRejected(
+                [&]() {
+                    DlMuMimoPrecodingMatrix::RegularizedZeroForcing(
+                        snapshot,
+                        {{3, 0}, {9, 0}},
+                        alpha);
+                },
+                "An invalid explicit RZF regularization parameter was accepted");
+        }
+        expectRejected(
+            [&]() {
+                DlMuMimoPrecodingMatrix::ZeroForcing(snapshot,
+                                                     {{3, 0}, {9, 0}},
+                                                     0.0);
+            },
+            "An invalid ZF rank tolerance was accepted");
+
+        MimoChannelMatrix rankDeficient3(1, 1, 2);
+        rankDeficient3.Set(0, 0, 0, {1.0, 0.0});
+        rankDeficient3.Set(0, 0, 1, {1.0, 0.0});
+        MimoChannelMatrix rankDeficient9 = rankDeficient3;
+        const auto rankDeficient =
+            MakeDlMuSnapshot({{3, rankDeficient3}, {9, rankDeficient9}});
+        expectRejected(
+            [&]() {
+                DlMuMimoPrecodingMatrix::ZeroForcing(
+                    rankDeficient,
+                    {{3, 0}, {9, 0}});
+            },
+            "A rank-deficient group was accepted by ZF");
+        expectRejected(
+            [&]() {
+                DlMuMimoPrecodingMatrix::RegularizedZeroForcing(
+                    rankDeficient,
+                    {{3, 0}, {9, 0}},
+                    0.1);
+            },
+            "A rank-deficient group was accepted by RZF");
+
+        MimoChannelMatrix overloadedChannel(1, 1, 2);
+        overloadedChannel.Set(0, 0, 0, {1.0, 0.0});
+        const auto overloaded =
+            MakeDlMuSnapshot({{3, overloadedChannel},
+                              {6, overloadedChannel},
+                              {9, overloadedChannel}});
+        expectRejected(
+            [&]() {
+                DlMuMimoPrecodingMatrix::ZeroForcing(
+                    overloaded,
+                    {{3, 0}, {6, 0}, {9, 0}});
+            },
+            "An overloaded user group was accepted");
+
+        auto nonFinite = snapshot;
+        nonFinite.users[1].channel.Set(
+            0,
+            0,
+            1,
+            {std::numeric_limits<double>::quiet_NaN(), 0.0});
+        expectRejected(
+            [&]() {
+                DlMuMimoPrecodingMatrix::ZeroForcing(
+                    nonFinite,
+                    {{3, 0}, {9, 0}});
+            },
+            "A non-finite snapshot was accepted");
+
+        auto inconsistent = snapshot;
+        inconsistent.users[1].frequencies[0] = 7;
+        expectRejected(
+            [&]() {
+                DlMuMimoPrecodingMatrix::ZeroForcing(
+                    inconsistent,
+                    {{3, 0}, {9, 0}});
+            },
+            "An inconsistent Phase-4.1 snapshot was accepted");
+
+        MimoChannelMatrix multipleRx(1, 2, 3);
+        multipleRx.Set(0, 0, 0, {1.0, 0.0});
+        multipleRx.Set(0, 1, 1, {1.0, 0.0});
+        const auto unsupportedReceiver = MakeDlMuSnapshot({{3, multipleRx}});
+        expectRejected(
+            [&]() {
+                DlMuMimoPrecodingMatrix::ZeroForcing(
+                    unsupportedReceiver,
+                    {{3, 0}});
+            },
+            "A multi-antenna receiver was accepted without a joint transceiver contract");
+
+        MimoChannelMatrix poorUser3(1, 1, 2);
+        poorUser3.Set(0, 0, 0, {1.0, 0.0});
+        MimoChannelMatrix poorUser9(1, 1, 2);
+        poorUser9.Set(0, 0, 0, {1.0, 0.0});
+        poorUser9.Set(0, 0, 1, {1e-8, 0.0});
+        const auto poorSnapshot = MakeDlMuSnapshot({{3, poorUser3}, {9, poorUser9}});
+        expectRejected(
+            [&]() {
+                DlMuMimoPrecodingMatrix::ZeroForcing(
+                    poorSnapshot,
+                    {{3, 0}, {9, 0}},
+                    1e-4);
+            },
+            "The explicit numerical-rank threshold was ignored");
+
+        const auto after =
+            DlMuMimoPrecodingMatrix::ZeroForcing(snapshot, {{9, 0}, {3, 0}});
+        const bool stateUnchanged = before.GetPrecodingMatrix().GetCoefficients() ==
+                                    after.GetPrecodingMatrix().GetCoefficients();
+        NS_TEST_ASSERT_MSG_EQ(stateUnchanged,
+                              true,
+                              "Rejected selections changed subsequent deterministic state");
+    }
+};
+
 class DlMuMimoRejectionTest : public TestCase
 {
   public:
@@ -2985,6 +3307,8 @@ class SionnaTestSuite : public TestSuite
         AddTestCase(new MultiUserChannelSnapshotRejectionTest, TestCase::QUICK);
         AddTestCase(new DlMuMimoFixedPrecodingAnalyticalTest, TestCase::QUICK);
         AddTestCase(new HeDlMuMimoPerUserContractTest, TestCase::QUICK);
+        AddTestCase(new DlMuMimoZfRzfAnalyticalTest, TestCase::QUICK);
+        AddTestCase(new DlMuMimoZfRzfRejectionTest, TestCase::QUICK);
         AddTestCase(new DlMuMimoRejectionTest, TestCase::QUICK);
     }
 };

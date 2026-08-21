@@ -7,6 +7,7 @@
 #include "dl-mu-mimo-link-model.h"
 
 #include <Eigen/Dense>
+#include <Eigen/SVD>
 
 #include <algorithm>
 #include <cmath>
@@ -91,6 +92,183 @@ ValidateSnapshot(const MultiUserChannelSnapshot& snapshot)
     }
 }
 
+void
+ValidatePrecoderSelection(const MultiUserChannelSnapshot& snapshot,
+                          const std::vector<DlMuMimoStreamMapping>& streamMappings,
+                          double rankTolerance)
+{
+    ValidateSnapshot(snapshot);
+    if (!std::isfinite(rankTolerance) || rankTolerance <= 0.0 || rankTolerance >= 1.0)
+    {
+        Reject("ZF/RZF rank tolerance must be finite and in (0, 1)");
+    }
+
+    const uint32_t numUsers = static_cast<uint32_t>(snapshot.users.size());
+    const uint32_t numTxAntennas = snapshot.users.front().channel.GetNumTxAntennas();
+    if (numUsers > numTxAntennas)
+    {
+        Reject("the single-stream user group is overloaded");
+    }
+
+    std::map<uint32_t, uint32_t> requestsByUser;
+    for (const auto& mapping : streamMappings)
+    {
+        if (mapping.userStream != 0)
+        {
+            Reject("ZF/RZF supports exactly user-local stream zero per user");
+        }
+        if (!requestsByUser.emplace(mapping.userId, 1).second)
+        {
+            Reject("ZF/RZF supports exactly one stream per user");
+        }
+    }
+    if (requestsByUser.size() != snapshot.users.size())
+    {
+        Reject("ZF/RZF requires exactly one stream request for every snapshot user");
+    }
+    for (const auto& user : snapshot.users)
+    {
+        if (user.channel.GetNumRxAntennas() != 1)
+        {
+            Reject("ZF/RZF requires exactly one RX antenna per user in Phase 4.3");
+        }
+        if (requestsByUser.find(user.userId) == requestsByUser.end())
+        {
+            Reject("a snapshot user has no ZF/RZF stream request");
+        }
+    }
+    for (const auto& request : requestsByUser)
+    {
+        const auto user = std::lower_bound(
+            snapshot.users.begin(),
+            snapshot.users.end(),
+            request.first,
+            [](const MultiUserChannel& candidate, uint32_t userId) {
+                return candidate.userId < userId;
+            });
+        if (user == snapshot.users.end() || user->userId != request.first)
+        {
+            Reject("a ZF/RZF stream is mapped to a user absent from the snapshot");
+        }
+    }
+}
+
+DlMuMimoPrecodingMatrix
+BuildInversePrecoder(const MultiUserChannelSnapshot& snapshot,
+                     const std::vector<DlMuMimoStreamMapping>& streamMappings,
+                     double rankTolerance,
+                     bool regularized,
+                     double alpha)
+{
+    ValidatePrecoderSelection(snapshot, streamMappings, rankTolerance);
+    if (regularized && (!std::isfinite(alpha) || alpha <= 0.0))
+    {
+        Reject("RZF regularization alpha must be finite and positive");
+    }
+
+    const uint32_t numUsers = static_cast<uint32_t>(snapshot.users.size());
+    const uint32_t numSubcarriers =
+        snapshot.users.front().channel.GetNumSubcarriers();
+    const uint32_t numTxAntennas =
+        snapshot.users.front().channel.GetNumTxAntennas();
+    std::vector<std::complex<double>> coefficients(
+        static_cast<std::size_t>(numSubcarriers) * numTxAntennas * numUsers);
+
+    for (uint32_t sc = 0; sc < numSubcarriers; ++sc)
+    {
+        Eigen::MatrixXcd stackedChannel(numUsers, numTxAntennas);
+        for (uint32_t user = 0; user < numUsers; ++user)
+        {
+            for (uint32_t tx = 0; tx < numTxAntennas; ++tx)
+            {
+                stackedChannel(user, tx) = snapshot.users.at(user).channel.Get(sc, 0, tx);
+            }
+        }
+
+        const Eigen::JacobiSVD<Eigen::MatrixXcd> decomposition(
+            stackedChannel,
+            Eigen::ComputeThinU | Eigen::ComputeThinV);
+        if (decomposition.info() != Eigen::Success)
+        {
+            Reject("ZF/RZF SVD decomposition failed");
+        }
+        const Eigen::VectorXd singularValues = decomposition.singularValues();
+        for (Eigen::Index mode = 0; mode < singularValues.size(); ++mode)
+        {
+            if (!std::isfinite(singularValues(mode)) || singularValues(mode) < 0.0)
+            {
+                Reject("ZF/RZF produced an invalid singular value");
+            }
+        }
+
+        const double rankThreshold = rankTolerance * singularValues(0);
+        uint32_t numericalRank = 0;
+        for (Eigen::Index mode = 0; mode < singularValues.size(); ++mode)
+        {
+            if (singularValues(mode) > rankThreshold)
+            {
+                ++numericalRank;
+            }
+        }
+        if (numericalRank < numUsers)
+        {
+            Reject("ZF/RZF user group on subcarrier " + std::to_string(sc) +
+                   " has numerical rank " + std::to_string(numericalRank) +
+                   " but requires " + std::to_string(numUsers));
+        }
+
+        Eigen::VectorXd inverseFactors(numUsers);
+        for (uint32_t mode = 0; mode < numUsers; ++mode)
+        {
+            const double singularValue = singularValues(mode);
+            const double denominator =
+                regularized ? singularValue * singularValue + alpha : singularValue;
+            const double factor = regularized ? singularValue / denominator : 1.0 / denominator;
+            if (!std::isfinite(denominator) || denominator <= 0.0 ||
+                !std::isfinite(factor))
+            {
+                Reject("ZF/RZF inverse factor is not finite and positive");
+            }
+            inverseFactors(mode) = factor;
+        }
+
+        Eigen::MatrixXcd precoding = decomposition.matrixV() *
+                                     inverseFactors.asDiagonal() *
+                                     decomposition.matrixU().adjoint();
+        const double rawPower = precoding.squaredNorm();
+        if (!precoding.allFinite() || !std::isfinite(rawPower) || rawPower <= 0.0)
+        {
+            Reject("ZF/RZF produced an invalid unnormalized precoder");
+        }
+        const double scale = std::sqrt(static_cast<double>(numUsers) / rawPower);
+        if (!std::isfinite(scale) || scale <= 0.0)
+        {
+            Reject("ZF/RZF power normalization failed");
+        }
+        precoding *= scale;
+
+        for (uint32_t tx = 0; tx < numTxAntennas; ++tx)
+        {
+            for (uint32_t user = 0; user < numUsers; ++user)
+            {
+                const std::size_t index =
+                    (static_cast<std::size_t>(sc) * numTxAntennas + tx) * numUsers + user;
+                coefficients.at(index) = precoding(tx, user);
+            }
+        }
+    }
+
+    std::vector<DlMuMimoStreamMapping> stableMappings;
+    stableMappings.reserve(snapshot.users.size());
+    for (const auto& user : snapshot.users)
+    {
+        stableMappings.push_back({user.userId, 0});
+    }
+    return DlMuMimoPrecodingMatrix(
+        MimoPrecodingMatrix(numSubcarriers, numTxAntennas, numUsers, coefficients),
+        stableMappings);
+}
+
 } // namespace
 
 DlMuMimoPrecodingMatrix::DlMuMimoPrecodingMatrix(
@@ -123,6 +301,25 @@ DlMuMimoPrecodingMatrix::DlMuMimoPrecodingMatrix(
             }
         }
     }
+}
+
+DlMuMimoPrecodingMatrix
+DlMuMimoPrecodingMatrix::ZeroForcing(
+    const MultiUserChannelSnapshot& snapshot,
+    const std::vector<DlMuMimoStreamMapping>& streamMappings,
+    double rankTolerance)
+{
+    return BuildInversePrecoder(snapshot, streamMappings, rankTolerance, false, 0.0);
+}
+
+DlMuMimoPrecodingMatrix
+DlMuMimoPrecodingMatrix::RegularizedZeroForcing(
+    const MultiUserChannelSnapshot& snapshot,
+    const std::vector<DlMuMimoStreamMapping>& streamMappings,
+    double alpha,
+    double rankTolerance)
+{
+    return BuildInversePrecoder(snapshot, streamMappings, rankTolerance, true, alpha);
 }
 
 const MimoPrecodingMatrix&
