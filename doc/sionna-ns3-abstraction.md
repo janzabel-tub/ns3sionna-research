@@ -53,30 +53,30 @@ PSD[k] *= |H[k]|^2             optional H[k]W[k]
 
 Sionna returns a channel frequency response of the form
 
-\[
+$$
 H_{\mathrm{raw}}[\ell,r,q,t,n,k],
-\]
+$$
 
 where:
 
-- \(\ell\) is the receiver or link index;
-- \(r\) is the RX-antenna index;
-- \(q\) is the transmitter index;
-- \(t\) is the TX-antenna index;
-- \(n\) is the Sionna time-step index;
-- \(k\) is the OFDM-subcarrier index.
+- $\ell$ is the receiver or link index;
+- $r$ is the RX-antenna index;
+- $q$ is the transmitter index;
+- $t$ is the TX-antenna index;
+- $n$ is the Sionna time-step index;
+- $k$ is the OFDM-subcarrier index.
 
 The link and time indices are not complex values embedded in an individual matrix. They are tensor dimensions used to select the required channel.
 
-One ns3sionna request contains one transmitter and asks Sionna for one CFR time step. Therefore, \(q=0\) and \(n=0\). After selecting receiver/link \(\ell\), the result is
+One ns3sionna request contains one transmitter and asks Sionna for one CFR time step. Therefore, $q=0$ and $n=0$. After selecting receiver/link $\ell$, the result is
 
-\[
+$$
 H_{\ell}[r,t,k]
 =
 H_{\mathrm{raw}}[\ell,r,0,t,0,k].
-\]
+$$
 
-For a fixed subcarrier \(k\), \(H[k]\) is an \(N_{\mathrm{rx}}\times N_{\mathrm{tx}}\) matrix. All subcarrier matrices together form a three-dimensional tensor with logical shape `[rx, tx, subcarrier]`.
+For a fixed subcarrier $k$, $H[k]$ is an $N_{\mathrm{rx}}\times N_{\mathrm{tx}}$ matrix. All subcarrier matrices together form a three-dimensional tensor with logical shape `[rx, tx, subcarrier]`.
 
 ## 2. ns-3 requests the channel at the current time
 
@@ -214,27 +214,29 @@ Each future point becomes a separate `ChannelState` response with its own `start
 
 ## 5. Separating wideband loss from small-scale fading
 
-The raw Sionna CFR contains both large-scale attenuation and frequency/spatial channel structure. ns3sionna calculates the mean channel power over all subcarriers and all antenna pairs:
+The raw Sionna CFR contains both large-scale attenuation and frequency/spatial channel structure. A CFR coefficient is a complex *field/amplitude* gain: for a SISO subcarrier, $y=hx$. Thus, for a transmit signal with power $\mathbb{E}[|x|^2]$, the received signal power is $\mathbb{E}[|y|^2]=|h|^2\mathbb{E}[|x|^2]$. This is why the coefficient's power gain is $|h|^2=\operatorname{Re}(h)^2+\operatorname{Im}(h)^2$, rather than $h$, $|h|$, or the square of an average complex coefficient.
 
-\[
+ns3sionna takes the unweighted empirical mean of those power gains over all subcarriers and all RX--TX antenna pairs:
+
+$$
 \bar P =
 \frac{1}{N_{\mathrm{sc}}N_{\mathrm{rx}}N_{\mathrm{tx}}}
 \sum_{k,r,t}|H[r,t,k]|^2.
-\]
+$$
 
 It then creates the scalar wideband loss
 
-\[
+$$
 L_{\mathrm{wb}}=-10\log_{10}(\bar P)\ \mathrm{dB}
-\]
+$$
 
 and the normalized channel
 
-\[
+$$
 H_{\mathrm{norm}}[r,t,k]
 =
 \frac{H[r,t,k]}{\sqrt{\bar P}}.
-\]
+$$
 
 The exact implementation in [`model/ns3sionna/mimo_data_contract.py`](../model/ns3sionna/mimo_data_contract.py#L100) is:
 
@@ -253,15 +255,19 @@ def normalize_link_cfr(cfr):
 
 After normalization,
 
-\[
+$$
 \frac{1}{N_{\mathrm{sc}}N_{\mathrm{rx}}N_{\mathrm{tx}}}
 \sum_{k,r,t}|H_{\mathrm{norm}}[r,t,k]|^2=1.
-\]
+$$
+
+The square root in the denominator is essential: it scales an *amplitude* coefficient. Squaring the resulting magnitude gives $|H_{\mathrm{norm}}|^2=|H|^2/\bar P$, whose average is one. Dividing $H$ by $\bar P$ itself would instead make its mean power $1/\bar P$.
+
+This quantity is **not** the time-average power of a transmitted waveform, nor necessarily the total received signal power across the array and bandwidth. It is a per-coefficient channel-power reference for the one selected link and one CFR time step; every reported subcarrier and antenna pair receives equal weight. The physical received signal power also depends on the transmit PSD, transmit spatial covariance/precoder, and receiver combining. For a per-subcarrier transmit covariance $Q_x[k]$, the total power at the receive-antenna inputs is $\operatorname{tr}(H[k]Q_x[k]H[k]^H)$. The normalization deliberately leaves those frequency-selective and spatial effects in $H_{\mathrm{norm}}$ while putting its common scale into $L_{\mathrm{wb}}$.
 
 The split prevents path loss from being applied twice:
 
 - `wb_loss` determines total received power;
-- normalized \(H[k]\) determines frequency selectivity and spatial behavior.
+- normalized $H[k]$ determines frequency selectivity and spatial behavior.
 
 ## 6. Flattening the normalized CFR
 
@@ -297,9 +303,9 @@ H[1](rx1,tx1)
 
 The corresponding flat-index formula is
 
-\[
+$$
 i=((kN_{\mathrm{rx}})+r)N_{\mathrm{tx}}+t.
-\]
+$$
 
 Real and imaginary components are transmitted as separate arrays because the Protobuf schema has no native complex-number type. The response also carries the TX/RX IDs and positions, delay, wideband loss, frequencies, antenna dimensions, and validity interval. See [`model/message.proto`](../model/message.proto#L120).
 
@@ -350,7 +356,7 @@ return (static_cast<std::size_t>(subcarrier) * m_numRxAntennas + rx) *
        tx;
 ```
 
-Consequently, `channel.Get(k, r, t)` returns matrix element \(H[k]_{r,t}\).
+Consequently, `channel.Get(k, r, t)` returns matrix element $H[k]_{r,t}$.
 
 ## 8. Caching by link and validity interval
 
@@ -378,11 +384,11 @@ Later packets reuse an entry while the current simulation time lies between `m_s
 
 For a 1x1 channel, or for a non-HE frame, ns-3 multiplies every applicable PSD bin by the channel power gain:
 
-\[
+$$
 S_{\mathrm{rx}}[k]
 =
 S_{\mathrm{pathloss}}[k]|H[k]|^2.
-\]
+$$
 
 The exact branch in [`model/sionna-spectrum-propagation-loss-model.cc`](../model/sionna-spectrum-propagation-loss-model.cc#L380) is:
 
@@ -405,9 +411,9 @@ if (scalarCompatibilityPath)
 
 `std::norm(h)` evaluates
 
-\[
+$$
 |h|^2=\operatorname{Re}(h)^2+\operatorname{Im}(h)^2.
-\]
+$$
 
 Thus the SISO packet-reception path retains frequency-selective power fading but does not use channel phase for decoding. Non-HE control frames on a MIMO PHY use the first antenna pair `(rx=0, tx=0)`. The complex CFR remains available through the packet's diagnostic/application tag.
 
@@ -429,15 +435,15 @@ const double receivedPowerW = Integral(*params->psd) * rxGainLinear;
 
 Receiver noise is
 
-\[
+$$
 N=kTB\,10^{NF/10},
-\]
+$$
 
 and the total reference SNR is
 
-\[
+$$
 \rho=\frac{P_{\mathrm{rx}}}{N}.
-\]
+$$
 
 The MIMO adapter invokes the link-budget calculation in [`model/sionna-spectrum-propagation-loss-model.cc`](../model/sionna-spectrum-propagation-loss-model.cc#L283):
 
@@ -465,15 +471,15 @@ result.m_referenceSnrLinear =
 
 Without a configured precoder, one stream is transmitted per TX antenna:
 
-\[
+$$
 N_s=N_{\mathrm{tx}}.
-\]
+$$
 
-The model divides total reference power equally among those streams. With a configured precoder \(W[k]\), ns-3 constructs the effective channel
+The model divides total reference power equally among those streams. With a configured precoder $W[k]$, ns-3 constructs the effective channel
 
-\[
+$$
 H_{\mathrm{eff}}[k]=H[k]W[k].
-\]
+$$
 
 The multiplication in [`model/mimo-precoding-matrix.cc`](../model/mimo-precoding-matrix.cc#L486) is:
 
@@ -498,7 +504,7 @@ for (uint32_t sc = 0; sc < channel.GetNumSubcarriers(); ++sc)
 }
 ```
 
-The configured matrix can represent fixed precoding, MRT, or SVD-derived precoding. Sionna continues to deliver only \(H[k]\); \(W[k]\) is selected and applied on the ns-3 side.
+The configured matrix can represent fixed precoding, MRT, or SVD-derived precoding. Sionna continues to deliver only $H[k]$; $W[k]$ is selected and applied on the ns-3 side.
 
 ## 12. Per-subcarrier MMSE detection
 
@@ -524,17 +530,17 @@ const double streamSnr = referenceSnrLinear / numStreams;
 
 For each subcarrier, the linear MMSE error covariance is
 
-\[
+$$
 E[k]
 =
 \left(I+\frac{\rho}{N_s}H[k]^H H[k]\right)^{-1}.
-\]
+$$
 
-The post-processing SINR of stream \(s\) is
+The post-processing SINR of stream $s$ is
 
-\[
+$$
 \gamma_s[k]=\frac{1}{E_{s,s}[k]}-1.
-\]
+$$
 
 The exact implementation in [`model/su-mimo-link-model.cc`](../model/su-mimo-link-model.cc#L95) is:
 
@@ -562,11 +568,11 @@ Unlike the SISO power-only branch, this operation uses the full complex channel,
 
 The model also calculates the minimum numerical channel rank and the ideal spectral-efficiency diagnostic
 
-\[
+$$
 \eta=
 \frac{1}{N_{\mathrm{sc}}}
 \sum_{k,s}\log_2(1+\gamma_s[k]).
-\]
+$$
 
 This is a diagnostic metric, not the final Wi-Fi data rate or packet-error probability.
 
@@ -574,16 +580,16 @@ This is a diagnostic metric, not the final Wi-Fi data rate or packet-error proba
 
 The MMSE stage produces one SINR per stream and subcarrier, but ns-3's Wi-Fi error models require a scalar SINR. The MCS-specific exponential effective-SINR mapping is
 
-\[
+$$
 \gamma_{\mathrm{eff}}
 =
 -\beta_m\ln\left(
 \frac{1}{N_{\mathrm{sc}}N_s}
 \sum_{k,s}\exp\left(-\frac{\gamma_s[k]}{\beta_m}\right)
 \right),
-\]
+$$
 
-where \(\beta_m>0\) is configured for HE MCS \(m\).
+where $\beta_m>0$ is configured for HE MCS $m$.
 
 The numerically stable implementation in [`model/he-su-mimo-link-abstraction.cc`](../model/he-su-mimo-link-abstraction.cc#L125) first finds the minimum SINR:
 
@@ -646,9 +652,9 @@ result.m_packetSuccessRate =
 
 The reported packet-error rate is
 
-\[
+$$
 PER=1-P_{\mathrm{success}}.
-\]
+$$
 
 This direct result is made available through the `MimoRx` trace.
 
@@ -656,11 +662,11 @@ This direct result is made available through the `MimoRx` trace.
 
 `SpectrumWifiPhy` expects a scalar PSD, not a matrix-valued channel. ns3sionna therefore constructs an equivalent scalar received power:
 
-\[
+$$
 P_{\mathrm{eq}}
 =
 \frac{\gamma_{\mathrm{eff}}N}{G_{\mathrm{diversity}}}.
-\]
+$$
 
 The diversity correction prevents ns-3's AWGN error model from adding an RX-array gain that MMSE already included. The code in [`model/sionna-spectrum-propagation-loss-model.cc`](../model/sionna-spectrum-propagation-loss-model.cc#L303) is:
 
@@ -712,7 +718,7 @@ See [`model/sionna-spectrum-propagation-loss-model.cc`](../model/sionna-spectrum
 
 The complete abstraction can be summarized as
 
-\[
+$$
 \boxed{
 H_{\mathrm{raw}}
 \longrightarrow
@@ -728,6 +734,6 @@ PER
 \longrightarrow
 \text{equivalent ns-3 PSD}
 }.
-\]
+$$
 
 The most important boundary is that ns-3 does not receive or demodulate complex I/Q samples. It uses the complex channel matrix mathematically to estimate the quality that a packet would have and maps that result back into the standard packet-level ns-3 PHY.
