@@ -29,26 +29,27 @@ deckt mit dem deterministischen Kanalpfad SpectrumWifiPhy end-to-end ab.
 Integrationsnahe Negativläufe prüfen widersprüchliche NSS, nicht unterstützte
 Modi und eine CFR-/PHY-Dimensionsverletzung. Ein dimensionssicherer,
 benutzergegebener Precoder unterstützt nun frequenzflaches und
-frequenzselektives festes W[k], einschließlich kontrollierter Streamauswahl
-mit N_s < N_tx. Darauf aufbauend erzeugt ns-3 nun für den eindeutigen
-MISO-Fall aus perfekter CFR ein leistungsnormalisiertes Ein-Stream-MRT-W[k].
-Für N_tx = 1 ist der bestehende Ein-Stream-MMSE-Pfad als äquivalente
+frequenzselektives festes $W[k]$, einschließlich kontrollierter Streamauswahl
+mit $N_s < N_\mathrm{tx}$. Darauf aufbauend erzeugt ns-3 nun für den eindeutigen
+MISO-Fall aus perfekter CFR ein leistungsnormalisiertes Ein-Stream-MRT-$W[k]$.
+Für $N_\mathrm{tx}=1$ ist der bestehende Ein-Stream-MMSE-Pfad als äquivalente
 MRC-Kombination validiert. Die neue deterministische SVD-Fabrik wählt pro
-Subcarrier explizit die N_s stärksten numerisch tragfähigen Eigenmoden und
+Subcarrier explizit die $N_s$ stärksten numerisch tragfähigen Eigenmoden und
 erzeugt bei gleicher Leistung oder optionaler räumlicher Wasserfüllung erneut
-ein festes W[k]. Rang, Singularwerte, Rauschleistung, Referenz-SNR, aktive
+ein festes $W[k]$. Rang, Singularwerte, Rauschleistung, Referenz-SNR, aktive
 Moden und Leistungsallokation bleiben vollständig sichtbar. Die neue
 semantische HE-/EHT-SU-Feedbackdarstellung komprimiert gleichleistungs-
 SVD-Precoder getrennt in Givens-Winkel, quantisiert sie deterministisch mit
 den groben 4/2- oder feinen 6/4-Bit-Codebooks und rekonstruiert daraus erneut
-ein auf den festen-W[k]-Vertrag normalisiertes Ergebnis. Bitumfang,
+ein auf den festen-$W[k]$-Vertrag normalisiertes Ergebnis. Bitumfang,
 Normierungskorrektur sowie phaseninvariante Richtungs- und Koeffizientenfehler
-werden ausgewiesen. MimoCsiAgingModel trennt H_hat[k,t_csi] von H[k,t_tx],
+werden ausgewiesen. MimoCsiAgingModel trennt $\hat{H}[k,t_\mathrm{csi}]$ von
+$H[k,t_\mathrm{tx}]$,
 bildet periodische Aktualisierung und Feedbackverzögerung explizit ab und
 liefert eine gerichtete, array-, modus- und zeitstempelabhängige
 Zustandsidentität. SionnaMimoHelper integriert nun festes Precoding, MRT, SVD,
 Wasserfüllung, quantisiertes Feedback und CSI-Alterung durch eine explizite,
-unveränderliche Precoderwahl. Apply führt das ausgewählte W[k] ohne geänderte
+unveränderliche Precoderwahl. Apply führt das ausgewählte $W[k]$ ohne geänderte
 Semantik durch denselben festen SpectrumWifiPhy-Adapterpfad. Das neue
 CPU-End-to-End-Beispiel vergleicht Open Loop, festen 2x1-Precoder, MRT und SVD
 bei gleicher Gesamtleistung und gibt Konfiguration, Durchsatz, PER,
@@ -88,7 +89,7 @@ bisherige 1x1-Sende- und Empfangsantenne. Die normalisierte SISO-CFR erfüllt
 \]
 
 während der Wideband-Pfadverlust separat in dB übertragen wird. Unterphase 1.2
-verallgemeinert diese Trennung auf alle Antennenpaare: H[k] enthält
+verallgemeinert diese Trennung auf alle Antennenpaare: $H[k]$ enthält
 Small-Scale-Fading und der skalare Wideband-Verlust bestimmt die Referenz-SNR.
 
 ## 3. Entwicklungsplan
@@ -106,9 +107,9 @@ Abnahmekriterium: SISO-Verhalten bleibt unverändert und alle alten Tests laufen
 
 #### Unterphase 1.1: Numerischer Kern (implementiert)
 
-- CFR-Tensor H[k] mit expliziten Dimensionen N_sc x N_rx x N_tx.
+- CFR-Tensor $H[k]$ mit expliziten Dimensionen $N_\mathrm{sc}\times N_\mathrm{rx}\times N_\mathrm{tx}$.
 - Open-Loop Spatial Multiplexing, ein Stream je Sendeantenne.
-- Gleiche Gesamtleistungsaufteilung über N_s = N_tx Streams.
+- Gleiche Gesamtleistungsaufteilung über $N_s=N_\mathrm{tx}$ Streams.
 - Perfekte CFR-Kenntnis am Empfänger und linearer MMSE-Detektor.
 - Post-MMSE-SINR pro Subcarrier und Stream.
 - Mutual-Information-basierte Kompression über Subcarrier.
@@ -231,8 +232,8 @@ erfüllen dieses Kriterium.
 
 ### Phase 3: SU-MIMO mit Precoding und Beamforming
 
-Sionna liefert weiterhin ausschließlich die komplexe CFR H[k]. Auswahl und
-Anwendung des Precoding W[k], Streamauswahl, Leistungsaufteilung und
+Sionna liefert weiterhin ausschließlich die komplexe CFR $H[k]$. Auswahl und
+Anwendung des Precoding $W[k]$, Streamauswahl, Leistungsaufteilung und
 CSI-Zeitbezug bleiben vollständig in ns-3. Die bestehende skalare Grenze zu
 SpectrumWifiPhy bleibt erhalten: Erst nach der matrixwertigen Kanal-,
 Precoding- und Detektorberechnung wird auf eine Effective-SINR beziehungsweise
@@ -250,56 +251,56 @@ Standardisierungsblock und Unterphase 3.5 schließt die Phase end-to-end ab.
 #### Unterphase 3.1: Festes Precoding als vollständige Grundlage (implementiert)
 
 - Einen dimensionssicheren Vertrag für
-  W[k] in C^(N_tx x N_s) mit verbindlicher sc/tx/stream-Reihenfolge
+  $W[k]\in\mathbb{C}^{N_\mathrm{tx}\times N_s}$ mit verbindlicher sc/tx/stream-Reihenfolge
   definieren; frequenzflache Matrizen werden explizit auf alle Subcarrier
   abgebildet.
 - Das Signalmodell auf
-  y[k] = sqrt(P/N_s) H[k] W[k] x[k] + n[k] verallgemeinern und den bestehenden
-  MMSE-Kern auf den effektiven Kanal H_eff[k] = H[k]W[k] anwenden.
-- N_s unabhängig von N_tx im Bereich 1 <= N_s <= min(N_tx, N_rx) führen.
-- Die Leistungsnormierung ||W[k]||_F^2 = N_s festlegen, sodass P weiterhin die
+  $y[k]=\sqrt{P/N_s}\,H[k]W[k]x[k]+n[k]$ verallgemeinern und den bestehenden
+  MMSE-Kern auf den effektiven Kanal $H_\mathrm{eff}[k]=H[k]W[k]$ anwenden.
+- $N_s$ unabhängig von $N_\mathrm{tx}$ im Bereich $1\leq N_s\leq\min(N_\mathrm{tx},N_\mathrm{rx})$ führen.
+- Die Leistungsnormierung $\lVert W[k]\rVert_F^2=N_s$ festlegen, sodass $P$ weiterhin die
   gesamte Sendeleistung bezeichnet und kein unbeabsichtigter Precoding-Gewinn
   entsteht.
 - Analytische Tests für SISO, Identitäts-Precoding, Streamauswahl,
   komplexwertige feste Matrizen und Dimensions-/Normierungsfehler ergänzen.
 
-Numerisches Zwischenkriterium: W[k] = I reproduziert den Phase-1-Kern
+Numerisches Zwischenkriterium: $W[k]=I$ reproduziert den Phase-1-Kern
 innerhalb 1e-10;
-synthetische H[k]W[k]-Referenzen liefern indexgenau dieselben
+synthetische $H[k]W[k]$-Referenzen liefern indexgenau dieselben
 Post-MMSE-SINRs und die Gesamtleistung bleibt invariant.
 
 Integrationsschritte innerhalb derselben Unterphase:
 
-- Benutzergegebenes frequenzflaches und frequenzselektives W[k] durch
+- Benutzergegebenes frequenzflaches und frequenzselektives $W[k]$ durch
   SionnaMimoHelper, Link-Abstraktion und SpectrumWifiPhy-Adapter führen.
-- WifiTxVector::GetNss an die Spaltenzahl von W[k] statt weiterhin zwingend
-  an N_tx koppeln und N_s < N_tx erstmals kontrolliert zulassen.
+- WifiTxVector::GetNss an die Spaltenzahl von $W[k]$ statt weiterhin zwingend
+  an $N_\mathrm{tx}$ koppeln und $N_s < N_\mathrm{tx}$ erstmals kontrolliert zulassen.
 - Subcarrierzahl, Antennenmaße, NSS, endliche Koeffizienten und
   Leistungsnormierung vor jeder Zustandsänderung zentral validieren.
 - Ohne explizites Precoding den bisherigen SISO-/Open-Loop-Pfad byte- und
   funktional kompatibel halten.
 - API-, Adapter- und End-to-End-Tests für 1x1, 2x2-Identität sowie
-  N_tx = 2, N_rx = 2, N_s = 1 ergänzen.
+  $N_\mathrm{tx}=2$, $N_\mathrm{rx}=2$, $N_s=1$ ergänzen.
 
 Abnahmekriterium: Manuell und über SionnaMimoHelper konfiguriertes festes
-W[k] liefern dieselben SINR-, EESM- und PER-Ergebnisse; alle Phase-2-Tests
+$W[k]$ liefern dieselben SINR-, EESM- und PER-Ergebnisse; alle Phase-2-Tests
 bleiben unverändert erfolgreich. Die analytischen, Adapter- und
 SpectrumWifiPhy-End-to-End-Ergebnisse in Abschnitt 7 erfüllen dieses
 Kriterium.
 
 #### Unterphase 3.2: Ein-Stream-MRT/MRC (implementiert)
 
-- MRT für den eindeutig definierten MISO-Fall N_rx = 1 aus perfekter CFR
+- MRT für den eindeutig definierten MISO-Fall $N_\mathrm{rx}=1$ aus perfekter CFR
   berechnen und auf Einheitsnorm normieren.
-- Für N_tx = 1 die bestehende Ein-Stream-MMSE-Lösung als äquivalente
+- Für $N_\mathrm{tx}=1$ die bestehende Ein-Stream-MMSE-Lösung als äquivalente
   MRC-Kombination ausweisen und validieren.
-- Den allgemeinen Fall N_tx > 1 und N_rx > 1 nicht mehrdeutig als MRT/MRC
+- Den allgemeinen Fall $N_\mathrm{tx}>1$ und $N_\mathrm{rx}>1$ nicht mehrdeutig als MRT/MRC
   bezeichnen; dessen optimale Ein-Stream-Lösung gehört zur SVD-Unterphase.
 - Analytische MISO-/SIMO-Kanäle, gemeinsame Phasendrehung, Nullkanal und
   erwarteten Arraygewinn testen.
 
 Abnahmekriterium: MRT/MRC erreicht auf analytischen Ein-Stream-Kanälen die
-Post-Combining-SNR rho ||h||_2^2, bleibt leistungsnormalisiert und fällt im
+Post-Combining-SNR $\rho\lVert h\rVert_2^2$, bleibt leistungsnormalisiert und fällt im
 1x1-Grenzfall exakt auf das bestehende Ergebnis zurück. Der analytische
 MRT-/MRC-Test in Abschnitt 7 erfüllt dieses Kriterium einschließlich
 Phaseninvarianz und eindeutiger Ablehnung der Null- und allgemeinen
@@ -307,10 +308,10 @@ MIMO-Fälle.
 
 #### Unterphase 3.3: SVD-Precoding und Leistungsallokation (implementiert)
 
-- Pro Subcarrier H[k] = U[k] Sigma[k] V^H[k] zerlegen und die N_s stärksten
-  rechten Singulärvektoren bei zunächst gleicher Streamleistung als W[k]
+- Pro Subcarrier $H[k]=U[k]\Sigma[k]V^H[k]$ zerlegen und die $N_s$ stärksten
+  rechten Singulärvektoren bei zunächst gleicher Streamleistung als $W[k]$
   verwenden.
-- N_s explizit wählen und gegen Antennenzahlen sowie einen dokumentierten
+- $N_s$ explizit wählen und gegen Antennenzahlen sowie einen dokumentierten
   numerischen Rangschwellwert validieren.
 - Sortierung, Vorzeichen-/Phasenkonvention und Verhalten bei gleichen
   Singularwerten deterministisch festlegen.
@@ -347,7 +348,7 @@ Gleichleistungsreferenz, ohne Sendeleistung zu erzeugen.
   abgrenzen.
 - Ideales SVD-Precoding, Quantisierung und Rekonstruktion als getrennte,
   einzeln testbare Schritte modellieren.
-- Quantisiertes W[k] erneut leistungsnormalisieren und Feedbackumfang sowie
+- Quantisiertes $W[k]$ erneut leistungsnormalisieren und Feedbackumfang sowie
   Quantisierungsfehler als Diagnosegrößen bereitstellen.
 - Bekannte Vektoren, Grenzwinkel, minimale/maximale Quantisierung und den
   unquantisierten Grenzfall testen.
@@ -359,8 +360,9 @@ Quantisierung verschlechtert die Referenzmetrik auf den Testkanälen nicht.
 
 CSI-Alterung innerhalb derselben Unterphase:
 
-- Die zur Precoderwahl verwendete Schätzung H_hat[k,t_csi] strikt von der bei
-  der Paketübertragung wirksamen CFR H[k,t_tx] trennen.
+- Die zur Precoderwahl verwendete Schätzung
+  $\hat{H}[k,t_\mathrm{csi}]$ strikt von der bei der Paketübertragung wirksamen
+  CFR $H[k,t_\mathrm{tx}]$ trennen.
 - CSI-Alter, Aktualisierungsintervall und Feedbackverzögerung explizit und
   reproduzierbar konfigurieren; perfektes aktuelles CSI bleibt der
   Nullalter-Grenzfall.
@@ -630,7 +632,7 @@ und alle Phase-1- bis Phase-3-Regressionen bleiben erfolgreich.
 - PER-Kurven gegen Link-Level-Referenzen kalibrieren.
 - Sensitivität gegenüber Antennenabstand, Orientierung, CSI-Alter und
   Raytracing-Samples untersuchen.
-- Cache- und IPC-Speicherbedarf für große N_sc, N_tx und N_rx messen.
+- Cache- und IPC-Speicherbedarf für große $N_\mathrm{sc}$, $N_\mathrm{tx}$ und $N_\mathrm{rx}$ messen.
 - Deterministische Seeds, Ergebnisformate und CI-Matrix für CPU/GPU festlegen.
 
 ## 4. Datenmodell und IPC-Vertrag der Unterphasen 1.1/1.2
@@ -719,9 +721,9 @@ Damit gilt
   \sum_{k,r,t}|H_\mathrm{norm}[r,t,k]|^2 = 1.
 \]
 
-Für N_rx=N_tx=1 ist dies exakt die bisherige SISO-Normalisierung. Die Aufteilung
-der gesamten Sendeleistung auf N_s Streams bleibt davon getrennt und erfolgt
-weiterhin im numerischen Modell mit dem Faktor 1/N_s.
+Für $N_\mathrm{rx}=N_\mathrm{tx}=1$ ist dies exakt die bisherige SISO-Normalisierung. Die Aufteilung
+der gesamten Sendeleistung auf $N_s$ Streams bleibt davon getrennt und erfolgt
+weiterhin im numerischen Modell mit dem Faktor $1/N_s$.
 
 ### 4.4 Arraykonfiguration und ns-3-Cache
 
@@ -821,20 +823,20 @@ Ohne Precoding gilt je Subcarrier
   \sqrt{\frac{P}{N_s}}\,\mathbf{H}[k]\mathbf{x}[k] + \mathbf{n}[k],
 \]
 
-mit N_s = N_tx, E[x x^H] = I und räumlich weißem Rauschen
-E[n n^H] = N I. Die Eingangsgröße
+mit $N_s=N_\mathrm{tx}$, $E[x x^H]=I$ und räumlich weißem Rauschen
+$E[n n^H]=N I$. Die Eingangsgröße
 
 \[
   \rho = \frac{P}{N}
 \]
 
 ist die gesamte Referenz-SNR vor der Small-Scale-CFR-Gewichtung. Das Modell
-verlangt in dieser Unterphase N_rx >= N_tx. Overloaded MIMO wird erst mit einer
+verlangt in dieser Unterphase $N_\mathrm{rx}\geq N_\mathrm{tx}$. Overloaded MIMO wird erst mit einer
 expliziten Streamauswahl zugelassen.
 
 ### 5.2 Linearer MMSE-Empfänger
 
-Mit alpha = rho/N_s und G[k] = H[k]^H H[k] folgt die
+Mit $\alpha=\rho/N_s$ und $G[k]=H[k]^H H[k]$ folgt die
 Fehlerkovarianz des linearen MMSE-Detektors:
 
 \[
@@ -854,7 +856,7 @@ definiert, weil I + alpha G positiv definit ist.
 
 ### 5.3 SISO-Grenzfall
 
-Für N_tx = N_rx = 1 ergibt sich
+Für $N_\mathrm{tx}=N_\mathrm{rx}=1$ ergibt sich
 
 \[
   E = \frac{1}{1 + \rho |h|^2},
@@ -2806,3 +2808,6 @@ PDF neu erzeugen:
 
 Das Rendering-Skript benötigt nur Matplotlib und läuft im vorhandenen
 CPU-Environment.
+
+
+# Check code in ZeroForcing
