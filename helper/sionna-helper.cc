@@ -32,7 +32,7 @@ SionnaHelper::SionnaHelper(std::string environment, std::string zmq_url): m_zmq_
     SetChannelBandwidth(80 * 3);
     m_fft_size = 1024 * 3;
     m_subcarrier_spacing = 78125;
-    m_min_coherence_time_ms = 100000; // min coherence time is 100s
+    m_min_coherence_time_ms = 0;
     m_time_evo_model = "position";
 
     std::cout << "Env: " << m_environment << std::endl;
@@ -296,22 +296,22 @@ SionnaHelper::Start()
     for (auto iter = c.Begin(); iter != c.End(); ++iter)
     {
         Ptr<MobilityModel> mobilityModel = (*iter)->GetObject<MobilityModel>();
-        
+
         if (mobilityModel)
         {
             // Only send node information if the node has the SionnaMobilityModel
             Ptr<SionnaMobilityModel> sionnaMobilityModel = DynamicCast<SionnaMobilityModel>(mobilityModel);
             NS_ASSERT_MSG(sionnaMobilityModel, "Not using SionnaMobilityModel.");
-            
+
             ns3sionna::SimInitMessage::NodeInfo* node_info = simulation_info->add_nodes();
             node_info->set_id((*iter)->GetId());
-            
+
             Vector position = mobilityModel->GetPosition();
 
             if (sionnaMobilityModel->GetModel() == "Random Walk")
             {
                 ns3sionna::SimInitMessage::NodeInfo::RandomWalkModel* random_walk_model = node_info->mutable_random_walk_model();
-                
+
                 ns3sionna::SimInitMessage::NodeInfo::Vector* position_vector = random_walk_model->mutable_position();
                 position_vector->set_x(position.x);
                 position_vector->set_y(position.y);
@@ -336,14 +336,14 @@ SionnaHelper::Start()
 
                 ns3sionna::SimInitMessage::NodeInfo::RandomWalkModel::RandomVariableStream* speed = random_walk_model->mutable_speed();
                 RandomVariableStreamMessage(speed, sionnaMobilityModel->GetSpeed());
-                
+
                 ns3sionna::SimInitMessage::NodeInfo::RandomWalkModel::RandomVariableStream* direction = random_walk_model->mutable_direction();
                 RandomVariableStreamMessage(direction, sionnaMobilityModel->GetDirection());
             }
             else
             {
                 ns3sionna::SimInitMessage::NodeInfo::ConstantPositionModel* constant_position_model = node_info->mutable_constant_position_model();
-                
+
                 ns3sionna::SimInitMessage::NodeInfo::Vector* position_vector = constant_position_model->mutable_position();
                 position_vector->set_x(position.x);
                 position_vector->set_y(position.y);
@@ -364,9 +364,9 @@ SionnaHelper::Start()
     // Receive the reply message
     zmq::message_t zmq_reply;
     zmq::recv_result_t result = m_zmq_socket.recv(zmq_reply, zmq::recv_flags::none);
-    
+
     NS_ASSERT_MSG(result, "Failed to receive reply after simulation information message.");
-    
+
     // Check if the reply message is an ack
     ns3sionna::Wrapper reply_wrapper;
     reply_wrapper.ParseFromArray(zmq_reply.data(), zmq_reply.size());
@@ -391,7 +391,7 @@ SionnaHelper::Destroy()
     // Prepare the request message
     ns3sionna::Wrapper wrapper;
     wrapper.mutable_sim_close_request();
-    
+
     // Serialize the request message
     std::string serialized_message;
     wrapper.SerializeToString(&serialized_message);
@@ -403,13 +403,13 @@ SionnaHelper::Destroy()
     // Receive the reply message
     zmq::message_t zmq_reply;
     zmq::recv_result_t result = m_zmq_socket.recv(zmq_reply, zmq::recv_flags::none);
-    
+
     NS_ASSERT_MSG(result, "Failed to receive reply after close request message.");
-    
+
     // Check if the reply message is an ack
     ns3sionna::Wrapper reply_wrapper;
     reply_wrapper.ParseFromArray(zmq_reply.data(), zmq_reply.size());
-    
+
     NS_ASSERT_MSG(reply_wrapper.has_sim_ack(), "Reply after close request is not an ack.");
 
     // Close socket

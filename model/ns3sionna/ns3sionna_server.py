@@ -150,8 +150,7 @@ class SionnaEnv:
 
         self.fc = sim_init_msg.frequency * 1e6
         self.fft_size = sim_init_msg.fft_size  # max FFT size
-        # todo: min Tc is not used
-        self.min_coherence_time_ms = sim_init_msg.min_coherence_time_ms # min Tc
+        self.min_coherence_time_ms = sim_init_msg.min_coherence_time_ms # fixed Tc
         self.subcarrier_spacing = sim_init_msg.subcarrier_spacing # in Hz
 
         print(f'Operating in mode: {self.mode}, sub_mode: {self.sub_mode}, time_evo_model: {self.time_evo_model}'
@@ -268,11 +267,14 @@ class SionnaEnv:
                 # perform walk
                 self._walk(node_id, dt)
                 if node_id != tx_node_id:
-                    tc = coherence_from_velocities(self.node_info[node_id].velocity,
-                                                    self.node_info[tx_node_id].velocity, self.fc,
-                                                    pos_tx=self.node_info[node_id].pos,
-                                                    pos_rx=self.node_info[tx_node_id].pos)
-                    csi_tc_arr.append(tc)
+                    if self.min_coherence_time_ms == 0:
+                        tc = coherence_from_velocities(self.node_info[node_id].velocity,
+                                                        self.node_info[tx_node_id].velocity, self.fc,
+                                                        pos_tx=self.node_info[node_id].pos,
+                                                        pos_rx=self.node_info[tx_node_id].pos)
+                        csi_tc_arr.append(tc)
+                    else:
+                        csi_tc_arr.append(self.min_coherence_time_ms)
 
             # take the worst case Tc from all RX nodes
             Tc_p2mp = int(np.min(np.asarray(csi_tc_arr)))
@@ -375,11 +377,13 @@ class SionnaEnv:
                     append_user_channel_identity(rx_node_info, curr_rx_node,
                                                  tx_node_id, csi.start_time,
                                                  self.rx_array_config)
-
-                tc = coherence_from_velocities(self.node_info[curr_rx_node].get_velo_at(lah_time),
-                                                self.node_info[tx_node_id].velocity, self.fc,
-                                                pos_tx=self.node_info[curr_rx_node].get_pos_at(lah_time),
-                                                pos_rx=self.node_info[tx_node_id].pos)
+                if self.min_coherence_time_ms == 0:
+                    tc = coherence_from_velocities(self.node_info[curr_rx_node].get_velo_at(lah_time),
+                                                    self.node_info[tx_node_id].velocity, self.fc,
+                                                    pos_tx=self.node_info[curr_rx_node].get_pos_at(lah_time),
+                                                    pos_rx=self.node_info[tx_node_id].pos)
+                else:
+                    tc = self.min_coherence_time_ms
 
                 rx_node_info.end_time2 = csi.start_time + tc
                 csi_tc_arr.append(tc)
@@ -487,10 +491,13 @@ class SionnaEnv:
 
             # compute coherence time: with direction vectors you can compute the radial (projected) relative
             # speed directly and from that the Doppler and coherence time.
-            tc = coherence_from_velocities(self.node_info[comp_rx_node_id].velocity,
-                                            self.node_info[tx_node_id].velocity, self.fc,
-                                            pos_tx=self.node_info[comp_rx_node_id].pos,
-                                            pos_rx=self.node_info[tx_node_id].pos)
+            if self.min_coherence_time_ms == 0:
+                tc = coherence_from_velocities(self.node_info[comp_rx_node_id].velocity,
+                                                self.node_info[tx_node_id].velocity, self.fc,
+                                                pos_tx=self.node_info[comp_rx_node_id].pos,
+                                                pos_rx=self.node_info[tx_node_id].pos)
+            else:
+                tc = self.min_coherence_time_ms
             rx_node_info.end_time2 = tc
             csi_tc_arr.append(tc)
 
