@@ -6,7 +6,7 @@ def print_sim_init(sim_init_msg):
     print("    Env:", sim_init_msg.scene_fname)
     print("    Seed:", sim_init_msg.seed, ", fc:", sim_init_msg.frequency, ", B:", sim_init_msg.channel_bw
           , ", FFT:", sim_init_msg.fft_size, ", dSC:", sim_init_msg.subcarrier_spacing
-          , ", Tc_min:", sim_init_msg.min_coherence_time_ms, ", time_evo:", sim_init_msg.time_evo_model)
+          , ", Tc_fixed:", sim_init_msg.fixed_coherence_time_ms, ", time_evo:", sim_init_msg.time_evo_model)
 
     print("Node Information:")
     for node_info in sim_init_msg.nodes:

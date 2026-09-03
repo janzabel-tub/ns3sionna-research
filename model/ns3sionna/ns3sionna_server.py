@@ -49,7 +49,7 @@ class SionnaEnv:
     author: Pilz, Zubow
     """
     def __init__(self, model_folder='./models/', rt_fast=False, default_mode=MODE_P2P, rt_max_parallel_links=256, est_csi=True, VERBOSE=True,
-                 CHECKS_ENABLED=True):
+                 CHECKS_ENABLED=True, LIVE_PREVIEW = False):
         self.model_folder = model_folder
         self.rt_fast = rt_fast
         if rt_fast:
@@ -104,6 +104,17 @@ class SionnaEnv:
         # all node which are currently placed on the scene
         self.placed_radio_node_names = []
 
+        # TODO: SERVER BROKEN, GUI NOT FULLY IMPLEMENTED YET!!!
+        # Live preview when running the server:
+        self.LIVE_PREVIEW = LIVE_PREVIEW
+
+        self.gui_fig = None
+        self.gui_ax = None
+        self.gui_background = None
+        self.gui_node_artists = {}
+        self.gui_time_text = None
+        self.gui_last_update = 0.0
+
 
     def init_simulation_env(self, sim_init_msg):
         '''
@@ -150,8 +161,8 @@ class SionnaEnv:
 
         self.fc = sim_init_msg.frequency * 1e6
         self.fft_size = sim_init_msg.fft_size  # max FFT size
-        # todo: min Tc is not used
-        self.min_coherence_time_ms = sim_init_msg.min_coherence_time_ms # min Tc
+        # todo: fixed Tc is not used
+        self.fixed_coherence_time_ms = sim_init_msg.fixed_coherence_time_ms # fixed Tc
         self.subcarrier_spacing = sim_init_msg.subcarrier_spacing # in Hz
 
         print(f'Operating in mode: {self.mode}, sub_mode: {self.sub_mode}, time_evo_model: {self.time_evo_model}'
@@ -166,6 +177,10 @@ class SionnaEnv:
 
         # configure mobility models
         self._init_mobility(sim_init_msg)
+
+        # Setup the live preview
+        if self.LIVE_PREVIEW:
+            self._init_live_gui(filepath)
 
         # for mode 3 if only constant speed model supported
         if self.mode == SionnaEnv.MODE_P2MP_LAH:
@@ -205,6 +220,36 @@ class SionnaEnv:
 
         return True, "OK"
 
+    # This section adds the live gui
+    def _init_live_gui(self, scene_path):
+        plt.ion()
+
+        floor_plan = load_scene_floor_plan(scene_path)
+
+        self.gui_fig, self.gui_ax = plt.subplots(figsize=(8, 7))
+
+        draw_scene_floor_plan(
+            self.gui_ax,
+            floor_plan,
+        )
+
+        self.gui_ax.set_xlabel("X position [m]")
+        self.gui_ax.set_ylabel("Y position [m]")
+        self.gui_ax.set_aspect("equal", adjustable="box")
+        self.gui_ax.grid(True, alpha=0.3)
+
+        for node_id, mobility in sorted(self.node_info.items()):
+            x, y, _ = mobility.pos
+
+            artist = self.gui_ax.scatter(
+                [x],
+                [y],
+                s=70,
+                zorder=10,
+                animated=True,
+            )
+
+            self.gui_node_artists[node_id] = artist
 
     def compute_cfr(self, csi_req, reply_wrapper):
 
@@ -832,6 +877,7 @@ if __name__ == '__main__':
     parser.add_argument("--rt_max_parallel_links", type=int, default=256, help="Max no. of link simulated at once; depends on GPU memory")
     parser.add_argument("--est_csi", help="Whether to estimate complex CSI per OFDM subcarrier", type=bool, default=True)
     parser.add_argument("--verbose", help="Whether to run in verbose mode", action='store_true')
+    parser.add_argument("--live_preview", help="Show live preview of mobility", action='store_true')
     args = parser.parse_args()
 
     print("ns3sionna v1.0")
@@ -840,7 +886,7 @@ if __name__ == '__main__':
               % (args.model_folder, args.single_run, args.default_mode, args.rt_fast, args.rt_max_parallel_links, args.est_csi))
         print("Waiting for new job ...")
         env = SionnaEnv(args.model_folder, args.rt_fast, args.default_mode, args.rt_max_parallel_links,
-                        args.est_csi, VERBOSE=args.verbose)
+                        args.est_csi, VERBOSE=args.verbose, LIVE_PREVIEW = live_preview)
         env.run()
 
         if args.single_run:

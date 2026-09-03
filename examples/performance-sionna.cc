@@ -204,12 +204,12 @@ RunSimulation(const std::string environment,
     double fc = get_center_freq(apDevices.Get(0));
 
     // set center frequency & bandwidth for Sionna
-    int min_coherence_time_ms = 1000;
+    int fixed_coherence_time_ms = 1000;
     sionnaHelper.Configure(fc,
                            channel_width,
                            getFFTSize(wifi_standard, channel_width),
                            getSubcarrierSpacing(wifi_standard),
-                           min_coherence_time_ms);
+                           fixed_coherence_time_ms);
 
     sionnaHelper.SetMode(mode);
     sionnaHelper.SetSubMode(sub_mode);
