@@ -51,10 +51,9 @@ public:
      * @param channel_bw the channel bandwidth (including guard bands) [MHz]
      * @param fft_size the FFT used over the channel_bw
      * @param ofdm_subcarrier_spacing the OFDM subcarrier spacing [Hz]
-     * @param min_coherence_time_ms the minimum channel coherence time  []in
-     * msused for caching
+     * @param fixed_coherence_time_ms the fixed channel coherence time used for caching [ms]
      */
-    void Configure(int frequency, int channel_bw, int fft_size, int ofdm_subcarrier_spacing, int min_coherence_time_ms); // both in MHz, ms
+    void Configure(int frequency, int channel_bw, int fft_size, int ofdm_subcarrier_spacing, int fixed_coherence_time_ms); // both in MHz, ms
 
     /**
      * Configures the radio parameters of the sionna simulation.
@@ -176,7 +175,7 @@ private:
     zmq::context_t m_zmq_context;
     int m_frequency; // in MHz
     int m_channel_bw; // in Mhz
-    int m_min_coherence_time_ms; // ms
+    int m_fixed_coherence_time_ms; // ms
     int m_fft_size;
     int m_subcarrier_spacing; // in Hz
     double m_noiseDbm;

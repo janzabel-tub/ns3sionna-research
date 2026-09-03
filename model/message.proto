@@ -43,7 +43,7 @@ message SimInitMessage {
     uint32 subcarrier_spacing = 6; // OFDM subcarrier spacing in Hz
     int32 mode = 7; // mode of operation: -1=not set, 1=P2P, 2=P2MP, 3=P2MP+lookahead
     int32 sub_mode = 8; // used in mode=3: max. no of parallel links to be computed in single call to Sionna, -1 if ignored
-    uint32 min_coherence_time_ms = 9; // minimal coherence time in milliseconds
+    uint32 fixed_coherence_time_ms = 9; // fixed coherence time in milliseconds
     string time_evo_model = 10; // time evolution model: 'doppler', 'position', 'hybrid'
 
     // each node is defined by ID, location and mobility model

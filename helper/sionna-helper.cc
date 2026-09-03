@@ -32,7 +32,8 @@ SionnaHelper::SionnaHelper(std::string environment, std::string zmq_url): m_zmq_
     SetChannelBandwidth(80 * 3);
     m_fft_size = 1024 * 3;
     m_subcarrier_spacing = 78125;
-    m_min_coherence_time_ms = 0;
+    // Zero selects dynamic coherence-time calculation.
+    m_fixed_coherence_time_ms = 0;
     m_time_evo_model = "position";
 
     std::cout << "Env: " << m_environment << std::endl;
@@ -97,9 +98,13 @@ SionnaHelper::SetSubMode(int sub_mode)
 }
 
 void
-SionnaHelper::Configure(int frequency, int channel_bw, int fft_size, int ofdm_subcarrier_spacing, int min_coherence_time_ms)
+SionnaHelper::Configure(int frequency,
+                        int channel_bw,
+                        int fft_size,
+                        int ofdm_subcarrier_spacing,
+                        int fixed_coherence_time_ms)
 {
-    m_min_coherence_time_ms = min_coherence_time_ms;
+    m_fixed_coherence_time_ms = fixed_coherence_time_ms;
     Configure(frequency, channel_bw, fft_size, ofdm_subcarrier_spacing);
 }
 
@@ -118,7 +123,7 @@ SionnaHelper::Configure(int frequency, int channel_bw, int fft_size, int ofdm_su
 
     std::cout << "ns3sionna configured with fc= " << frequency << "MHz, B=" << m_channel_bw
         << "MHz" << ", FFT=" << m_fft_size << ", Evo model:" << m_time_evo_model
-        << ", MinTc=" << m_min_coherence_time_ms << "ms" << std::endl;
+        << ", FixedTc=" << m_fixed_coherence_time_ms << "ms" << std::endl;
 }
 
 void
@@ -286,7 +291,7 @@ SionnaHelper::Start()
     simulation_info->set_frequency(m_frequency);
     simulation_info->set_channel_bw(m_channel_bw);
     simulation_info->set_fft_size(m_fft_size);
-    simulation_info->set_min_coherence_time_ms(m_min_coherence_time_ms);
+    simulation_info->set_fixed_coherence_time_ms(m_fixed_coherence_time_ms);
     simulation_info->set_time_evo_model(m_time_evo_model);
     simulation_info->set_subcarrier_spacing(m_subcarrier_spacing);
     simulation_info->set_mode(m_mode);

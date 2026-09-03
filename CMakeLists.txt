@@ -45,6 +45,7 @@ set(proto_source_files model/message.proto)
 
 # Module sources and headers
 set(SOURCE_FILES
+        model/dl-mu-mimo-runtime.cc
         model/dl-mu-mimo-link-model.cc
         model/he-dl-mu-mimo-link-abstraction.cc
         model/he-su-mimo-link-abstraction.cc
@@ -66,6 +67,7 @@ set(SOURCE_FILES
 )
 
 set(HEADER_FILES
+        model/dl-mu-mimo-runtime.h
         model/dl-mu-mimo-link-model.h
         model/he-dl-mu-mimo-link-abstraction.h
         model/he-su-mimo-link-abstraction.h
@@ -111,6 +113,7 @@ build_lib(
         TEST_SOURCES
         test/sionna-test-suite.cc
         test/mimo-csi-feedback-test-suite.cc
+        test/dl-mu-mimo-runtime-test-suite.cc
         ${examples_as_tests_sources}
 )
 
