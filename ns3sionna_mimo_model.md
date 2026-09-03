@@ -68,8 +68,10 @@ Ergebnisse werden auf die gemeinsame Phase-4.2-Gesamtleistung normalisiert;
 überlastete und numerisch rangdefiziente Gruppen werden abgelehnt. Unterphase
 4.4 integriert diesen Zustand für HE-DL-MU-PPDUs in den Spectrumadapter,
 ordnet STA-ID, RU, MCS und NSS zu und begrenzt räumliche Interferenz auf
-dieselbe RU. Scheduler, High-Level-Helper-Integration, Laufzeit-CSI und
-Unterphase 4.5 oder später wurden nicht begonnen.
+dieselbe RU. Unterphase 4.5 bindet nun den Laufzeit-CSI-Zustand an die
+MultiUserScheduler-Ausgabe und ergänzt feste sowie korrelationsbasierte
+Gruppen. High-Level-Helper-Integration, ein konkreter End-to-End-Scheduler und
+Unterphase 4.6 oder später wurden nicht begonnen.
 
 ## 2. Reproduzierbare Ausgangsbasis
 
@@ -551,9 +553,10 @@ gemeinsamem Phase-4.2-/4.3-Precoder. Empfängeradressen werden eindeutig auf
 STA-IDs und damit auf RU, MCS und NSS des vorhandenen `HeMuUserInfoMap`
 abgebildet. Die gemeinsame Matrixrechnung trennt gleiche und verschiedene
 RUs vor der skalaren PSD-Übergabe; synthetische und echte HE-MU-PPDU-Tests in
-Abschnitt 7.6 erfüllen das Abnahmekriterium. Unterphase 4.5 wurde nicht begonnen.
+Abschnitt 7.6 erfüllen das Abnahmekriterium. Die Implementierung nahm
+Unterphase 4.5 nicht vorweg.
 
-#### Unterphase 4.5: Laufzeit-CSI und Scheduler-Schnittstelle
+#### Unterphase 4.5: Laufzeit-CSI und Scheduler-Schnittstelle (implementiert)
 
 - Einen gerichteten, zeitgestempelten CSI- und Precoderzustand pro AP,
   Nutzergruppe, RU und Übertragungsrichtung verwalten; veraltete oder für eine
@@ -574,6 +577,15 @@ Abnahmekriterium: Scheduler und PHY verwenden nachweislich denselben
 gerichteten Kanalschnappschuss; unpassende oder veraltete Zustände werden
 erkannt und identische Eingaben erzeugen exakt dieselbe Nutzergruppe,
 RU-/NSS-Zuordnung und denselben Precoder.
+
+Dieses Kriterium ist erfüllt: DlMuMimoRuntime übernimmt Kandidaten und
+RU-/NSS-Metadaten direkt aus MultiUserScheduler::DlMuInfo, bindet STA-IDs
+explizit an stabile Kanalnutzer und liefert eine deterministische feste oder
+korrelationsbasierte Gruppenauswahl. Erst wenn der Scheduler genau diese
+Auswahl für denselben Sendezeitpunkt ausgibt, installiert Install den
+unveränderten Snapshot und ZF-/RZF-Precoder im Phase-4.4-Adapter. Falsche,
+veraltete, anders gerichtete oder nicht unterstützte Zustände werden vor
+jeder Änderung abgelehnt. Unterphase 4.6 wurde nicht begonnen.
 
 #### Unterphase 4.6: Downlink-Benutzbarkeit und Phasenvalidierung
 
@@ -2003,6 +2015,95 @@ eindeutig ab. HE-SU und alle bisherigen 1x1-, festen-W[k]-, ZF-/RZF-,
 Serialisierungs-, Batching- und Cachepfade bleiben unverändert; EHT-MU und
 EHT-TB werden ausdrücklich abgelehnt.
 
+### 5.16 Laufzeit-CSI und Scheduler-Schnittstelle der Unterphase 4.5
+
+DlMuMimoRuntime bildet eine schmale, wertbasierte Brücke zwischen dem
+vorhandenen ns-3-MultiUserScheduler und dem Phase-4.4-Spectrumadapter. Ein
+Auswahlaufruf übernimmt dessen DlMuInfo einschließlich
+WifiTxParameters::m_txVector, HeMuUserInfoMap und WifiPsduMap. Eine explizite
+Menge von DlMuMimoStaUserBinding trennt weiterhin STA-ID und stabile
+Kanalnutzer-ID. PSDU-, HE-MU-TxVector- und Binding-Menge müssen identisch sein;
+jede PSDU muss existieren.
+
+Der Laufzeitschlüssel lautet
+
+\[
+  K=\left(n_{\mathrm{AP}},d,
+    \{(u,\mathrm{STA},\mathrm{RU},N_{\mathrm{SS}})\}\right).
+\]
+
+Die Nutzerfolge in \(K\) ist unabhängig von der Eingabereihenfolge streng
+nach stabiler Nutzer-ID sortiert. Unterphase 4.5 akzeptiert nur
+WIFI_PREAMBLE_HE_MU, Downlink, einen Stream und eine Empfangsantenne je Nutzer
+sowie mindestens zwei Nutzer pro Gruppe. Die ausgewählten Nutzer müssen
+dieselbe RU belegen. Der Scheduler erhält diese geordnete Auswahl über
+DlMuMimoRuntimeSelection::GetUsers; nur ein anschließend ausgegebenes DlMuInfo
+mit exakt denselben STA-IDs, RUs und NSS kann den Zustand durch Lookup oder
+Install treffen. So bleiben interne WifiTxParameters-Informationen im
+Scheduler und werden nicht nachträglich teilweise gefiltert.
+
+Die feste Gruppierung übernimmt eine explizite Nutzermenge, ignoriert deren
+Eingabereihenfolge und verwendet danach die unveränderte ZF- oder explizite
+RZF-Fabrik aus Unterphase 4.3. Die alternativ explizit wählbare
+MINIMUM_CORRELATION-Gruppierung untersucht alle Teilmengen der angeforderten
+Größe in lexikographischer Reihenfolge. Für eine Gruppe \(G\) ist die
+ausgegebene Metrik
+
+\[
+  \mu(G)=\max_{u\ne v\in G}
+  \frac{\left|\sum_{k,t}H_u[k,0,t]H_v^*[k,0,t]\right|}
+       {\sqrt{\sum_{k,t}|H_u[k,0,t]|^2}
+        \sqrt{\sum_{k,t}|H_v[k,0,t]|^2}}.
+\]
+
+Nur Nutzer mit identischer RU kommen gemeinsam in Frage. Überlastete,
+rangdefiziente oder anderweitig von der Phase-4.3-Fabrik abgelehnte Gruppen
+werden verworfen. Gewählt wird die verbleibende Gruppe mit kleinstem
+\(\mu\); innerhalb \(10^{-15}\) gleicher Metriken entscheidet die
+lexikographische Nutzer-ID-Folge. Gibt es keine belegbare Gruppe, wird kein
+Zustand erzeugt. Der fertige ZF-/RZF-Precoder behält
+\(\lVert W[k]\rVert_F^2=|G|\) und damit die gesamte AP-Leistung.
+
+Für den tatsächlichen Sendezeitpunkt \(t_{\mathrm{tx}}\) wird unverändert der
+Phase-3-Vertrag MimoCsiTimingConfiguration::ResolveCsiTimestamp benutzt:
+
+\[
+ t_{\mathrm{csi}}=
+ \begin{cases}
+   t_{\mathrm{tx}}-t_{\mathrm{fb}}, & T_{\mathrm{upd}}=0,\\
+   T_{\mathrm{upd}}\left\lfloor
+     \dfrac{t_{\mathrm{tx}}-t_{\mathrm{fb}}}{T_{\mathrm{upd}}}
+   \right\rfloor, & T_{\mathrm{upd}}>0.
+ \end{cases}
+\]
+
+Snapshot und alle Nutzer müssen exakt diesen gerichteten CSI-Zeitpunkt
+tragen. Auswahl und Diagnose speichern \(t_{\mathrm{csi}}\),
+\(t_{\mathrm{tx}}\), CSI-Alter, Aktualisierungsintervall und Rückmeldedauer.
+Ein Lookup für einen anderen Sendezeitpunkt, eine andere Gruppe, AP, RU, NSS
+oder Richtung schlägt fehl. Pro Schlüssel bleibt der neueste Zustand
+erhalten; ein älterer Ersatz sowie verschiedene CFRs unter derselben
+CSI-Identität werden atomar abgelehnt.
+
+DlMuMimoFeedbackRepresentation unterscheidet vollständige perfekte
+MU-Kanalschätzung, quantisierte MU-Kanalschätzung und einen rekonstruierten
+SU-Precoder. In dieser Unterphase ist ausschließlich PERFECT_CHANNEL
+unterstützt. Die beiden anderen Varianten werden eindeutig abgelehnt;
+insbesondere wird ein SU-Precoder nicht als vollständige Mehrnutzer-CFR
+interpretiert. Install prüft zuerst den vollständigen Laufzeitschlüssel und
+Zeitpunkt und übergibt erst danach genau den gespeicherten Snapshot und
+Precoder an SionnaSpectrumPropagationLossModel::SetDlMuMimoState.
+
+Alle Fehler der neuen wertbasierten API sind std::invalid_argument mit dem
+Präfix DlMuMimoRuntime. Konstruktion, Auswahl und Lookup prüfen Konfiguration,
+Richtung, Zeit, Endpunkte, Nutzer-, STA-ID-, PSDU-, RU- und NSS-Mengen,
+Frequenz-/Antennendimensionen, Endlichkeit, Last und Rang vor einer
+Zustandsänderung. Protocol Buffers, Serialisierung, Batching, Rohkanalcache,
+ZMQ, Server, Sionna RT, SU-Helper, EESM/PER und der Spectrum-Rechenpfad
+bleiben unverändert. Ein konkreter End-to-End-Scheduler, automatische
+Sounding-/Feedbackereignisse, Helperfreigabe, EHT und Uplink bleiben
+Unterphase 4.6 oder später vorbehalten.
+
 ## 6. High-Level-API-Vertrag bis Unterphase 3.5
 
 ### 6.1 Typen, Besitz und Defaults
@@ -2404,7 +2505,7 @@ Simulator-Timer, keine implizite CSI-Abfrage und keinen MAC-Feedbacktransport;
 diese Grenzen verhindern, dass das explizite Forschungsmodell eine
 vollständige 802.11-Soundingprozedur vortäuscht.
 
-## 7. Validierung der Unterphasen 1.1 bis 4.3
+## 7. Validierung der Unterphasen 1.1 bis 4.5
 
 Die native Suite sionna enthält nun 33 schnelle Fälle:
 
@@ -2571,6 +2672,17 @@ Phase 4.4 prüft gleiche-RU-Interferenz, analytische SINR, EESM/PER,
 Link Budget und äquivalente Leistung innerhalb $10^{-12}$. Die echte
 HE-MU-PPDU-Integration vergleicht die skalare RU-PSD mit einer relativen
 Toleranz von $10^{-10}$.
+
+Die eigenständige native Suite `dl-mu-mimo-runtime` ergänzt zwei schnelle
+Fälle für Unterphase 4.5. Der Auswahlfall prüft feste und
+korrelationsbasierte Gruppen, stabile Nutzer-/STA-ID-/RU-/NSS-Zuordnung,
+lexikographische Gleichstandsauflösung, direkte ZF-/RZF-Parität,
+Gesamtleistung, Aktualisierungsraster, Rückmeldedauer, CSI-Alter und die
+exakte Installation im Phase-4.4-Adapter. Der Negativfall prüft EHT, Uplink,
+falschen AP, fehlende Bindings, unterschiedliche RUs, mehrere Streams,
+falsche und zukünftige Zeitpunkte, quantisierte MU-Rückmeldung,
+SU-Precoder-Rekonstruktion, Überlast, Rangverlust, Gruppen-/Zeit-Mismatch und
+atomare Ablehnung eines älteren Ersatzes.
 
 Der reale Server-Integrationstest konfiguriert 1x2-PlanarArrays an TX und RX,
 führt Sionna RT auf der CPU aus und prüft die Form 2 x 2 x 256, 1024 komplexe
@@ -2801,6 +2913,29 @@ Cache, ZMQ, Sionna RT noch einen Serverpfad. Die schnelle Python-Vertragssuite,
 die native Suite und der echte HE-MU-PPDU-Adapterfall prüfen die berührten und
 unveränderten Grenzen direkt.
 
+### 7.7 Validierung der Unterphase 4.5
+
+Am 3. September 2026 wurden nach der Implementierung von Unterphase 4.5
+folgende Prüfungen auf der CPU-Referenzplattform erfolgreich ausgeführt:
+
+- gezielter Build des Ziels `sionna-test`
+- neue native Suite `dl-mu-mimo-runtime` mit beiden schnellen Fällen; feste
+  und korrelationsbasierte Auswahl, ZF/RZF, Scheduleridentität,
+  Zeitdiagnostik und die vollständige Negativmatrix bestanden
+- native Suite `sionna` mit allen 36 bestehenden Fällen erfolgreich
+- unveränderte Suite `sionna-mimo-csi-feedback` erfolgreich
+- unveränderte ExampleAsTest-Suites `sionna-example-sumimo-minimal`,
+  `sionna-example-sumimo-precoding`,
+  `sionna-example-sumimo-precoding-negative`,
+  `sionna-example-mimo-helper-configuration-negative` und
+  `sionna-example-mimo-helper-runtime-negative` jeweils erfolgreich
+- reine Python-Vertragssuite mit sieben von sieben Fällen in 0,006 s
+- `git diff --check` ohne Befund
+
+Server- und Raytracing-Suites wurden bewusst nicht erneut ausgeführt:
+Unterphase 4.5 ändert weder Python, Protocol Buffers, Serialisierung,
+Batching, Rohkanalcache, ZMQ, Sionna RT noch einen Serverpfad.
+
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 
 - SionnaMimoHelper überträgt eine gemeinsame TX- und RX-Geometrie für die
@@ -2823,8 +2958,10 @@ unveränderten Grenzen direkt.
   einer Empfangsantenne und einem Stream je Nutzer. Unterphase 4.4 integriert
   einen explizit installierten gemeinsamen Zustand für HE-DL-MU direkt in den
   Spectrumadapter und liest die HE-MU-PHY-Metadaten aus dem TxVector.
-  SionnaMimoHelper, Scheduler, Laufzeitcache und automatische Ablaufsteuerung
-  bleiben Unterphase 4.5 oder später vorbehalten.
+  Unterphase 4.5 ergänzt nun die wertbasierte Laufzeit- und
+  Scheduler-Schnittstelle für HE-Downlink. SionnaMimoHelper-Freigabe, ein
+  konkreter End-to-End-Scheduler und automatische Ablaufsteuerung bleiben
+  Unterphase 4.6 oder später vorbehalten.
 - MRT bleibt der eindeutige perfekte 2x1-MISO-Ein-Stream-Fall. Quantisierung
   und positives CSI-Alter gelten nur für gleichleistungs-SVD. Wasserfüllung
   bleibt auf unquantisiertes aktuelles CSI beschränkt, weil die semantische
@@ -2892,9 +3029,12 @@ NSS, begrenzt räumliche Interferenz auf dieselbe RU und übergibt erst nach der
 Matrixrechnung eine skalare PSD je adressiertem Empfänger. Der Helper führt
 parallel die unveränderten SU-Verträge durch den bisherigen festen-W[k]-Pfad.
 Einzelnutzer- und 1x1-Grenzfall sowie alle Phase-1-/2-/3-Pfade bleiben
-kompatibel. Automatische Sounding-/Feedbackabläufe, ein
-MU-Precoder-Laufzeitcache, Scheduler, Helperintegration und sämtliche
-Unterphasen ab 4.5 wurden nicht begonnen.
+kompatibel. Die Laufzeit-CSI-/Scheduler-Schnittstelle der Unterphase 4.5
+verwaltet jetzt den neuesten exakten AP-/Gruppen-/RU-/NSS-Zustand, übernimmt
+Phase-3-Zeiten und installiert ausschließlich denselben gerichteten Snapshot
+im PHY. Automatische Sounding-/Feedbackabläufe, Helperintegration, ein
+End-to-End-Schedulerbeispiel und sämtliche Unterphasen ab 4.6 wurden nicht
+begonnen.
 
 ## 9. Ausführung
 
@@ -2903,6 +3043,7 @@ Vom ns-3.40-Verzeichnis:
     ./ns3 configure --enable-examples --enable-tests
     ./ns3 build
     ./test.py -s sionna
+    ./test.py -s dl-mu-mimo-runtime
     ./test.py -s sionna-mimo-csi-feedback
     ./test.py -s sionna-example-sumimo-minimal
     ./test.py -s sionna-example-mimo-helper-configuration-negative
