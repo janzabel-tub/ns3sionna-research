@@ -4,11 +4,13 @@
  * Copyright (c) 2026
  */
 
+#include "ns3/constant-position-mobility-model.h"
 #include "ns3/dl-mu-mimo-link-model.h"
 #include "ns3/double.h"
 #include "ns3/error-rate-model.h"
 #include "ns3/he-dl-mu-mimo-link-abstraction.h"
 #include "ns3/he-phy.h"
+#include "ns3/he-ppdu.h"
 #include "ns3/he-su-mimo-link-abstraction.h"
 #include "ns3/mimo-channel-matrix.h"
 #include "ns3/mimo-precoding-matrix.h"
@@ -26,12 +28,19 @@
 #include "ns3/uinteger.h"
 #include "ns3/wifi-helper.h"
 #include "ns3/wifi-link-budget.h"
+#include "ns3/wifi-mac.h"
+#include "ns3/wifi-mac-header.h"
 #include "ns3/wifi-mac-helper.h"
 #include "ns3/wifi-net-device.h"
+#include "ns3/wifi-psdu.h"
+#include "ns3/wifi-spectrum-signal-parameters.h"
+#include "ns3/wifi-spectrum-phy-interface.h"
+#include "ns3/wifi-spectrum-value-helper.h"
 #include "ns3/wifi-tx-vector.h"
 
 #include <cmath>
 #include <complex>
+#include <iterator>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -62,6 +71,19 @@ MakeReferenceSnrBudget(double referenceSnrLinear)
     const double txPowerDbm =
         WifiLinkBudget::LinearToDb(referenceSnrLinear * boltzmann) + 30.0;
     return WifiLinkBudget::Calculate(txPowerDbm, 0.0, 1.0, 1.0, 0.0);
+}
+
+double
+IntegrateSpectrumBand(const SpectrumValue& psd, const WifiSpectrumBandIndices& indices)
+{
+    auto band = psd.GetSpectrumModel()->Begin();
+    std::advance(band, indices.first);
+    double powerW = 0.0;
+    for (std::size_t index = indices.first; index <= indices.second; ++index, ++band)
+    {
+        powerW += psd.ValuesAt(index) * (band->fh - band->fl);
+    }
+    return powerW;
 }
 
 SionnaMimoConfiguration
@@ -2418,6 +2440,21 @@ MakeIdentityDlMuPrecoding(uint32_t numSubcarriers)
         {{3, 0}, {9, 0}});
 }
 
+WifiTxVector
+MakeHeDlMuTxVector(const HeRu::RuSpec& user3Ru,
+                   const HeRu::RuSpec& user9Ru,
+                   uint8_t user3Nss = 1,
+                   uint8_t user9Nss = 1)
+{
+    WifiTxVector txVector;
+    txVector.SetPreambleType(WIFI_PREAMBLE_HE_MU);
+    txVector.SetChannelWidth(20);
+    txVector.SetGuardInterval(800);
+    txVector.SetHeMuUserInfo(11, {user9Ru, 3, user9Nss});
+    txVector.SetHeMuUserInfo(7, {user3Ru, 0, user3Nss});
+    return txVector;
+}
+
 class DlMuMimoFixedPrecodingAnalyticalTest : public TestCase
 {
   public:
@@ -2631,6 +2668,587 @@ class HeDlMuMimoPerUserContractTest : public TestCase
                                       1e-12,
                                       "Per-user PER did not use that user's packet size");
         }
+    }
+};
+
+class HeDlMuMimoSpectrumAdapterTest : public TestCase
+{
+  public:
+    HeDlMuMimoSpectrumAdapterTest()
+        : TestCase("HE DL MU spectrum adapter maps STA metadata, RU interference, SINR, PER, and power")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        constexpr double noiseFigureDb = 7.0;
+        constexpr double referenceSnr = 10.0;
+        const HeRu::RuSpec ru1(HeRu::RU_106_TONE, 1, true);
+        const HeRu::RuSpec ru2(HeRu::RU_106_TONE, 2, true);
+        const double bandwidthHz =
+            static_cast<double>(HeRu::GetBandwidth(HeRu::RU_106_TONE)) * 1e6;
+        const double noisePowerW =
+            WifiLinkBudget::Calculate(0.0, 0.0, bandwidthHz, 290.0, noiseFigureDb)
+                .GetReceiverNoisePowerW();
+        const double receivedPowerW = referenceSnr * noisePowerW;
+
+        MimoChannelMatrix user3Channel(1, 1, 2);
+        user3Channel.Set(0, 0, 0, {1.0, 0.0});
+        user3Channel.Set(0, 0, 1, {1.0, 0.0});
+        MimoChannelMatrix user9Channel = user3Channel;
+        const auto snapshot =
+            MakeDlMuSnapshot({{3, user3Channel}, {9, user9Channel}});
+        const auto precoding = MakeIdentityDlMuPrecoding(1);
+        auto errorModel = CreateObject<TableBasedErrorRateModel>();
+        auto adapter = CreateObject<SionnaSpectrumPropagationLossModel>();
+        adapter->SetEesmBeta(0, 2.0);
+        adapter->SetEesmBeta(3, 3.0);
+
+        const auto sameRuVector = MakeHeDlMuTxVector(ru1, ru1);
+        const std::vector<SionnaHeDlMuMimoSpectrumUserTransmission> users{
+            {9, 11, receivedPowerW, 1, 1000},
+            {3, 7, receivedPowerW, 1, 400}};
+        const auto sameRu =
+            adapter->CalculateHeDlMuMimoRx(snapshot,
+                                           precoding,
+                                           sameRuVector,
+                                           users,
+                                           2,
+                                           noiseFigureDb,
+                                           errorModel);
+        for (const auto& input : users)
+        {
+            const auto& link = sameRu.GetLinkResult().GetUserById(input.userId);
+            NS_TEST_ASSERT_MSG_EQ_TOL(
+                link.GetMimoResult().GetInterUserInterferencePower(0, 0),
+                5.0 / 121.0,
+                1e-12,
+                "Same-RU spatially multiplexed user has incorrect analytical IUI");
+            NS_TEST_ASSERT_MSG_EQ_TOL(link.GetEffectiveSinrLinear(),
+                                      5.0 / 6.0,
+                                      1e-12,
+                                      "Same-RU spatially multiplexed user has incorrect SINR");
+            const double expectedSuccess =
+                errorModel->GetChunkSuccessRate(
+                    sameRuVector.GetMode(input.staId),
+                    sameRuVector,
+                    5.0 / 6.0,
+                    static_cast<uint64_t>(input.packetSizeBytes) * 8,
+                    1,
+                    WIFI_PPDU_FIELD_DATA,
+                    input.staId);
+            NS_TEST_ASSERT_MSG_EQ_TOL(link.GetPacketSuccessRate(),
+                                      expectedSuccess,
+                                      1e-12,
+                                      "PER did not use the addressed STA-ID MCS and packet size");
+            NS_TEST_ASSERT_MSG_EQ_TOL(
+                sameRu.GetEquivalentReceivedPowerW(input.userId),
+                (5.0 / 6.0) * noisePowerW,
+                noisePowerW * 1e-12,
+                "Equivalent PSD power did not apply noise exactly once");
+            NS_TEST_ASSERT_MSG_EQ_TOL(link.GetLinkBudget().GetReceivedPowerW(),
+                                      receivedPowerW,
+                                      receivedPowerW * 1e-12,
+                                      "Per-user received power changed in the MU adapter");
+        }
+        NS_TEST_ASSERT_MSG_EQ(sameRuVector.GetMode(7).GetMcsValue(),
+                              0,
+                              "User 3 was not selected through STA-ID 7");
+        NS_TEST_ASSERT_MSG_EQ(sameRuVector.GetMode(11).GetMcsValue(),
+                              3,
+                              "User 9 was not selected through STA-ID 11");
+
+        const auto differentRuVector = MakeHeDlMuTxVector(ru1, ru2);
+        const auto differentRu =
+            adapter->CalculateHeDlMuMimoRx(snapshot,
+                                           precoding,
+                                           differentRuVector,
+                                           users,
+                                           2,
+                                           noiseFigureDb,
+                                           errorModel);
+        for (const uint32_t userId : {3u, 9u})
+        {
+            const auto& link = differentRu.GetLinkResult().GetUserById(userId);
+            NS_TEST_ASSERT_MSG_EQ_TOL(
+                link.GetMimoResult().GetInterUserInterferencePower(0, 0),
+                0.0,
+                1e-12,
+                "Different-RU users were not orthogonal");
+            NS_TEST_ASSERT_MSG_EQ_TOL(link.GetEffectiveSinrLinear(),
+                                      referenceSnr,
+                                      1e-12,
+                                      "Different-RU user did not retain the full RU power");
+            NS_TEST_ASSERT_MSG_EQ_TOL(
+                differentRu.GetEquivalentReceivedPowerW(userId),
+                receivedPowerW,
+                receivedPowerW * 1e-12,
+                "Different-RU equivalent power changed the per-RU AP power convention");
+        }
+
+        MimoChannelMatrix twoStreamChannel(1, 2, 2);
+        twoStreamChannel.Set(0, 0, 0, {1.0, 0.0});
+        twoStreamChannel.Set(0, 1, 1, {1.0, 0.0});
+        const auto twoStreamSnapshot = MakeDlMuSnapshot({{3, twoStreamChannel}});
+        const DlMuMimoPrecodingMatrix twoStreamPrecoding(
+            MimoPrecodingMatrix::FrequencyFlat(
+                1,
+                2,
+                2,
+                {{1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {1.0, 0.0}}),
+            {{3, 0}, {3, 1}});
+        WifiTxVector twoStreamVector;
+        twoStreamVector.SetPreambleType(WIFI_PREAMBLE_HE_MU);
+        twoStreamVector.SetChannelWidth(20);
+        twoStreamVector.SetGuardInterval(800);
+        twoStreamVector.SetHeMuUserInfo(7, {ru1, 0, 2});
+        const auto twoStream =
+            adapter->CalculateHeDlMuMimoRx(twoStreamSnapshot,
+                                           twoStreamPrecoding,
+                                           twoStreamVector,
+                                           {{3, 7, receivedPowerW, 2, 400}},
+                                           2,
+                                           noiseFigureDb,
+                                           errorModel);
+        NS_TEST_ASSERT_MSG_EQ(
+            twoStream.GetLinkResult().GetUserById(3).GetMimoResult().GetNumStreams(),
+            2,
+            "Per-user HE-MU NSS did not select both mapped streams");
+
+        MimoChannelMatrix sisoChannel(1, 1, 1);
+        sisoChannel.Set(0, 0, 0, {1.0, 0.0});
+        const auto sisoSnapshot = MakeDlMuSnapshot({{3, sisoChannel}});
+        const DlMuMimoPrecodingMatrix sisoPrecoding(
+            MimoPrecodingMatrix::FrequencyFlat(1, 1, 1, {{1.0, 0.0}}),
+            {{3, 0}});
+        WifiTxVector sisoVector;
+        sisoVector.SetPreambleType(WIFI_PREAMBLE_HE_MU);
+        sisoVector.SetChannelWidth(20);
+        sisoVector.SetGuardInterval(800);
+        sisoVector.SetHeMuUserInfo(7, {ru1, 0, 1});
+        const auto siso =
+            adapter->CalculateHeDlMuMimoRx(sisoSnapshot,
+                                           sisoPrecoding,
+                                           sisoVector,
+                                           {{3, 7, receivedPowerW, 1, 400}},
+                                           1,
+                                           noiseFigureDb,
+                                           errorModel);
+        NS_TEST_ASSERT_MSG_EQ_TOL(
+            siso.GetLinkResult().GetUserById(3).GetEffectiveSinrLinear(),
+            referenceSnr,
+            1e-12,
+            "The HE-MU adapter changed normalized 1x1 behavior");
+    }
+};
+
+class HeDlMuMimoSpectrumAdapterRejectionTest : public TestCase
+{
+  public:
+    HeDlMuMimoSpectrumAdapterRejectionTest()
+        : TestCase("HE DL MU spectrum adapter rejects invalid receivers atomically and preserves SU")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        constexpr double noiseFigureDb = 7.0;
+        const HeRu::RuSpec ru(HeRu::RU_106_TONE, 1, true);
+        MimoChannelMatrix user3Channel(1, 1, 2);
+        user3Channel.Set(0, 0, 0, {1.0, 0.0});
+        MimoChannelMatrix user9Channel(1, 1, 2);
+        user9Channel.Set(0, 0, 1, {1.0, 0.0});
+        const auto snapshot =
+            MakeDlMuSnapshot({{3, user3Channel}, {9, user9Channel}});
+        const auto precoding = MakeIdentityDlMuPrecoding(1);
+        const auto txVector = MakeHeDlMuTxVector(ru, ru);
+        const auto errorModel = CreateObject<TableBasedErrorRateModel>();
+        const double receivedPowerW =
+            10.0 * WifiLinkBudget::Calculate(0.0,
+                                             0.0,
+                                             static_cast<double>(
+                                                 HeRu::GetBandwidth(HeRu::RU_106_TONE)) *
+                                                 1e6,
+                                             290.0,
+                                             noiseFigureDb)
+                       .GetReceiverNoisePowerW();
+        const std::vector<SionnaHeDlMuMimoSpectrumUserTransmission> users{
+            {3, 7, receivedPowerW, 1, 400},
+            {9, 11, receivedPowerW, 1, 1000}};
+
+        auto adapter = CreateObject<SionnaSpectrumPropagationLossModel>();
+        adapter->SetEesmBeta(0, 2.0);
+        adapter->SetEesmBeta(3, 3.0);
+        adapter->SetDlMuMimoState(snapshot, precoding);
+        NS_TEST_ASSERT_MSG_EQ(adapter->HasDlMuMimoState(),
+                              true,
+                              "Valid HE-DL-MU state was not installed");
+
+        auto expectRejected = [this](const auto& operation, const std::string& reason) {
+            bool rejected = false;
+            try
+            {
+                operation();
+            }
+            catch (const std::invalid_argument&)
+            {
+                rejected = true;
+            }
+            NS_TEST_ASSERT_MSG_EQ(rejected, true, reason);
+        };
+
+        expectRejected(
+            [&]() {
+                auto unknown = users;
+                unknown[0].userId = 12;
+                adapter->CalculateHeDlMuMimoRx(snapshot,
+                                               precoding,
+                                               txVector,
+                                               unknown,
+                                               2,
+                                               noiseFigureDb,
+                                               errorModel);
+            },
+            "Unknown snapshot receiver was accepted");
+        expectRejected(
+            [&]() {
+                auto unaddressed = txVector;
+                unaddressed.GetHeMuUserInfoMap().erase(11);
+                adapter->CalculateHeDlMuMimoRx(snapshot,
+                                               precoding,
+                                               unaddressed,
+                                               users,
+                                               2,
+                                               noiseFigureDb,
+                                               errorModel);
+            },
+            "Unaddressed receiver was accepted");
+        expectRejected(
+            [&]() {
+                auto mismatch = users;
+                mismatch[0].rxPhyAntennas = 2;
+                adapter->CalculateHeDlMuMimoRx(snapshot,
+                                               precoding,
+                                               txVector,
+                                               mismatch,
+                                               2,
+                                               noiseFigureDb,
+                                               errorModel);
+            },
+            "Receiver dimension mismatch was accepted");
+        expectRejected(
+            [&]() {
+                auto mismatch = txVector;
+                mismatch.SetNss(2, 7);
+                adapter->CalculateHeDlMuMimoRx(snapshot,
+                                               precoding,
+                                               mismatch,
+                                               users,
+                                               2,
+                                               noiseFigureDb,
+                                               errorModel);
+            },
+            "Per-user NSS mismatch was accepted");
+        expectRejected(
+            [&]() {
+                adapter->CalculateHeDlMuMimoRx(snapshot,
+                                               precoding,
+                                               txVector,
+                                               users,
+                                               1,
+                                               noiseFigureDb,
+                                               errorModel);
+            },
+            "Transmitter dimension mismatch was accepted");
+        expectRejected(
+            [&]() {
+                auto wrongDirection = snapshot;
+                wrongDirection.direction = MultiUserChannelDirection::UPLINK;
+                for (auto& user : wrongDirection.users)
+                {
+                    user.direction = MultiUserChannelDirection::UPLINK;
+                }
+                adapter->CalculateHeDlMuMimoRx(wrongDirection,
+                                               precoding,
+                                               txVector,
+                                               users,
+                                               2,
+                                               noiseFigureDb,
+                                               errorModel);
+            },
+            "Uplink state was accepted by the downlink adapter");
+        expectRejected(
+            [&]() {
+                adapter->CalculateHeDlMuMimoRx(snapshot,
+                                               precoding,
+                                               MakeHeTxVector(HePhy::GetHeMcs0(), 1),
+                                               users,
+                                               2,
+                                               noiseFigureDb,
+                                               errorModel);
+            },
+            "HE-SU preamble was accepted by the HE-MU adapter");
+        expectRejected(
+            [&]() {
+                auto eht = txVector;
+                eht.SetPreambleType(WIFI_PREAMBLE_EHT_MU);
+                adapter->CalculateHeDlMuMimoRx(snapshot,
+                                               precoding,
+                                               eht,
+                                               users,
+                                               2,
+                                               noiseFigureDb,
+                                               errorModel);
+            },
+            "EHT-MU preamble was accepted");
+
+        auto invalidState = snapshot;
+        invalidState.direction = MultiUserChannelDirection::UPLINK;
+        for (auto& user : invalidState.users)
+        {
+            user.direction = MultiUserChannelDirection::UPLINK;
+        }
+        expectRejected(
+            [&]() {
+                adapter->SetDlMuMimoState(invalidState, precoding);
+            },
+            "Invalid replacement state was accepted");
+        NS_TEST_ASSERT_MSG_EQ(adapter->HasDlMuMimoState(),
+                              true,
+                              "Rejected replacement cleared the valid MU state");
+        const auto validAfterRejections =
+            adapter->CalculateHeDlMuMimoRx(snapshot,
+                                           precoding,
+                                           txVector,
+                                           users,
+                                           2,
+                                           noiseFigureDb,
+                                           errorModel);
+        expectRejected(
+            [&]() {
+                validAfterRejections.GetEquivalentReceivedPowerW(12);
+            },
+            "Unknown result user was accepted");
+
+        MimoChannelMatrix sisoChannel(1, 1, 1);
+        sisoChannel.Set(0, 0, 0, {1.0, 0.0});
+        const auto suBefore =
+            adapter->CalculateMimoRx(sisoChannel,
+                                     receivedPowerW,
+                                     MakeHeTxVector(HePhy::GetHeMcs0(), 1),
+                                     400,
+                                     1,
+                                     1,
+                                     20e6,
+                                     noiseFigureDb,
+                                     errorModel);
+        const auto suAfter =
+            adapter->CalculateMimoRx(sisoChannel,
+                                     receivedPowerW,
+                                     MakeHeTxVector(HePhy::GetHeMcs0(), 1),
+                                     400,
+                                     1,
+                                     1,
+                                     20e6,
+                                     noiseFigureDb,
+                                     errorModel);
+        NS_TEST_ASSERT_MSG_EQ_TOL(suAfter.GetLinkResult().GetEffectiveSinrLinear(),
+                                  suBefore.GetLinkResult().GetEffectiveSinrLinear(),
+                                  1e-12,
+                                  "Installed Phase-4.4 state changed the SU adapter path");
+        NS_TEST_ASSERT_MSG_EQ_TOL(suAfter.GetLinkResult().GetPacketErrorRate(),
+                                  suBefore.GetLinkResult().GetPacketErrorRate(),
+                                  1e-12,
+                                  "Installed Phase-4.4 state changed SU PER");
+
+        adapter->ClearDlMuMimoState();
+        NS_TEST_ASSERT_MSG_EQ(adapter->HasDlMuMimoState(),
+                              false,
+                              "HE-DL-MU state was not cleared");
+    }
+};
+
+class HeDlMuMimoSpectrumPpduIntegrationTest : public TestCase
+{
+  public:
+    HeDlMuMimoSpectrumPpduIntegrationTest()
+        : TestCase("true HE DL MU PPDU runs joint reception before scalar PSD handoff")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        constexpr double noiseFigureDb = 7.0;
+        constexpr double rxGainDb = 3.0;
+        constexpr double txPowerW = 1e-6;
+        constexpr uint16_t width = 20;
+
+        auto spectrumChannel = CreateObject<MultiModelSpectrumChannel>();
+        NodeContainer apNode;
+        NodeContainer staNodes;
+        apNode.Create(1);
+        staNodes.Create(2);
+        apNode.Get(0)->AggregateObject(CreateObject<ConstantPositionMobilityModel>());
+        apNode.Get(0)->GetObject<MobilityModel>()->SetPosition({0.0, 0.0, 0.0});
+        for (auto node = staNodes.Begin(); node != staNodes.End(); ++node)
+        {
+            (*node)->AggregateObject(CreateObject<ConstantPositionMobilityModel>());
+            (*node)->GetObject<MobilityModel>()->SetPosition({1.0, 0.0, 0.0});
+        }
+
+        SpectrumWifiPhyHelper apPhyHelper;
+        SpectrumWifiPhyHelper staPhyHelper;
+        apPhyHelper.SetChannel(spectrumChannel);
+        staPhyHelper.SetChannel(spectrumChannel);
+        ConfigureManualPhy(apPhyHelper, 2, 2, noiseFigureDb);
+        ConfigureManualPhy(staPhyHelper, 1, 1, noiseFigureDb);
+        staPhyHelper.Set("RxGain", DoubleValue(rxGainDb));
+
+        WifiHelper wifi;
+        wifi.SetStandard(WIFI_STANDARD_80211ax);
+        WifiMacHelper apMac;
+        WifiMacHelper staMac;
+        apMac.SetType("ns3::ApWifiMac");
+        staMac.SetType("ns3::StaWifiMac");
+        auto apDevice =
+            DynamicCast<WifiNetDevice>(wifi.Install(apPhyHelper, apMac, apNode).Get(0));
+        const auto staDevices = wifi.Install(staPhyHelper, staMac, staNodes);
+        apNode.Get(0)->GetObject<MobilityModel>()->SetPosition({0.0, 0.0, 0.0});
+        staNodes.Get(0)->GetObject<MobilityModel>()->SetPosition({1.0, 0.0, 0.0});
+        staNodes.Get(1)->GetObject<MobilityModel>()->SetPosition({2.0, 0.0, 0.0});
+        NS_TEST_ASSERT_MSG_GT(
+            apNode.Get(0)->GetObject<MobilityModel>()->GetDistanceFrom(
+                staNodes.Get(0)->GetObject<MobilityModel>()),
+            0.0,
+            "PPDU test nodes did not retain distinct positions");
+        auto apPhy = DynamicCast<SpectrumWifiPhy>(apDevice->GetPhy());
+        std::vector<Ptr<SpectrumWifiPhy>> staPhys;
+        for (uint32_t index = 0; index < staDevices.GetN(); ++index)
+        {
+            staPhys.push_back(DynamicCast<SpectrumWifiPhy>(
+                DynamicCast<WifiNetDevice>(staDevices.Get(index))->GetPhy()));
+        }
+        const WifiPhy::ChannelTuple channel{36, width, WIFI_PHY_BAND_5GHZ, 0};
+        apPhy->SetOperatingChannel(channel);
+        for (const auto& phy : staPhys)
+        {
+            phy->SetOperatingChannel(channel);
+        }
+
+        const HeRu::RuSpec fullRu(HeRu::GetRuType(width), 1, true);
+        auto txVector = MakeHeDlMuTxVector(fullRu, fullRu);
+        txVector.SetSigBMode(HePhy::GetVhtMcs(5));
+        const std::vector<uint16_t> staIds{7, 11};
+        const std::vector<uint32_t> packetSizes{400, 1000};
+        WifiConstPsduMap psdus;
+        for (std::size_t index = 0; index < staIds.size(); ++index)
+        {
+            WifiMacHeader header;
+            header.SetType(WIFI_MAC_QOSDATA);
+            header.SetQosTid(0);
+            header.SetAddr1(
+                DynamicCast<WifiNetDevice>(staDevices.Get(index))->GetMac()->GetAddress());
+            header.SetAddr2(apDevice->GetMac()->GetAddress());
+            header.SetSequenceNumber(index + 1);
+            psdus.emplace(staIds[index],
+                          Create<WifiPsdu>(Create<Packet>(packetSizes[index]), header));
+        }
+        auto ppdu = Create<HePpdu>(psdus,
+                                   txVector,
+                                   apPhy->GetOperatingChannel(),
+                                   MicroSeconds(100),
+                                   44,
+                                   HePpdu::PSD_HE_PORTION);
+        const auto ppduTxVector = ppdu->GetTxVector();
+        const uint16_t center =
+            apPhy->GetOperatingChannel().GetPrimaryChannelCenterFrequency(width);
+        auto txPsd = WifiSpectrumValueHelper::CreateHeOfdmTxPowerSpectralDensity(
+            center,
+            width,
+            txPowerW,
+            apPhy->GetGuardBandwidth(width));
+
+        const uint32_t numSubcarriers = txPsd->GetValuesN() - 1;
+        MimoChannelMatrix user3Channel(numSubcarriers, 1, 2);
+        MimoChannelMatrix user9Channel(numSubcarriers, 1, 2);
+        for (uint32_t sc = 0; sc < numSubcarriers; ++sc)
+        {
+            for (uint32_t tx = 0; tx < 2; ++tx)
+            {
+                user3Channel.Set(sc, 0, tx, {1.0, 0.0});
+                user9Channel.Set(sc, 0, tx, {1.0, 0.0});
+            }
+        }
+        auto snapshot =
+            MakeDlMuSnapshot({{3, user3Channel}, {9, user9Channel}});
+        const std::vector<double> pathLossDb{6.0, 12.0};
+        for (std::size_t index = 0; index < snapshot.users.size(); ++index)
+        {
+            snapshot.users[index].txNodeId = apNode.Get(0)->GetId();
+            snapshot.users[index].rxNodeId = staNodes.Get(index)->GetId();
+            snapshot.users[index].widebandLossDb = pathLossDb[index];
+        }
+        const auto precoding = MakeIdentityDlMuPrecoding(numSubcarriers);
+        auto adapter = CreateObject<SionnaSpectrumPropagationLossModel>();
+        adapter->SetReceiverNoiseFigureDb(noiseFigureDb);
+        adapter->SetEesmBeta(0, 2.0);
+        adapter->SetEesmBeta(3, 3.0);
+        adapter->SetDlMuMimoState(snapshot, precoding);
+
+        auto hePhy =
+            DynamicCast<HePhy>(staPhys[0]->GetPhyEntity(WIFI_MOD_CLASS_HE));
+        const auto ruBand = hePhy->GetRuBandForRx(ppduTxVector, 7);
+        const double apRuPowerW = IntegrateSpectrumBand(*txPsd, ruBand.indices);
+        const double rxGainLinear = std::pow(10.0, rxGainDb / 10.0);
+        std::vector<SionnaHeDlMuMimoSpectrumUserTransmission> users;
+        for (std::size_t index = 0; index < staIds.size(); ++index)
+        {
+            users.push_back(
+                {index == 0 ? 3u : 9u,
+                 staIds[index],
+                 apRuPowerW / std::pow(10.0, pathLossDb[index] / 10.0) *
+                     rxGainLinear,
+                 1,
+                 psdus.at(staIds[index])->GetSize()});
+        }
+        const auto expected = adapter->CalculateHeDlMuMimoRx(
+            snapshot,
+            precoding,
+            ppduTxVector,
+            users,
+            2,
+            noiseFigureDb,
+            CreateObject<TableBasedErrorRateModel>());
+
+        for (std::size_t index = 0; index < staPhys.size(); ++index)
+        {
+            auto params = Create<WifiSpectrumSignalParameters>();
+            params->duration = MicroSeconds(100);
+            params->ppdu = ppdu;
+            params->txPhy = apPhy->GetCurrentInterface();
+            params->psd = Copy<SpectrumValue>(txPsd);
+            *params->psd *= 1.0 / std::pow(10.0, pathLossDb[index] / 10.0);
+
+            const auto rxPsd = adapter->CalcRxPowerSpectralDensity(
+                params,
+                apNode.Get(0)->GetObject<MobilityModel>(),
+                staNodes.Get(index)->GetObject<MobilityModel>());
+            const auto userRuBand =
+                DynamicCast<HePhy>(staPhys[index]->GetPhyEntity(WIFI_MOD_CLASS_HE))
+                    ->GetRuBandForRx(ppduTxVector, staIds[index]);
+            const uint32_t userId = index == 0 ? 3 : 9;
+            const double equivalentPower =
+                expected.GetEquivalentReceivedPowerW(userId);
+            NS_TEST_ASSERT_MSG_EQ_TOL(
+                IntegrateSpectrumBand(*rxPsd, userRuBand.indices),
+                equivalentPower / rxGainLinear,
+                equivalentPower / rxGainLinear * 1e-10,
+                "Runtime HE-MU PSD did not preserve the single downstream PHY Rx gain");
+        }
+        Simulator::Destroy();
     }
 };
 
@@ -3307,6 +3925,9 @@ class SionnaTestSuite : public TestSuite
         AddTestCase(new MultiUserChannelSnapshotRejectionTest, TestCase::QUICK);
         AddTestCase(new DlMuMimoFixedPrecodingAnalyticalTest, TestCase::QUICK);
         AddTestCase(new HeDlMuMimoPerUserContractTest, TestCase::QUICK);
+        AddTestCase(new HeDlMuMimoSpectrumAdapterTest, TestCase::QUICK);
+        AddTestCase(new HeDlMuMimoSpectrumAdapterRejectionTest, TestCase::QUICK);
+        AddTestCase(new HeDlMuMimoSpectrumPpduIntegrationTest, TestCase::QUICK);
         AddTestCase(new DlMuMimoZfRzfAnalyticalTest, TestCase::QUICK);
         AddTestCase(new DlMuMimoZfRzfRejectionTest, TestCase::QUICK);
         AddTestCase(new DlMuMimoRejectionTest, TestCase::QUICK);

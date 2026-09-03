@@ -65,9 +65,11 @@ Paketgrößenangaben. Die neue wertbasierte Precoderwahl erzeugt für genau eine
 Stream und eine Empfangsantenne je Nutzer aus gleichzeitiger perfekter CSI
 deterministisches ZF oder RZF mit explizitem Regularisierungsparameter. Beide
 Ergebnisse werden auf die gemeinsame Phase-4.2-Gesamtleistung normalisiert;
-überlastete und numerisch rangdefiziente Gruppen werden abgelehnt. Scheduler,
-High-Level-Helper-, HE-MU-PHY-Integration und Unterphase 4.4 oder später
-wurden nicht begonnen.
+überlastete und numerisch rangdefiziente Gruppen werden abgelehnt. Unterphase
+4.4 integriert diesen Zustand für HE-DL-MU-PPDUs in den Spectrumadapter,
+ordnet STA-ID, RU, MCS und NSS zu und begrenzt räumliche Interferenz auf
+dieselbe RU. Scheduler, High-Level-Helper-Integration, Laufzeit-CSI und
+Unterphase 4.5 oder später wurden nicht begonnen.
 
 ## 2. Reproduzierbare Ausgangsbasis
 
@@ -519,9 +521,9 @@ explizit übergebene positive RZF-$\alpha$. Beide Fabriken prüfen den
 vollständigen Phase-4.1-Snapshot und die Ein-Stream-Zuordnung vor Konstruktion,
 lehnen Überlast und Rangverlust ab und skalieren erst das fertige Ergebnis auf
 die Phase-4.2-Gesamtleistung. Die schnellen nativen Referenzfälle in
-Abschnitt 7.5 erfüllen das Abnahmekriterium; Unterphase 4.4 wurde nicht begonnen.
+Abschnitt 7.5 erfüllen das Abnahmekriterium.
 
-#### Unterphase 4.4: HE-Downlink-MU-PHY-Integration
+#### Unterphase 4.4: HE-Downlink-MU-PHY-Integration (implementiert)
 
 - Den gemeinsamen MU-Zustand in den schmalsten geeigneten
   SpectrumWifiPhy-Pfad für `WIFI_PREAMBLE_HE_MU` einkoppeln.
@@ -542,6 +544,14 @@ die analytisch erwartete SINR und PER; nicht adressierte oder inkonsistente
 Empfänger verändern keinen MU-Zustand. Der bestehende SU-Pfad bleibt
 bit- und funktionskompatibel. EHT bleibt bis zu einer expliziten
 EHT-Link-/PER-Abstraktion als nicht unterstützt gekennzeichnet.
+
+Dieses Kriterium ist erfüllt: Der Spectrumadapter übernimmt für
+`WIFI_PREAMBLE_HE_MU` einen vollständig validierten Phase-4.1-Snapshot samt
+gemeinsamem Phase-4.2-/4.3-Precoder. Empfängeradressen werden eindeutig auf
+STA-IDs und damit auf RU, MCS und NSS des vorhandenen `HeMuUserInfoMap`
+abgebildet. Die gemeinsame Matrixrechnung trennt gleiche und verschiedene
+RUs vor der skalaren PSD-Übergabe; synthetische und echte HE-MU-PPDU-Tests in
+Abschnitt 7.6 erfüllen das Abnahmekriterium. Unterphase 4.5 wurde nicht begonnen.
 
 #### Unterphase 4.5: Laufzeit-CSI und Scheduler-Schnittstelle
 
@@ -1934,6 +1944,65 @@ bestehenden nutzerweisen MMSE-, EESM- und PER-Pfade. Protocol Buffers,
 Serialisierung, Batching, Cache, ZMQ, Sionna RT und SpectrumWifiPhy werden
 durch Unterphase 4.3 nicht geändert.
 
+### 5.15 HE-Downlink-MU-Spectrumintegration der Unterphase 4.4
+
+`SionnaSpectrumPropagationLossModel::SetDlMuMimoState` übernimmt genau einen
+wertbasierten, zuvor vollständig geprüften Downlink-Snapshot und dessen
+gemeinsamen `DlMuMimoPrecodingMatrix`. Der Zustand ist absichtlich explizit:
+Unterphase 4.4 ergänzt weder automatische CSI-Aktualisierung noch Scheduler
+oder einen Precoder-Laufzeitcache.
+
+Nur ein `HePpdu` mit `WIFI_PREAMBLE_HE_MU` aktiviert den neuen Pfad. Der
+Sender muss ein AP sein. Für jeden Snapshotempfänger wird dessen MAC-Adresse
+mit der Zieladresse genau eines PSDU verknüpft und so die vorhandene STA-ID
+bestimmt. RU, MCS und NSS werden danach ausschließlich aus dem
+`WifiTxVector::HeMuUserInfoMap` gelesen. Nutzer-ID und STA-ID bleiben getrennte
+Identitäten; die Eingabereihenfolge beeinflusst das Ergebnis nicht.
+
+Zwei Nutzer gehören genau dann zur selben Orthogonalitätsgruppe, wenn ihre
+`HeRu::RuSpec`-Werte gleich sind. Für eine Gruppe \(g\) mit \(N_{s,g}\)
+räumlich gemultiplexten Streams gilt weiterhin die Phase-4.2-Normierung, nun
+bezogen auf die Leistung der belegten RU:
+
+\[
+  \rho_u = \frac{P_{\mathrm{RU}(u)} L_u G_{\mathrm{rx},u}}{N_u},
+  \qquad
+  \rho_{u,s}=\frac{\rho_u}{N_{s,g(u)}}.
+\]
+
+Spalten aus derselben Gruppe gehen gemeinsam in die MMSE-Kovarianz und als
+Inter-User-Interferenz ein. Spalten anderer RUs werden weder in die
+Kovarianz noch in die Interferenzsumme aufgenommen. Damit besitzt jede RU ihre
+aus der gesendeten PSD integrierte AP-Leistung; nur gleichzeitig in derselben
+RU gesendete Streams teilen diese Leistung.
+
+Der skalare SpectrumChannel-Pfadverlust liegt beim Eintritt in den Adapter
+bereits in `params->psd`. Der Adapter rekonstruiert daraus einmalig die
+AP-RU-Leistung, wendet für jeden Snapshotnutzer genau dessen Widebandverlust
+und Empfangsgewinn an und berechnet das Rauschen einmal aus RU-Bandbreite,
+290 K und der konsistenten PHY-Rauschzahl. Erst nachdem der vollständige
+Mehrnutzerkanal gemeinsam durch MMSE, EESM und ErrorRateModel gelaufen ist,
+wird für den adressierten Empfänger
+
+\[
+  P_{\mathrm{eq},u}=
+  \gamma_{\mathrm{eff},u}\,N_u/G_{\mathrm{AWGN},u}
+\]
+
+gebildet und dessen Empfangs-PSD skaliert. Die Skalierung erfolgt vor der
+bestehenden abschließenden `RxGain`-Multiplikation; deshalb gehen AP-Leistung,
+Pfadverlust, Rauschen, AWGN-Diversity-Kompensation und Empfangsgewinn jeweils
+genau einmal ein.
+
+Vor PSD-Skalierung, Paketmarkierung oder Zustandsänderung werden Präambel und
+Richtung, AP/STA-Rollen, Snapshotidentität, vollständige Adressierung,
+eindeutige STA-IDs, RU-/MCS-/NSS-Metadaten, Paketgrößen, Fehlerkurvenmodell,
+Rauschzahl sowie TX-, RX-, Stream-, CFR-, Precoder- und Spektrumdimensionen
+geprüft. Unbekannte, nicht adressierte oder inkonsistente Empfänger brechen
+eindeutig ab. HE-SU und alle bisherigen 1x1-, festen-W[k]-, ZF-/RZF-,
+Serialisierungs-, Batching- und Cachepfade bleiben unverändert; EHT-MU und
+EHT-TB werden ausdrücklich abgelehnt.
+
 ## 6. High-Level-API-Vertrag bis Unterphase 3.5
 
 ### 6.1 Typen, Besitz und Defaults
@@ -2441,7 +2510,7 @@ Die native Suite sionna enthält nun 33 schnelle Fälle:
     abweichendes Frequenzraster, fehlende oder nicht endliche SNR,
     unvollständige HE-Eingaben, NSS-Widerspruch und Paketgröße null. Ein danach
     ausgeführter gültiger Referenzfall weist den unveränderten Vertrag nach.
-+32. Deterministische ZF-/RZF-Auswahl für orthogonale, korrelierte und
+32. Deterministische ZF-/RZF-Auswahl für orthogonale, korrelierte und
     schlecht konditionierte Kanäle. Der Fall prüft stabile Nutzer-/Spaltenordnung
     unabhängig von der Anforderungsreihenfolge, koeffizientengleiche
     Wiederholung, ZF-Interferenzunterdrückung, endliches explizites RZF,
@@ -2452,6 +2521,21 @@ Die native Suite sionna enthält nun 33 schnelle Fälle:
     Ein gültiger Aufruf vor und nach allen Ablehnungen liefert identische
     Koeffizienten.
 
+
+34. Nativer HE-DL-MU-Adapterfall mit umgekehrter Nutzerreihenfolge und von
+    Nutzer-IDs verschiedenen STA-IDs. Er prüft zwei MCS, NSS eins und zwei,
+    gleiche RU mit analytischer Interferenz und SINR \(5/6\), verschiedene
+    RUs mit null Interferenz und SINR 10, nutzerweise PER, Link Budget,
+    äquivalente PSD-Leistung sowie den 1x1-Grenzfall.
+35. Atomare Adapter-Negativmatrix für unbekannte und nicht adressierte Nutzer,
+    falsche Richtung und Präambel, EHT, TX-/RX-/NSS-Dimensionsfehler sowie
+    unbekannte Ergebnisnutzer. Ein installierter gültiger MU-Zustand und der
+    unveränderte SU-SINR-/PER-Pfad werden vor und nach Ablehnungen verglichen.
+36. Echter `HePpdu`-Adapterfall mit AP- und zwei STA-MACs,
+    `WIFI_PREAMBLE_HE_MU`, gemeinsamem 2x2-Precoder, unterschiedlichen
+    Pfadverlusten und positivem Empfangsgewinn. Die je STA zurückgegebene
+    skalare RU-PSD wird mit der zuvor gemeinsam berechneten Matrixreferenz
+    verglichen.
 
 Die eigenständige native Suite `sionna-mimo-csi-feedback` ergänzt zwei Fälle
 für Unterphase 3.4. Der Feedbackfall prüft HE und EHT, beide SU-Codebücher,
@@ -2483,6 +2567,10 @@ ErrorRateModel-Parität werden innerhalb $10^{-12}$ geprüft.
 Phase 4.3 prüft ZF-Interferenz und Precoderleistung innerhalb $10^{-12}$ sowie
 Einzelnutzer-/1x1-SINR innerhalb $10^{-10}$; deterministische Wiederholungen
 werden koeffizientengenau verglichen.
+Phase 4.4 prüft gleiche-RU-Interferenz, analytische SINR, EESM/PER,
+Link Budget und äquivalente Leistung innerhalb $10^{-12}$. Die echte
+HE-MU-PPDU-Integration vergleicht die skalare RU-PSD mit einer relativen
+Toleranz von $10^{-10}$.
 
 Der reale Server-Integrationstest konfiguriert 1x2-PlanarArrays an TX und RX,
 führt Sionna RT auf der CPU aus und prüft die Form 2 x 2 x 256, 1024 komplexe
@@ -2654,7 +2742,6 @@ Die Server- und Raytracing-Suites wurden bewusst nicht erneut ausgeführt:
 Unterphase 4.2 ändert weder Python noch Protocol Buffers, Serialisierung,
 Batching, Cache, ZMQ oder Sionna RT. Die schnelle Python-Vertragssuite und die
 nativen Phase-4.1-Fälle prüfen die unveränderten Grenzen direkt.
-+
 ### 7.5 Validierung der Unterphase 4.3
 
 Am 21. August 2026 wurden nach der Implementierung von Unterphase 4.3
@@ -2684,6 +2771,36 @@ Batching, Cache, ZMQ, Sionna RT oder einen Serverpfad. Die schnelle
 Python-Vertragssuite und die vollständige native Suite prüfen die berührten
 und unveränderten Grenzen direkt.
 
+### 7.6 Validierung der Unterphase 4.4
+
+Am 3. September 2026 wurden nach der Implementierung von Unterphase 4.4
+folgende Prüfungen auf der CPU-Referenzplattform erfolgreich ausgeführt:
+
+- gezielter Build des Ziels `sionna-test`
+- direkte native Suite `sionna` mit allen 36 registrierten Fällen in 0,048 s;
+  die drei neuen Fälle decken STA-ID-/Nutzerzuordnung, gleiche und verschiedene
+  RUs, MCS/NSS, analytische SINR/PER, Leistung, Dimensions- und
+  Adressierungsablehnungen, SU-/1x1-Parität sowie einen echten HE-MU-PPDU ab
+- `./test.py -s sionna --verbose` mit einem von einem Suite-Lauf in 3,77 s
+- reine Python-Vertragssuite mit sieben von sieben Fällen in 0,005 s; damit
+  bleiben Serialisierung, Snapshotordnung und heterogene RX-Dimensionen
+  unverändert
+- unveränderte Suite `sionna-mimo-csi-feedback` mit einem von einem Lauf in
+  3,54 s
+- unveränderte ExampleAsTest-Suites `sionna-example-sumimo-minimal` in
+  18,69 s, `sionna-example-sumimo-precoding` in 37,52 s,
+  `sionna-example-sumimo-precoding-negative` in 4,28 s,
+  `sionna-example-mimo-helper-configuration-negative` in 3,82 s und
+  `sionna-example-mimo-helper-runtime-negative` in 5,08 s; jeweils ein von
+  einem Lauf erfolgreich
+- `git diff --check` ohne Befund
+
+Server- und Raytracing-Suites wurden bewusst nicht erneut ausgeführt:
+Unterphase 4.4 ändert weder Python, Protocol Buffers, Serialisierung, Batching,
+Cache, ZMQ, Sionna RT noch einen Serverpfad. Die schnelle Python-Vertragssuite,
+die native Suite und der echte HE-MU-PPDU-Adapterfall prüfen die berührten und
+unveränderten Grenzen direkt.
+
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 
 - SionnaMimoHelper überträgt eine gemeinsame TX- und RX-Geometrie für die
@@ -2703,9 +2820,11 @@ und unveränderten Grenzen direkt.
   Unterphase 4.2 stellt den festen gemeinsamen MU-Precoder und die
   Inter-User-Interferenz als direkte native API bereit. Unterphase 4.3 ergänzt
   daran die explizit aufgerufenen ZF-/RZF-Fabriken für vollrangige Gruppen mit
-  einer Empfangsantenne und einem Stream je Nutzer. Installation oder Auswahl
-  durch SionnaMimoHelper, HE-MU-PHY-Metadaten, Scheduler, Laufzeitcache und
-  automatische Ablaufsteuerung beginnen frühestens mit Unterphase 4.4.
+  einer Empfangsantenne und einem Stream je Nutzer. Unterphase 4.4 integriert
+  einen explizit installierten gemeinsamen Zustand für HE-DL-MU direkt in den
+  Spectrumadapter und liest die HE-MU-PHY-Metadaten aus dem TxVector.
+  SionnaMimoHelper, Scheduler, Laufzeitcache und automatische Ablaufsteuerung
+  bleiben Unterphase 4.5 oder später vorbehalten.
 - MRT bleibt der eindeutige perfekte 2x1-MISO-Ein-Stream-Fall. Quantisierung
   und positives CSI-Alter gelten nur für gleichleistungs-SVD. Wasserfüllung
   bleibt auf unquantisiertes aktuelles CSI beschränkt, weil die semantische
@@ -2716,14 +2835,16 @@ und unveränderten Grenzen direkt.
   erneut aufrufen. Das ist kein per-Link- oder per-Paket-Precodercache.
 - Die Inter-User-Interferenz der gleichzeitig durch denselben festen
   MU-Precoder gesendeten Streams geht in Unterphase 4.2 frequenz- und
-  antennenabhängig in die MMSE-Kovarianz ein. Andere zeitvariable externe
-  Interferenz wird weiterhin erst nach der MMSE-/EESM-Abstraktion durch
-  InterferenceHelper skalar berücksichtigt; ihre räumliche Kovarianz ist
-  nicht modelliert.
+  antennenabhängig in die MMSE-Kovarianz ein. Im HE-MU-Pfad der Unterphase 4.4
+  gilt das ausschließlich innerhalb derselben RU; verschiedene RUs sind
+  orthogonal. Andere zeitvariable externe Interferenz wird weiterhin erst
+  nach der MMSE-/EESM-Abstraktion durch InterferenceHelper skalar
+  berücksichtigt; ihre räumliche Kovarianz ist nicht modelliert.
 - SionnaMimoHelper übernimmt die Rauschzahl einmalig und setzt sie identisch am
   Adapter sowie an beiden PHY-Helpern. Code ohne High-Level-API muss beide
   Werte weiterhin manuell konsistent halten, da ns-3.40 das PHY-Attribut nicht
-  lesbar macht.
+  lesbar macht. Der Phase-4.4-Adapter verwendet deshalb seinen explizit
+  konfigurierten Wert für alle adressierten Empfänger.
 - Es existiert absichtlich keine mitgelieferte HE-EESM-Beta-Tabelle.
   Frequenzselektive absolute PER-Prognosen benötigen vor der wissenschaftlichen
   Nutzung eine dokumentierte Link-Level-Kalibrierung. Ohne diese Konfiguration
@@ -2765,12 +2886,15 @@ Downlink-Precoder, erhält die gesamte AP-Leistung und liefert gewünschte
 Leistung, Inter-User-Interferenz, Post-MMSE-SINR, EESM und PER je Nutzer. Der
 Phase-4.3-Kern leitet daraus für den dokumentierten Einantennen-/Ein-Stream-
 Fall deterministisches ZF oder explizit regularisiertes RZF ab, erhält die
-Gesamtleistung und lehnt nicht planbare Gruppen ab. Der
-Helper führt parallel die unveränderten SU-Verträge durch den bisherigen
-festen-W[k]-Pfad. Einzelnutzer- und 1x1-Grenzfall sowie alle Phase-1-/2-/3-
-Pfade bleiben kompatibel. Automatische Sounding-/Feedbackabläufe, ein
-MU-Precoder-Laufzeitcache, Scheduler, Helper-/HE-MU-PHY-Integration und
-sämtliche Unterphasen ab 4.4 wurden nicht begonnen.
+Gesamtleistung und lehnt nicht planbare Gruppen ab. Unterphase 4.4 bindet
+diesen gemeinsamen Zustand für echte HE-DL-MU-PPDUs an STA-ID, RU, MCS und
+NSS, begrenzt räumliche Interferenz auf dieselbe RU und übergibt erst nach der
+Matrixrechnung eine skalare PSD je adressiertem Empfänger. Der Helper führt
+parallel die unveränderten SU-Verträge durch den bisherigen festen-W[k]-Pfad.
+Einzelnutzer- und 1x1-Grenzfall sowie alle Phase-1-/2-/3-Pfade bleiben
+kompatibel. Automatische Sounding-/Feedbackabläufe, ein
+MU-Precoder-Laufzeitcache, Scheduler, Helperintegration und sämtliche
+Unterphasen ab 4.5 wurden nicht begonnen.
 
 ## 9. Ausführung
 

@@ -118,6 +118,8 @@ struct DlMuMimoUserSnr
 {
     uint32_t userId;
     double referenceSnrLinear;
+    /** Users in different groups are orthogonal and do not interfere. */
+    uint32_t orthogonalityGroup{0};
 };
 
 /**

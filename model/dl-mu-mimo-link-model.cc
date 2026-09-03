@@ -487,6 +487,7 @@ DlMuMimoLinkModel::Calculate(const MultiUserChannelSnapshot& snapshot,
     precoding.ValidateForSnapshot(snapshot);
 
     std::map<uint32_t, double> snrByUser;
+    std::map<uint32_t, uint32_t> groupByUser;
     for (const auto& userSnr : userSnrs)
     {
         if (!std::isfinite(userSnr.referenceSnrLinear) || userSnr.referenceSnrLinear < 0.0)
@@ -497,6 +498,7 @@ DlMuMimoLinkModel::Calculate(const MultiUserChannelSnapshot& snapshot,
         {
             Reject("a reference SNR was supplied more than once");
         }
+        groupByUser.emplace(userSnr.userId, userSnr.orthogonalityGroup);
     }
     if (snrByUser.size() != snapshot.users.size())
     {
@@ -512,6 +514,12 @@ DlMuMimoLinkModel::Calculate(const MultiUserChannelSnapshot& snapshot,
 
     const auto& matrix = precoding.GetPrecodingMatrix();
     const uint32_t totalStreams = matrix.GetNumStreams();
+    std::map<uint32_t, uint32_t> streamsByGroup;
+    for (uint32_t column = 0; column < totalStreams; ++column)
+    {
+        const auto& mapping = precoding.GetStreamMapping(column);
+        ++streamsByGroup[groupByUser.at(mapping.userId)];
+    }
     DlMuMimoLinkResult result;
     result.m_users.reserve(snapshot.users.size());
 
@@ -520,7 +528,9 @@ DlMuMimoLinkModel::Calculate(const MultiUserChannelSnapshot& snapshot,
         const uint32_t numSubcarriers = user.channel.GetNumSubcarriers();
         const uint32_t numRxAntennas = user.channel.GetNumRxAntennas();
         const uint32_t numUserStreams = precoding.GetNumStreamsForUser(user.userId);
-        const double streamSnr = snrByUser.at(user.userId) / totalStreams;
+        const uint32_t userGroup = groupByUser.at(user.userId);
+        const double streamSnr =
+            snrByUser.at(user.userId) / streamsByGroup.at(userGroup);
 
         DlMuMimoUserResult userResult;
         userResult.m_userId = user.userId;
@@ -548,9 +558,17 @@ DlMuMimoLinkModel::Calculate(const MultiUserChannelSnapshot& snapshot,
                 }
             }
 
-            const Eigen::MatrixXcd covariance =
-                Eigen::MatrixXcd::Identity(numRxAntennas, numRxAntennas) +
-                streamSnr * effective * effective.adjoint();
+            Eigen::MatrixXcd covariance =
+                Eigen::MatrixXcd::Identity(numRxAntennas, numRxAntennas);
+            for (uint32_t column = 0; column < totalStreams; ++column)
+            {
+                const auto& mapping = precoding.GetStreamMapping(column);
+                if (groupByUser.at(mapping.userId) == userGroup)
+                {
+                    covariance += streamSnr * effective.col(column) *
+                                  effective.col(column).adjoint();
+                }
+            }
             const Eigen::LDLT<Eigen::MatrixXcd> decomposition(covariance);
             if (decomposition.info() != Eigen::Success)
             {
@@ -583,7 +601,12 @@ DlMuMimoLinkModel::Calculate(const MultiUserChannelSnapshot& snapshot,
                     }
                     const double contribution =
                         streamSnr * std::norm(combiner.dot(effective.col(other)));
-                    if (precoding.GetStreamMapping(other).userId == user.userId)
+                    const auto& otherMapping = precoding.GetStreamMapping(other);
+                    if (groupByUser.at(otherMapping.userId) != userGroup)
+                    {
+                        continue;
+                    }
+                    if (otherMapping.userId == user.userId)
                     {
                         intraUser += contribution;
                     }
