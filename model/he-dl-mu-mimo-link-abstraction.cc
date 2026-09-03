@@ -165,12 +165,16 @@ HeDlMuMimoLinkAbstraction::Calculate(
         {
             Reject("every WifiTxVector mode must be initialized");
         }
-        const WifiMode mode = user.txVector.GetMode();
+        if (user.txVector.IsMu() && !user.txVector.IsAllocated(user.staId))
+        {
+            Reject("every MU STA-ID must occur in WifiTxVector");
+        }
+        const WifiMode mode = user.txVector.GetMode(user.staId);
         if (mode.GetModulationClass() != WIFI_MOD_CLASS_HE)
         {
             Reject("every user requires an 802.11ax HE mode");
         }
-        if (user.txVector.GetNss() != precoding.GetNumStreamsForUser(user.userId))
+        if (user.txVector.GetNss(user.staId) != precoding.GetNumStreamsForUser(user.userId))
         {
             Reject("WifiTxVector NSS must match the user's mapped stream count");
         }
@@ -207,7 +211,8 @@ HeDlMuMimoLinkAbstraction::Calculate(
             Reject("ErrorRateModel cannot represent more than 255 receive antennas");
         }
         snrs.push_back({snapshotUser.userId,
-                        input->second->linkBudget.GetReferenceSnrLinear()});
+                        input->second->linkBudget.GetReferenceSnrLinear(),
+                        input->second->orthogonalityGroup});
     }
 
     const auto mimo = DlMuMimoLinkModel::Calculate(snapshot, precoding, snrs);
@@ -232,16 +237,18 @@ HeDlMuMimoLinkAbstraction::Calculate(
         userResult.m_userId = snapshotUser.userId;
         userResult.m_linkBudget = input.linkBudget;
         userResult.m_mimoResult = mimoUser;
-        userResult.m_effectiveSinrLinear =
-            m_suAbstraction->CalculateEffectiveSinr(sinrs,
-                                                    input.txVector.GetMode().GetMcsValue());
+        userResult.m_effectiveSinrLinear = m_suAbstraction->CalculateEffectiveSinr(
+            sinrs,
+            input.txVector.GetMode(input.staId).GetMcsValue());
         userResult.m_packetSuccessRate =
             GetErrorRateModel()->GetChunkSuccessRate(
-                input.txVector.GetMode(),
+                input.txVector.GetMode(input.staId),
                 input.txVector,
                 userResult.m_effectiveSinrLinear,
                 static_cast<uint64_t>(input.packetSizeBytes) * 8,
-                static_cast<uint8_t>(snapshotUser.channel.GetNumRxAntennas()));
+                static_cast<uint8_t>(snapshotUser.channel.GetNumRxAntennas()),
+                WIFI_PPDU_FIELD_DATA,
+                input.staId);
         if (!std::isfinite(userResult.m_packetSuccessRate) ||
             userResult.m_packetSuccessRate < 0.0 || userResult.m_packetSuccessRate > 1.0)
         {

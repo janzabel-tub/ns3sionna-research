@@ -30,6 +30,10 @@ struct HeDlMuMimoUserTransmission
     WifiLinkBudgetResult linkBudget;
     WifiTxVector txVector;
     uint32_t packetSizeBytes;
+    /** STA-ID used to select per-user HE-MU mode and NSS metadata. */
+    uint16_t staId{SU_STA_ID};
+    /** Users in different groups (HE RUs in Phase 4.4) are orthogonal. */
+    uint32_t orthogonalityGroup{0};
 };
 
 /** Complete HE result for one downlink MU user. */

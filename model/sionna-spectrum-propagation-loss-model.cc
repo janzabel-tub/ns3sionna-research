@@ -24,9 +24,12 @@
 #include <ns3/abort.h>
 #include <ns3/double.h>
 #include <ns3/error-rate-model.h>
+#include <ns3/he-phy.h>
+#include <ns3/he-ppdu.h>
 #include <ns3/interference-helper.h>
 #include <ns3/log.h>
 #include <ns3/node.h>
+#include <ns3/node-list.h>
 #include <ns3/object-factory.h>
 #include <ns3/pointer.h>
 #include <ns3/random-variable-stream.h>
@@ -41,9 +44,12 @@
 #include <ns3/wifi-spectrum-signal-parameters.h>
 #include <ns3/wifi-spectrum-value-helper.h>
 #include <ns3/wifi-tx-vector.h>
+#include <ns3/wifi-mac.h>
 #include <ns3/wifi-utils.h>
 
 #include <algorithm>
+#include <set>
+#include <stdexcept>
 #include <cmath>
 
 namespace ns3
@@ -111,6 +117,23 @@ GetErrorRateModel(Ptr<SpectrumWifiPhy> phy)
     return helper->GetErrorRateModel();
 }
 
+double
+IntegralBand(const SpectrumValue& psd, const WifiSpectrumBandIndices& indices)
+{
+    if (indices.first > indices.second || indices.second >= psd.GetValuesN())
+    {
+        throw std::invalid_argument("Sionna HE-DL-MU adapter: RU spectrum indices are invalid");
+    }
+    auto band = psd.GetSpectrumModel()->Begin();
+    std::advance(band, indices.first);
+    double powerW = 0.0;
+    for (std::size_t index = indices.first; index <= indices.second; ++index, ++band)
+    {
+        powerW += psd.ValuesAt(index) * (band->fh - band->fl);
+    }
+    return powerW;
+}
+
 } // namespace
 
 const HeSuMimoLinkResult&
@@ -123,6 +146,27 @@ double
 SionnaMimoSpectrumRxResult::GetEquivalentReceivedPowerW() const
 {
     return m_equivalentReceivedPowerW;
+}
+
+const HeDlMuMimoLinkResult&
+SionnaHeDlMuMimoSpectrumRxResult::GetLinkResult() const
+{
+    return m_linkResult;
+}
+
+double
+SionnaHeDlMuMimoSpectrumRxResult::GetEquivalentReceivedPowerW(uint32_t userId) const
+{
+    const auto found = std::lower_bound(
+        m_equivalentPowers.begin(),
+        m_equivalentPowers.end(),
+        userId,
+        [](const auto& user, uint32_t id) { return user.userId < id; });
+    if (found == m_equivalentPowers.end() || found->userId != userId)
+    {
+        throw std::invalid_argument("Sionna HE-DL-MU adapter: result user ID is absent");
+    }
+    return found->powerW;
 }
 
 SionnaSpectrumPropagationLossModel::SionnaSpectrumPropagationLossModel()
@@ -181,12 +225,14 @@ void
 SionnaSpectrumPropagationLossModel::SetEesmBeta(uint8_t mcs, double betaLinear)
 {
     m_linkAbstraction->SetEesmBeta(mcs, betaLinear);
+    m_eesmBetas[mcs] = betaLinear;
 }
 
 void
 SionnaSpectrumPropagationLossModel::SetEesmBetaDb(uint8_t mcs, double betaDb)
 {
     m_linkAbstraction->SetEesmBetaDb(mcs, betaDb);
+    m_eesmBetas[mcs] = m_linkAbstraction->GetEesmBeta(mcs);
 }
 
 void
@@ -199,6 +245,7 @@ SionnaSpectrumPropagationLossModel::ConfigureEesmBetas(
         linkAbstraction->SetEesmBeta(mcs, betaLinear);
     }
     m_linkAbstraction = linkAbstraction;
+    m_eesmBetas = betas;
 }
 
 void
@@ -225,6 +272,29 @@ SionnaSpectrumPropagationLossModel::GetPrecodingMatrix() const
 {
     NS_ABORT_MSG_IF(!m_precodingMatrix, "No fixed precoding matrix is configured");
     return *m_precodingMatrix;
+}
+
+void
+SionnaSpectrumPropagationLossModel::SetDlMuMimoState(
+    const MultiUserChannelSnapshot& snapshot,
+    const DlMuMimoPrecodingMatrix& precoding)
+{
+    precoding.ValidateForSnapshot(snapshot);
+    m_dlMuSnapshot = snapshot;
+    m_dlMuPrecoding = precoding;
+}
+
+void
+SionnaSpectrumPropagationLossModel::ClearDlMuMimoState()
+{
+    m_dlMuSnapshot.reset();
+    m_dlMuPrecoding.reset();
+}
+
+bool
+SionnaSpectrumPropagationLossModel::HasDlMuMimoState() const
+{
+    return m_dlMuSnapshot.has_value() && m_dlMuPrecoding.has_value();
 }
 
 double
@@ -317,6 +387,172 @@ SionnaSpectrumPropagationLossModel::CalculateMimoRx(
 
 
 
+SionnaHeDlMuMimoSpectrumRxResult
+SionnaSpectrumPropagationLossModel::CalculateHeDlMuMimoRx(
+    const MultiUserChannelSnapshot& snapshot,
+    const DlMuMimoPrecodingMatrix& precoding,
+    const WifiTxVector& txVector,
+    const std::vector<SionnaHeDlMuMimoSpectrumUserTransmission>& users,
+    uint8_t txPhyAntennas,
+    double receiverNoiseFigureDb,
+    Ptr<ErrorRateModel> errorRateModel) const
+{
+    const auto reject = [](const std::string& reason) {
+        throw std::invalid_argument("Sionna HE-DL-MU adapter: " + reason);
+    };
+
+    if (txVector.GetPreambleType() != WIFI_PREAMBLE_HE_MU)
+    {
+        reject("only WIFI_PREAMBLE_HE_MU downlink PPDUs are supported");
+    }
+    if (!txVector.GetModeInitialized() ||
+        txVector.GetModulationClass() != WIFI_MOD_CLASS_HE)
+    {
+        reject("EHT and non-HE MU PPDUs are unsupported");
+    }
+    if (!errorRateModel)
+    {
+        reject("SpectrumWifiPhy ErrorRateModel must be configured");
+    }
+    if (!std::isfinite(receiverNoiseFigureDb) || receiverNoiseFigureDb < 0.0)
+    {
+        reject("receiver noise figure must be finite and non-negative");
+    }
+
+    precoding.ValidateForSnapshot(snapshot);
+    if (snapshot.direction != MultiUserChannelDirection::DOWNLINK)
+    {
+        reject("only downlink channel snapshots are supported");
+    }
+    if (snapshot.users.empty() ||
+        txPhyAntennas != snapshot.users.front().channel.GetNumTxAntennas())
+    {
+        reject("transmitter PHY antennas must equal the snapshot TX dimension");
+    }
+
+    const auto& userInfoMap = txVector.GetHeMuUserInfoMap();
+    if (users.size() != snapshot.users.size() || users.size() != userInfoMap.size())
+    {
+        reject("snapshot, receiver inputs, and HeMuUserInfoMap must contain the same users");
+    }
+
+    std::map<uint32_t, const SionnaHeDlMuMimoSpectrumUserTransmission*> inputs;
+    std::set<uint16_t> staIds;
+    std::vector<HeRu::RuSpec> ruGroups;
+    std::vector<HeDlMuMimoUserTransmission> heUsers;
+    heUsers.reserve(users.size());
+
+    for (const auto& user : users)
+    {
+        if (!inputs.emplace(user.userId, &user).second)
+        {
+            reject("a snapshot user occurs more than once");
+        }
+        if (!staIds.insert(user.staId).second || user.staId == NO_USER_STA_ID ||
+            !txVector.IsAllocated(user.staId))
+        {
+            reject("every receiver requires one unique addressed STA-ID");
+        }
+        if (!std::isfinite(user.receivedPowerW) || user.receivedPowerW <= 0.0)
+        {
+            reject("received power must be finite and positive");
+        }
+        const auto snapshotUser = std::lower_bound(
+            snapshot.users.begin(),
+            snapshot.users.end(),
+            user.userId,
+            [](const MultiUserChannel& candidate, uint32_t id) {
+                return candidate.userId < id;
+            });
+        if (snapshotUser == snapshot.users.end() || snapshotUser->userId != user.userId)
+        {
+            reject("receiver user ID is absent from the channel snapshot");
+        }
+        if (snapshotUser->direction != MultiUserChannelDirection::DOWNLINK ||
+            snapshotUser->channel.GetNumRxAntennas() != user.rxPhyAntennas)
+        {
+            reject("receiver direction or antenna dimension is inconsistent");
+        }
+
+        const auto& userInfo = userInfoMap.at(user.staId);
+        if (userInfo.nss != precoding.GetNumStreamsForUser(user.userId) ||
+            userInfo.nss == 0 || user.rxPhyAntennas < userInfo.nss)
+        {
+            reject("per-user NSS is inconsistent with the precoder or receiver PHY");
+        }
+        const auto ru = std::find(ruGroups.begin(), ruGroups.end(), userInfo.ru);
+        uint32_t group = static_cast<uint32_t>(std::distance(ruGroups.begin(), ru));
+        if (ru == ruGroups.end())
+        {
+            ruGroups.push_back(userInfo.ru);
+        }
+        const double bandwidthHz =
+            static_cast<double>(HeRu::GetBandwidth(userInfo.ru.GetRuType())) * 1e6;
+        if (!std::isfinite(bandwidthHz) || bandwidthHz <= 0.0)
+        {
+            reject("HE RU bandwidth is invalid");
+        }
+        const auto linkBudget =
+            WifiLinkBudget::Calculate(WToDbm(user.receivedPowerW),
+                                      0.0,
+                                      bandwidthHz,
+                                      WIFI_NOISE_TEMPERATURE_K,
+                                      receiverNoiseFigureDb);
+        heUsers.push_back({user.userId,
+                           linkBudget,
+                           txVector,
+                           user.packetSizeBytes,
+                           user.staId,
+                           group});
+    }
+
+    for (const auto& snapshotUser : snapshot.users)
+    {
+        if (inputs.find(snapshotUser.userId) == inputs.end())
+        {
+            reject("a snapshot user has no receiver input");
+        }
+    }
+    for (const auto& [staId, userInfo] : userInfoMap)
+    {
+        static_cast<void>(userInfo);
+        if (staIds.find(staId) == staIds.end())
+        {
+            reject("HeMuUserInfoMap contains an unknown or unaddressed receiver");
+        }
+    }
+
+    auto abstraction = CreateObject<HeDlMuMimoLinkAbstraction>();
+    for (const auto& [mcs, beta] : m_eesmBetas)
+    {
+        abstraction->SetEesmBeta(mcs, beta);
+    }
+    abstraction->SetErrorRateModel(errorRateModel);
+
+    SionnaHeDlMuMimoSpectrumRxResult result;
+    result.m_linkResult = abstraction->Calculate(snapshot, precoding, heUsers);
+    result.m_equivalentPowers.reserve(snapshot.users.size());
+    for (const auto& snapshotUser : snapshot.users)
+    {
+        const auto& input = *inputs.at(snapshotUser.userId);
+        const auto& userInfo = userInfoMap.at(input.staId);
+        const auto& link = result.m_linkResult.GetUserById(snapshotUser.userId);
+        const double diversityGain =
+            errorRateModel->IsAwgn() && input.rxPhyAntennas > userInfo.nss
+                ? static_cast<double>(input.rxPhyAntennas) / userInfo.nss
+                : 1.0;
+        const double equivalentPower =
+            link.GetEffectiveSinrLinear() *
+            link.GetLinkBudget().GetReceiverNoisePowerW() / diversityGain;
+        if (!std::isfinite(equivalentPower) || equivalentPower < 0.0)
+        {
+            reject("MU abstraction produced invalid equivalent receive power");
+        }
+        result.m_equivalentPowers.push_back({snapshotUser.userId, equivalentPower});
+    }
+    return result;
+}
+
 Ptr<SpectrumValue>
 SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const SpectrumSignalParameters> params,
                                                 Ptr<const MobilityModel> a, Ptr<const MobilityModel> b) const
@@ -342,28 +578,64 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
 
     Ptr<SpectrumValue> rxPsd = Copy<SpectrumValue>(params->psd);
 
-    NS_ABORT_MSG_IF(!m_fixedChannelEnabled && !m_propagationCache,
-                    "SionnaSpectrumPropagationLossModel needs a propagation cache or fixed CFR");
+    Ptr<const WifiSpectrumSignalParameters> wifiParams =
+        DynamicCast<const WifiSpectrumSignalParameters>(params);
+    const bool hasWifiPpdu = wifiParams && wifiParams->ppdu;
+    const WifiPreamble preamble =
+        hasWifiPpdu ? wifiParams->ppdu->GetTxVector().GetPreambleType()
+                    : WIFI_PREAMBLE_LONG;
+    NS_ABORT_MSG_IF(preamble == WIFI_PREAMBLE_EHT_MU ||
+                        preamble == WIFI_PREAMBLE_EHT_TB,
+                    "The Sionna MIMO adapter does not support EHT MU PPDUs");
+    NS_ABORT_MSG_IF(HasDlMuMimoState() && preamble == WIFI_PREAMBLE_HE_TB,
+                    "The Phase-4.4 state supports downlink HE MU only");
+    const bool isHeMu = preamble == WIFI_PREAMBLE_HE_MU;
 
-    // The scalar SpectrumChannel loss model already applied this wideband path
-    // loss to params->psd. Fetch it only for the diagnostic packet tag.
-    const double wbLoss = m_fixedChannelEnabled
-                              ? m_fixedPathLossDb
-                              : m_propagationCache->GetPropagationLoss(a, b);
+    NS_ABORT_MSG_IF(!isHeMu && !m_fixedChannelEnabled && !m_propagationCache,
+                    "SionnaSpectrumPropagationLossModel needs a propagation cache or fixed CFR");
+    NS_ABORT_MSG_IF(isHeMu && !HasDlMuMimoState(),
+                    "HE DL MU requires an explicitly installed Phase-4.4 state");
+
+    const MultiUserChannel* muReceiver = nullptr;
+    if (isHeMu)
+    {
+        for (const auto& user : m_dlMuSnapshot->users)
+        {
+            if (user.rxNodeId == bId)
+            {
+                NS_ABORT_MSG_IF(muReceiver,
+                                "HE DL MU snapshot contains the receiver node more than once");
+                muReceiver = &user;
+            }
+            NS_ABORT_MSG_IF(user.txNodeId != aId ||
+                                user.direction != MultiUserChannelDirection::DOWNLINK,
+                            "HE DL MU snapshot direction or transmitter is inconsistent");
+        }
+        NS_ABORT_MSG_IF(!muReceiver,
+                        "Unknown or unaddressed HE DL MU receiver");
+    }
+
+    // SpectrumChannel has already applied the scalar wideband path loss.
+    const double wbLoss =
+        isHeMu ? muReceiver->widebandLossDb
+               : (m_fixedChannelEnabled
+                      ? m_fixedPathLossDb
+                      : m_propagationCache->GetPropagationLoss(a, b));
     const MimoChannelMatrix channel =
-        m_fixedChannelEnabled ? m_fixedChannel
-                              : m_propagationCache->GetPropagationChannelMatrix(a, b);
+        isHeMu ? muReceiver->channel
+               : (m_fixedChannelEnabled
+                      ? m_fixedChannel
+                      : m_propagationCache->GetPropagationChannelMatrix(a, b));
     NS_ABORT_MSG_IF(channel.GetNumSubcarriers() + 1 != params->psd->GetValuesN(),
                     "PSD must contain exactly one more guard bin than the Sionna CFR");
 
-    Ptr<const WifiSpectrumSignalParameters> wifiParams =
-        DynamicCast<const WifiSpectrumSignalParameters>(params);
     const bool isHeSu =
-        wifiParams && wifiParams->ppdu &&
+        hasWifiPpdu &&
+        preamble == WIFI_PREAMBLE_HE_SU &&
         wifiParams->ppdu->GetTxVector().GetModeInitialized() &&
         wifiParams->ppdu->GetTxVector().GetMode().GetModulationClass() ==
-            WIFI_MOD_CLASS_HE &&
-        wifiParams->ppdu->GetTxVector().GetPreambleType() == WIFI_PREAMBLE_HE_SU;
+            WIFI_MOD_CLASS_HE;
+
     if (isHeSu)
     {
         const uint32_t expectedNss = m_precodingMatrix
@@ -380,7 +652,133 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
     const bool legacySiso = channel.GetNumRxAntennas() == 1 &&
                             channel.GetNumTxAntennas() == 1;
     const bool scalarCompatibilityPath = legacySiso || !isHeSu;
-    if (scalarCompatibilityPath)
+
+    Ptr<const WifiPsdu> addressedMuPsdu;
+    if (isHeMu)
+    {
+        Ptr<SpectrumWifiPhy> txPhy = GetTransmitterSpectrumWifiPhy(params);
+        Ptr<WifiSpectrumPhyInterface> txInterface =
+            DynamicCast<WifiSpectrumPhyInterface>(params->txPhy);
+        NS_ABORT_MSG_IF(!txInterface, "Wi-Fi transmitter has no spectrum PHY interface");
+        Ptr<WifiNetDevice> txDevice = DynamicCast<WifiNetDevice>(txPhy->GetDevice());
+        NS_ABORT_MSG_IF(!txDevice || !txDevice->GetMac() ||
+                            txDevice->GetMac()->GetTypeOfStation() != AP,
+                        "HE DL MU transmitter must be an AP");
+
+        Ptr<const HePpdu> hePpdu = DynamicCast<const HePpdu>(wifiParams->ppdu);
+        NS_ABORT_MSG_IF(!hePpdu, "WIFI_PREAMBLE_HE_MU requires an HePpdu");
+        const auto& txVector = hePpdu->GetTxVector();
+        NS_ABORT_MSG_IF(txPhy->GetNumberOfAntennas() !=
+                            m_dlMuSnapshot->users.front().channel.GetNumTxAntennas() ||
+                            txPhy->GetMaxSupportedTxSpatialStreams() <
+                                m_dlMuPrecoding->GetNumStreams(),
+                        "Transmitter PHY dimensions do not support the joint MU precoder");
+        NS_ABORT_MSG_IF(!std::isfinite(m_receiverNoiseFigureDb),
+                        "Configure the MIMO receiver noise figure explicitly and consistently "
+                        "with SpectrumWifiPhy RxNoiseFigure");
+
+        Ptr<SpectrumWifiPhy> currentRxPhy =
+            GetSpectrumWifiPhy(b, txInterface->GetChannel());
+        Ptr<HePhy> hePhy =
+            DynamicCast<HePhy>(currentRxPhy->GetPhyEntity(WIFI_MOD_CLASS_HE));
+        NS_ABORT_MSG_IF(!hePhy, "Receiver PHY has no HE entity");
+        Ptr<ErrorRateModel> errorRateModel = GetErrorRateModel(currentRxPhy);
+
+        std::vector<SionnaHeDlMuMimoSpectrumUserTransmission> users;
+        users.reserve(m_dlMuSnapshot->users.size());
+        std::optional<WifiSpectrumBandIndices> currentRuIndices;
+        for (const auto& snapshotUser : m_dlMuSnapshot->users)
+        {
+            NS_ABORT_MSG_IF(snapshotUser.rxNodeId >= NodeList::GetNNodes(),
+                            "HE DL MU snapshot references an unknown receiver node");
+            Ptr<Node> userNode = NodeList::GetNode(snapshotUser.rxNodeId);
+            Ptr<MobilityModel> userMobility = userNode->GetObject<MobilityModel>();
+            NS_ABORT_MSG_IF(!userMobility,
+                            "HE DL MU receiver node has no mobility model");
+            Ptr<SpectrumWifiPhy> userPhy =
+                GetSpectrumWifiPhy(userMobility, txInterface->GetChannel());
+            Ptr<WifiNetDevice> userDevice = DynamicCast<WifiNetDevice>(userPhy->GetDevice());
+            NS_ABORT_MSG_IF(!userDevice || !userDevice->GetMac() ||
+                                userDevice->GetMac()->GetTypeOfStation() == AP,
+                            "HE DL MU receiver must be a non-AP Wi-Fi station");
+
+            uint16_t staId = SU_STA_ID;
+            Ptr<const WifiPsdu> psdu;
+            for (const auto& [candidateStaId, userInfo] : txVector.GetHeMuUserInfoMap())
+            {
+                static_cast<void>(userInfo);
+                Ptr<const WifiPsdu> candidate = hePpdu->GetPsdu(0, candidateStaId);
+                if (candidate && candidate->GetAddr1() == userDevice->GetMac()->GetAddress())
+                {
+                    NS_ABORT_MSG_IF(psdu,
+                                    "HE DL MU receiver address maps to multiple STA-IDs");
+                    staId = candidateStaId;
+                    psdu = candidate;
+                }
+            }
+            NS_ABORT_MSG_IF(!psdu || staId == SU_STA_ID,
+                            "Unknown or unaddressed HE DL MU receiver");
+            const auto& userInfo = txVector.GetHeMuUserInfo(staId);
+            NS_ABORT_MSG_IF(userPhy->GetNumberOfAntennas() !=
+                                snapshotUser.channel.GetNumRxAntennas() ||
+                                userPhy->GetMaxSupportedRxSpatialStreams() < userInfo.nss,
+                            "Receiver PHY dimensions do not match HE MU NSS and snapshot CFR");
+
+            NS_ABORT_MSG_IF(GetErrorRateModel(userPhy)->GetInstanceTypeId() !=
+                                errorRateModel->GetInstanceTypeId(),
+                            "HE DL MU receivers must use the same ErrorRateModel type");
+
+            const auto ruBand = hePhy->GetRuBandForRx(txVector, staId);
+            const double currentPathAttenuatedRuPowerW =
+                IntegralBand(*params->psd, ruBand.indices);
+            NS_ABORT_MSG_IF(!std::isfinite(currentPathAttenuatedRuPowerW) ||
+                                currentPathAttenuatedRuPowerW <= 0.0,
+                            "HE MU RU has no finite received power");
+            const double apRuPowerW =
+                currentPathAttenuatedRuPowerW * DbToRatio(wbLoss);
+            const double userReceivedPowerW =
+                apRuPowerW / DbToRatio(snapshotUser.widebandLossDb) *
+                DbToRatio(userPhy->GetRxGain());
+            users.push_back({snapshotUser.userId,
+                             staId,
+                             userReceivedPowerW,
+                             userPhy->GetNumberOfAntennas(),
+                             psdu->GetSize()});
+            if (snapshotUser.rxNodeId == bId)
+            {
+                addressedMuPsdu = psdu;
+                currentRuIndices = ruBand.indices;
+            }
+        }
+        NS_ABORT_MSG_IF(!addressedMuPsdu || !currentRuIndices,
+                        "Current receiver is not addressed by the HE DL MU PPDU");
+
+        const auto muRx = CalculateHeDlMuMimoRx(*m_dlMuSnapshot,
+                                                *m_dlMuPrecoding,
+                                                txVector,
+                                                users,
+                                                txPhy->GetNumberOfAntennas(),
+                                                m_receiverNoiseFigureDb,
+                                                errorRateModel);
+        const double rxGainLinear = DbToRatio(currentRxPhy->GetRxGain());
+        const double equivalentPowerBeforeRxGain =
+            muRx.GetEquivalentReceivedPowerW(muReceiver->userId) / rxGainLinear;
+        const double currentPowerBeforeRxGain =
+            IntegralBand(*rxPsd, *currentRuIndices);
+        NS_ABORT_MSG_IF(currentPowerBeforeRxGain <= 0.0,
+                        "Path-loss-attenuated HE MU RU PSD has no power");
+        *rxPsd *= equivalentPowerBeforeRxGain / currentPowerBeforeRxGain;
+
+        const auto& userResult = muRx.GetLinkResult().GetUserById(muReceiver->userId);
+        m_mimoRxTrace(wifiParams->ppdu->GetUid(),
+                      aId,
+                      bId,
+                      userResult.GetEffectiveSinrLinear(),
+                      userResult.GetPacketErrorRate(),
+                      0);
+    }
+
+    else if (scalarCompatibilityPath)
     {
         // Preserve the established 1x1 path. Non-HE control frames on a MIMO
         // PHY use the first antenna pair because Phase 1 models HE SU payloads only.
@@ -448,7 +846,10 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
     if (auto wifiTxParams = DynamicCast<const WifiSpectrumSignalParameters>(params))
     {   // WiFi packet found
         Ptr<WifiPpdu> ppdu = wifiTxParams->ppdu->Copy();
-        Ptr<const WifiPsdu> psdu = ppdu->GetPsdu();
+        Ptr<const WifiPsdu> psdu =
+            isHeMu ? addressedMuPsdu : ppdu->GetPsdu();
+        NS_ABORT_MSG_IF(!psdu,
+                        "Wi-Fi PPDU has no PSDU addressed to this receiver");
 
         // for each payload
         for (size_t payload_idx = 0; payload_idx < psdu->GetNMpdus(); payload_idx++) {

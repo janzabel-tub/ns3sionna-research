@@ -20,6 +20,7 @@
 #ifndef SIONNA_SPECTRUM_PROPAGATION_LOSS_H
 #define SIONNA_SPECTRUM_PROPAGATION_LOSS_H
 
+#include "he-dl-mu-mimo-link-abstraction.h"
 #include "he-su-mimo-link-abstraction.h"
 #include "ns3/spectrum-propagation-loss-model.h"
 #include "sionna-propagation-cache.h"
@@ -54,6 +55,36 @@ class SionnaMimoSpectrumRxResult
 
     HeSuMimoLinkResult m_linkResult;
     double m_equivalentReceivedPowerW{0.0};
+};
+
+/** Receiver inputs after applying AP power, path loss, and receive gain once. */
+struct SionnaHeDlMuMimoSpectrumUserTransmission
+{
+    uint32_t userId;
+    uint16_t staId;
+    double receivedPowerW;
+    uint8_t rxPhyAntennas;
+    uint32_t packetSizeBytes;
+};
+
+/** Matrix-valued HE-DL-MU result and its per-receiver scalar PHY handoff. */
+class SionnaHeDlMuMimoSpectrumRxResult
+{
+  public:
+    const HeDlMuMimoLinkResult& GetLinkResult() const;
+    double GetEquivalentReceivedPowerW(uint32_t userId) const;
+
+  private:
+    struct UserEquivalentPower
+    {
+        uint32_t userId;
+        double powerW;
+    };
+
+    friend class SionnaSpectrumPropagationLossModel;
+
+    HeDlMuMimoLinkResult m_linkResult;
+    std::vector<UserEquivalentPower> m_equivalentPowers;
 };
 
 /**
@@ -106,6 +137,21 @@ class SionnaSpectrumPropagationLossModel : public SpectrumPropagationLossModel
     /** Return the configured fixed precoding tensor. */
     const MimoPrecodingMatrix& GetPrecodingMatrix() const;
 
+    /**
+     * Install one immutable Phase-4.4 downlink MU snapshot and joint precoder.
+     *
+     * Runtime CSI lookup and scheduler integration deliberately remain outside
+     * this Phase-4.4 state holder.
+     */
+    void SetDlMuMimoState(const MultiUserChannelSnapshot& snapshot,
+                          const DlMuMimoPrecodingMatrix& precoding);
+
+    /** Remove the explicitly installed HE-DL-MU state. */
+    void ClearDlMuMimoState();
+
+    /** Return whether a validated HE-DL-MU state is installed. */
+    bool HasDlMuMimoState() const;
+
     /** Return the receiver noise figure configured for the integrated path. */
     double GetReceiverNoiseFigureDb() const;
 
@@ -129,6 +175,20 @@ class SionnaSpectrumPropagationLossModel : public SpectrumPropagationLossModel
         double receiverNoiseFigureDb,
         Ptr<ErrorRateModel> errorRateModel) const;
 
+    /**
+     * Evaluate one complete HE-DL-MU transmission before scalar PSD conversion.
+     *
+     * STA-ID, RU, MCS, and NSS are read exclusively from txVector.
+     */
+    SionnaHeDlMuMimoSpectrumRxResult CalculateHeDlMuMimoRx(
+        const MultiUserChannelSnapshot& snapshot,
+        const DlMuMimoPrecodingMatrix& precoding,
+        const WifiTxVector& txVector,
+        const std::vector<SionnaHeDlMuMimoSpectrumUserTransmission>& users,
+        uint8_t txPhyAntennas,
+        double receiverNoiseFigureDb,
+        Ptr<ErrorRateModel> errorRateModel) const;
+
   private:
     /**
      * @param params the spectrum signal parameters.
@@ -144,6 +204,9 @@ class SionnaSpectrumPropagationLossModel : public SpectrumPropagationLossModel
     Ptr<SionnaPropagationCache> m_propagationCache;
     Ptr<HeSuMimoLinkAbstraction> m_linkAbstraction;
     std::optional<MimoPrecodingMatrix> m_precodingMatrix;
+    std::optional<MultiUserChannelSnapshot> m_dlMuSnapshot;
+    std::optional<DlMuMimoPrecodingMatrix> m_dlMuPrecoding;
+    std::map<uint8_t, double> m_eesmBetas;
     bool m_fixedChannelEnabled{false};
     MimoChannelMatrix m_fixedChannel;
     double m_fixedPathLossDb{0.0};
