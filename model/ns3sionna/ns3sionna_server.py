@@ -2,6 +2,7 @@ import sionna.rt  # Must run before importing Mitsuba so Sionna selects its RT b
 
 import os
 import argparse
+import copy
 import numpy as np
 import time
 import GPUtil
@@ -41,6 +42,9 @@ class SionnaEnv:
     MODE_P2MP       = 2
     # compute also future channels; used only if the transmitter is static (receivers are mobile)
     MODE_P2MP_LAH   = 3
+    MOBILITY_EPS = 1e-9
+    MOBILITY_NUDGE = 1e-7
+    MAX_MOBILITY_BOUNCES = 256
 
     """
     This class represents the Sionna component of ns3sionna. It represents the environment where the node
@@ -48,8 +52,10 @@ class SionnaEnv:
 
     author: Pilz, Zubow
     """
-    def __init__(self, model_folder='./models/', rt_fast=False, default_mode=MODE_P2P, rt_max_parallel_links=256, est_csi=True, VERBOSE=True,
-                 CHECKS_ENABLED=True):
+    def __init__(self, model_folder='./models/', rt_fast=False, default_mode=MODE_P2P,
+                 rt_max_parallel_links=256, est_csi=True, VERBOSE=True,
+                 CHECKS_ENABLED=True, equidistant_walk_steps=0,
+                 mobility_bbox_margin=1.0, mobility_bbox_enabled=False):
         self.model_folder = model_folder
         self.rt_fast = rt_fast
         if rt_fast:
@@ -104,6 +110,16 @@ class SionnaEnv:
         # all node which are currently placed on the scene
         self.placed_radio_node_names = []
 
+        self.equidistant_walk_steps = int(equidistant_walk_steps)
+        if self.equidistant_walk_steps < 0:
+            raise ValueError("equidistant_walk_steps must be non-negative")
+        self.absolute_time_mobility = self.equidistant_walk_steps > 0
+        self.mobility_bbox_margin = float(mobility_bbox_margin)
+        if self.mobility_bbox_margin < 0:
+            raise ValueError("mobility_bbox_margin must be non-negative")
+        self.mobility_bbox_enabled = bool(mobility_bbox_enabled)
+        self.mobility_bounds = None
+
 
     def init_simulation_env(self, sim_init_msg):
         '''
@@ -122,6 +138,7 @@ class SionnaEnv:
             return False, "Failed to load scene file in: " + filepath + ", error: " + str(e)
 
         self.bbox = self.scene.mi_scene.bbox()
+        self._init_mobility_bounds()
 
         if self.VERBOSE:
             # show some stats about the scene
@@ -206,6 +223,76 @@ class SionnaEnv:
         return True, "OK"
 
 
+    @staticmethod
+    def _scalar_to_float(value):
+        if hasattr(value, "numpy"):
+            value = value.numpy()
+        return float(np.asarray(value).reshape(-1)[0])
+
+
+    def _init_mobility_bounds(self):
+        self.mobility_bounds = None
+        if not self.mobility_bbox_enabled:
+            return
+
+        margin = self.mobility_bbox_margin
+        xmin = self._scalar_to_float(self.bbox.min.x) - margin
+        xmax = self._scalar_to_float(self.bbox.max.x) + margin
+        ymin = self._scalar_to_float(self.bbox.min.y) - margin
+        ymax = self._scalar_to_float(self.bbox.max.y) + margin
+        bounds = (xmin, xmax, ymin, ymax)
+        if not all(math.isfinite(value) for value in bounds) or xmin >= xmax or ymin >= ymax:
+            raise ValueError(f"Invalid scene bounding box for mobility: {bounds}")
+        self.mobility_bounds = bounds
+
+
+    def _next_bbox_hit(self, pos, direction, max_distance):
+        if self.mobility_bounds is None:
+            return None
+
+        xmin, xmax, ymin, ymax = self.mobility_bounds
+        candidates = []
+        for axis, lower, upper in ((0, xmin, xmax), (1, ymin, ymax)):
+            component = direction[axis]
+            if abs(component) <= self.MOBILITY_EPS:
+                continue
+            boundary = upper if component > 0 else lower
+            distance = (boundary - pos[axis]) / component
+            if -self.MOBILITY_EPS <= distance <= max_distance + self.MOBILITY_EPS:
+                candidates.append((max(0.0, distance), axis))
+
+        if not candidates:
+            return None
+        hit_distance = min(distance for distance, _ in candidates)
+        hit_axes = [axis for distance, axis in candidates
+                    if abs(distance - hit_distance) <= self.MOBILITY_NUDGE]
+        return hit_distance, hit_axes
+
+
+    def _update_nodes_to_time(self, target_time, node_ids):
+        if not self.absolute_time_mobility:
+            dt = target_time - self.sim_time
+            for node_id in node_ids:
+                self._walk(node_id, dt)
+            return
+
+        for node_id in node_ids:
+            node = self.node_info[node_id]
+            while node.last_update < target_time:
+                next_tick = ((node.last_update // self.equidistant_walk_steps) + 1) * self.equidistant_walk_steps
+                step_end = min(target_time, next_tick)
+                self._walk(node_id,
+                           step_end - node.last_update,
+                           start_time=node.last_update,
+                           allow_velocity_change=step_end == next_tick)
+                node = self.node_info[node_id]
+
+
+    def _make_mobility_rng(self, node_id):
+        seed = np.random.SeedSequence([int(self.my_seed), int(node_id), 0x51A0])
+        return np.random.default_rng(seed)
+
+
     def compute_cfr(self, csi_req, reply_wrapper):
 
         tx_node_id = csi_req.tx_node
@@ -259,14 +346,14 @@ class SionnaEnv:
 
         # sim future node positions
         lah_time_vec = []
+        mobility_checkpoint = None
         for lah_i in range(look_ahead):
-            # move in time
-            dt = req_sim_time - self.sim_time
+            self._update_nodes_to_time(req_sim_time, nodes_to_update)
+            if mobility_checkpoint is None:
+                mobility_checkpoint = copy.deepcopy(self.node_info)
 
             csi_tc_arr = []
             for node_id in nodes_to_update:
-                # perform walk
-                self._walk(node_id, dt)
                 if node_id != tx_node_id:
                     if self.fixed_coherence_time_ms == 0:
                         tc = coherence_from_velocities(self.node_info[node_id].velocity,
@@ -399,6 +486,9 @@ class SionnaEnv:
 
         print(f'{self.sim_time / 1e9}s: Computed CSI with Tc: {np.round(np.asarray(Tc_p2mp_lah) / 1e6,2)}ms, #links: {num_computed_lnks}')
 
+        if mobility_checkpoint is not None:
+            self.node_info = mobility_checkpoint
+            self.sim_time = lah_time_vec[0]
         return num_computed_lnks
 
 
@@ -514,69 +604,102 @@ class SionnaEnv:
         return len(rx_nodes)
 
 
-    def _walk(self, node_id, dt):
-        """
-        Move the given node to the given time interval.
-        :param node_id: node_id of the node to move
-        :param dt: time interval in ns
-        """
-        init_dt = dt
-
-        pos = self.node_info[node_id].pos
-        velocity = self.node_info[node_id].velocity
-
-        speed = np.linalg.norm(velocity)
-        if speed == 0:
+    def _walk(self, node_id, dt, start_time=None, allow_velocity_change=True):
+        """Advance one node by ``dt`` nanoseconds, reflecting at scene and bbox walls."""
+        if dt <= 0:
             return
 
-        # Check if the next position is inside the borders
-        # Calculate direction vector and travel distance
+        node = self.node_info[node_id]
+        start_time = self.sim_time if start_time is None else start_time
+        target_time = start_time + dt
+        pos = np.asarray(node.pos, dtype=float).copy()
+        velocity = np.asarray(node.velocity, dtype=float).copy()
+        speed = np.linalg.norm(velocity)
+
+        if not np.all(np.isfinite(pos)) or not np.all(np.isfinite(velocity)):
+            raise ValueError(f"Non-finite mobility state for node {node_id}")
+        if speed <= self.MOBILITY_EPS:
+            node.update_pos(target_time, pos, velocity, False)
+            node.check_set_new_velocity(target_time, 0.0, allow_velocity_change)
+            return
+
         direction = velocity / speed
-        distance = np.linalg.norm(velocity * dt / 1e9) # convert dt into sec
+        distance = speed * dt / 1e9
+        initial_distance = distance
 
-        while True:
-            # Create a ray
-            ray = mi.Ray3f(mi.Point3f(pos), mi.Vector3f(direction))
-            ray.maxt = mi.Float(distance)
+        if self.mobility_bounds is not None:
+            xmin, xmax, ymin, ymax = self.mobility_bounds
+            for axis, (lower, upper) in enumerate(((xmin, xmax), (ymin, ymax))):
+                if pos[axis] < lower or pos[axis] > upper:
+                    side = -1 if pos[axis] < lower else 1
+                    pos[axis] = np.clip(pos[axis], lower + self.MOBILITY_NUDGE,
+                                       upper - self.MOBILITY_NUDGE)
+                    if direction[axis] * side > 0:
+                        direction[axis] *= -1
 
-            # Calculate the intersection of the ray with the scene
-            si = self.scene.mi_scene.ray_intersect(ray, mi.RayFlags.Minimal, False, True)
-
-            if si.is_valid():
-                # If the ray hits an object, calculate the reflection
-
-                # The intersection point (position) is set back by one centimeter to prevent cases
-                # where the intersection point is found behind a wall
-                t_np = si.t.numpy()
-                t = float(t_np[0]) - 0.01
-                pos = pos + t * direction
-
-                # The reflected direction is calculated in the z plane
-                n = np.squeeze(si.n.numpy())
-                n = [n[1], -n[0], 0.0]
-                n = n / np.linalg.norm(n)
-
-                mob_theta = self.node_info[node_id].get_next_direction_angle()
-                direction = - (direction - 2 * (np.dot(direction, n) + mob_theta) * n)
-
-                velocity = direction * speed
-
-                # make sure we do not change speed
-                velocity = (velocity / np.linalg.norm(velocity)) * speed
-
-                distance -= t
-                dt -= (t / speed) * 1e9
-
-            else:
-                # If the ray does not hit an object, calculate the next position
+        bounces = 0
+        while distance > self.MOBILITY_EPS:
+            bounces += 1
+            if bounces > self.MAX_MOBILITY_BOUNCES:
+                warnings.warn(f"Node {node_id} exceeded the mobility bounce limit")
                 break
 
-        next_pos = pos + (velocity * dt / 1e9)
+            bbox_hit = self._next_bbox_hit(pos, direction, distance)
+            ray_distance = distance if bbox_hit is None else min(distance, bbox_hit[0])
+            ray = mi.Ray3f(mi.Point3f(pos), mi.Vector3f(direction))
+            ray.maxt = mi.Float(ray_distance)
+            interaction = self.scene.mi_scene.ray_intersect(
+                ray, mi.RayFlags.Minimal, False, True)
 
-        # update node pos & velocity
-        self.node_info[node_id].update_pos(self.sim_time + init_dt, next_pos, velocity, False)
-        # check if new velocity must be set
-        self.node_info[node_id].check_set_new_velocity(self.sim_time + init_dt, distance)
+            scene_distance = None
+            if interaction.is_valid():
+                scene_distance = max(float(interaction.t.numpy()[0]), 0.0)
+            scene_hit = (scene_distance is not None and
+                         (bbox_hit is None or
+                          scene_distance < bbox_hit[0] - self.MOBILITY_EPS))
+
+            if scene_hit:
+                travelled = min(max(scene_distance - 0.01, 0.0), distance)
+                pos += travelled * direction
+                distance -= travelled
+
+                normal = np.squeeze(interaction.n.numpy())
+                tangent = np.asarray([normal[1], -normal[0], 0.0], dtype=float)
+                tangent_norm = np.linalg.norm(tangent)
+                if tangent_norm <= self.MOBILITY_EPS:
+                    direction = -direction
+                else:
+                    tangent /= tangent_norm
+                    angle = node.get_next_direction_angle()
+                    direction = -(direction - 2 * (np.dot(direction, tangent) + angle) * tangent)
+                    direction_norm = np.linalg.norm(direction)
+                    direction = (-velocity / speed if direction_norm <= self.MOBILITY_EPS
+                                 else direction / direction_norm)
+
+                nudge = min(self.MOBILITY_NUDGE, distance)
+                pos += nudge * direction
+                distance -= nudge
+            elif bbox_hit is not None:
+                travelled, hit_axes = bbox_hit
+                pos += travelled * direction
+                distance -= travelled
+                for axis in hit_axes:
+                    direction[axis] *= -1
+
+                xmin, xmax, ymin, ymax = self.mobility_bounds
+                for axis in hit_axes:
+                    lower, upper = ((xmin, xmax), (ymin, ymax))[axis]
+                    pos[axis] = np.clip(pos[axis], lower + self.MOBILITY_NUDGE,
+                                       upper - self.MOBILITY_NUDGE)
+            else:
+                pos += distance * direction
+                distance = 0.0
+
+        velocity = direction * speed
+        node.update_pos(target_time, pos, velocity, bounces > 1)
+        node.check_set_new_velocity(target_time,
+                                    initial_distance - distance,
+                                    allow_velocity_change)
 
 
     def _place_tx_rx_node(self, tx_node: int, rx_nodes: list):
@@ -618,9 +741,6 @@ class SionnaEnv:
         :return: (list(rx_node), list(link propagation delay), list(wideband loss), list(normalized CFR))
         '''
 
-        # execute mobility
-        dt = req_sim_time - self.sim_time
-
         # estimate the node we need to update their position
         if req_mode == SionnaEnv.MODE_P2P:
             nodes_to_update = [tx_node, rx_node] # only TX and RX
@@ -628,8 +748,7 @@ class SionnaEnv:
             # both P2MP and P2MP_LAH
             nodes_to_update = sorted(self.node_info)
 
-        for node_id in nodes_to_update:
-            self._walk(node_id, dt)
+        self._update_nodes_to_time(req_sim_time, nodes_to_update)
 
         # update time
         self.sim_time = req_sim_time
@@ -750,9 +869,10 @@ class SionnaEnv:
                     direction_params = (random_walk_model.direction.normal.mean,
                                         random_walk_model.direction.normal.variance)
 
+                rng = self._make_mobility_rng(node_info.id) if self.absolute_time_mobility else None
                 self.node_info[node_info.id] = RandomWalkMobility(node_info.id, [pos.x, pos.y, pos.z],
                                                                   mode, mode_params, speed, speed_params,
-                                                                  direction, direction_params)
+                                                                  direction, direction_params, rng=rng)
 
 
     def run(self):
@@ -840,6 +960,12 @@ if __name__ == '__main__':
     parser.add_argument("--rt_max_parallel_links", type=int, default=256, help="Max no. of link simulated at once; depends on GPU memory")
     parser.add_argument("--est_csi", help="Whether to estimate complex CSI per OFDM subcarrier", type=bool, default=True)
     parser.add_argument("--verbose", help="Whether to run in verbose mode", action='store_true')
+    parser.add_argument("--equidistant_walk_steps", type=int, default=0,
+                        help="Fixed internal mobility step in ns; 0 uses request intervals")
+    parser.add_argument("--mobility_bbox_toggle", action='store_true',
+                        help="Reflect mobile nodes at the scene x/y bounding box")
+    parser.add_argument("--mobility_bbox_margin", type=float, default=1.0,
+                        help="Outward scene bounding-box margin in meters")
     args = parser.parse_args()
 
     print("ns3sionna v1.0")
@@ -848,7 +974,10 @@ if __name__ == '__main__':
               % (args.model_folder, args.single_run, args.default_mode, args.rt_fast, args.rt_max_parallel_links, args.est_csi))
         print("Waiting for new job ...")
         env = SionnaEnv(args.model_folder, args.rt_fast, args.default_mode, args.rt_max_parallel_links,
-                        args.est_csi, VERBOSE=args.verbose)
+                        args.est_csi, VERBOSE=args.verbose,
+                        equidistant_walk_steps=args.equidistant_walk_steps,
+                        mobility_bbox_margin=args.mobility_bbox_margin,
+                        mobility_bbox_enabled=args.mobility_bbox_toggle)
         env.run()
 
         if args.single_run:

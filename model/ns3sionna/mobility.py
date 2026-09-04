@@ -28,13 +28,13 @@ class AbstractMobility(ABC):
     def update_pos(self, sim_time, pos, velocity, hit_wall):
         assert sim_time >= self.last_update
         self.last_update = sim_time
-        self.pos = pos
-        self.velocity = velocity
+        self.pos = np.array(pos, copy=True)
+        self.velocity = np.array(velocity, copy=True)
         self.hit_wall = hit_wall
 
         if self.collect_history:
-            self.pos_history[sim_time] = pos
-            self.velo_history[sim_time] = velocity
+            self.pos_history[sim_time] = self.pos.copy()
+            self.velo_history[sim_time] = self.velocity.copy()
 
 
     @abstractmethod
@@ -53,7 +53,7 @@ class AbstractMobility(ABC):
 
 
     @abstractmethod
-    def check_set_new_velocity(self, sim_time, distance):
+    def check_set_new_velocity(self, sim_time, distance, allow_change=True):
         pass
 
 
@@ -67,13 +67,14 @@ class ConstantMobility(AbstractMobility):
     '''
     def __init__(self, node_id, pos, collect_history=True):
         super(ConstantMobility, self).__init__(node_id, pos, collect_history)
+        self.update_pos(0, self.pos.copy(), self.velocity.copy(), False)
 
 
     def get_next_direction_angle(self):
         return 0.0
 
 
-    def check_set_new_velocity(self, sim_time, distance):
+    def check_set_new_velocity(self, sim_time, distance, allow_change=True):
         pass
 
 
@@ -104,7 +105,7 @@ class RandomWalkMobility(AbstractMobility):
     '''
     A random walk mobility model with different modes and configurations.
     '''
-    def __init__(self, node_id, pos, mode, mode_params, speed, speed_params, direction, direction_params, collect_history=True):
+    def __init__(self, node_id, pos, mode, mode_params, speed, speed_params, direction, direction_params, rng=None, collect_history=True):
         super(RandomWalkMobility, self).__init__(node_id, pos, collect_history)
         self.mode = mode
         self.mode_params = mode_params
@@ -112,6 +113,7 @@ class RandomWalkMobility(AbstractMobility):
         self.speed_params = speed_params
         self.direction = direction
         self.direction_params = direction_params
+        self.rng = rng
 
         if self.mode == RandomWalkMobility.MODE_WALL:
             pass
@@ -122,6 +124,7 @@ class RandomWalkMobility(AbstractMobility):
 
         # init with some speed and direction
         self._set_new_velocity()
+        self.update_pos(0, self.pos.copy(), self.velocity.copy(), False)
 
 
     def get_pos_at(self, req_time):
@@ -141,31 +144,45 @@ class RandomWalkMobility(AbstractMobility):
         self.segment_distance = 0.0 # MODE_DISTANCE
 
 
-    def check_set_new_velocity(self, sim_time, distance):
+    def check_set_new_velocity(self, sim_time, distance, allow_change=True):
         if self.mode == RandomWalkMobility.MODE_WALL:
             return
         elif self.mode == RandomWalkMobility.MODE_TIME:
-            if sim_time - self.last_update_velocity >= self.time_period:
+            if allow_change and sim_time - self.last_update_velocity >= self.time_period:
                 self._set_new_velocity(sim_time)
+                if self.collect_history:
+                    self.pos_history[sim_time] = self.pos.copy()
+                    self.velo_history[sim_time] = self.velocity.copy()
         elif self.mode == RandomWalkMobility.MODE_DISTANCE:
             self.segment_distance += distance
-            if self.segment_distance >= self.distance_period:
+            if allow_change and self.segment_distance >= self.distance_period:
                 self._set_new_velocity(sim_time)
+                if self.collect_history:
+                    self.pos_history[sim_time] = self.pos.copy()
+                    self.velo_history[sim_time] = self.velocity.copy()
 
 
     def _get_next_speed(self):
         if self.speed == RandomWalkMobility.SPEED_UNIFORM:
-            return np.random.uniform(self.speed_params[0], self.speed_params[1])
+            if self.rng is None:
+                return np.random.uniform(self.speed_params[0], self.speed_params[1])
+            return self.rng.uniform(self.speed_params[0], self.speed_params[1])
         elif self.speed == RandomWalkMobility.SPEED_CONSTANT:
             return self.speed_params[0]
         elif self.speed == RandomWalkMobility.SPEED_NORMAL:
-            return np.random.normal(self.speed_params[0], self.speed_params[1])
+            if self.rng is None:
+                return np.random.normal(self.speed_params[0], self.speed_params[1])
+            return self.rng.normal(self.speed_params[0], self.speed_params[1])
 
 
     def get_next_direction_angle(self):
         if self.direction == RandomWalkMobility.DIRECTION_UNIFORM:
-            return np.random.uniform(self.direction_params[0], self.direction_params[1])
+            if self.rng is None:
+                return np.random.uniform(self.direction_params[0], self.direction_params[1])
+            return self.rng.uniform(self.direction_params[0], self.direction_params[1])
         elif self.direction == RandomWalkMobility.DIRECTION_CONSTANT:
             return self.direction_params[0]
         elif self.direction == RandomWalkMobility.DIRECTION_NORMAL:
-            return np.random.normal(self.direction_params[0], self.direction_params[1])
+            if self.rng is None:
+                return np.random.normal(self.direction_params[0], self.direction_params[1])
+            return self.rng.normal(self.direction_params[0], self.direction_params[1])
