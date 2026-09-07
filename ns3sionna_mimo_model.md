@@ -2938,6 +2938,35 @@ Server- und Raytracing-Suites wurden bewusst nicht erneut ausgeführt:
 Unterphase 4.5 ändert weder Python, Protocol Buffers, Serialisierung,
 Batching, Rohkanalcache, ZMQ, Sionna RT noch einen Serverpfad.
 
+### 7.8 Korrektur und Arbeitscheckpoint vom 7. September 2026
+
+Der Server konvertiert `fixed_coherence_time_ms` einmalig an der
+Konfigurationsgrenze in `fixed_coherence_time_ns`:
+
+    T_fixed,ns = T_fixed,ms * 1 000 000
+
+Alle drei festen Zeitpfade verwenden diese Nanosekundendauer. Null aktiviert
+weiterhin die dynamische Berechnung. Die neue AST-basierte Vertragssuite prüft
+die tatsächliche Konfigurationszuweisung sowie alle drei festen und dynamischen
+Zweige ohne Raytracing. Zusammen mit den bestehenden Datenvertrags- und
+Mobilitätstests bestanden elf Tests. Ein erster vollständiger Serverlauf bestand
+die ersten drei Fälle einschließlich realer 2x2-CFR; er wurde im Mode-3-Fall
+abgebrochen, weil die alte Testkonfiguration 100000 ms nun tatsächlich 100 s
+pro Look-ahead-Schritt bedeutete. Die Testfixtures verwenden jetzt 5 ms;
+die vollständige Serversuite muss damit noch erneut ausgeführt werden.
+
+Unterphase 4.4 bleibt nach dem Review ausdrücklich **nicht erneut abgenommen**.
+Die RU-Tonauswahl, gruppenweise Precoder-Leistungsnormierung, Trennung der
+Nicht-HE-Präambel und Mithörerbehandlung liegen als uncommitteter Arbeitsstand
+vor. Ein Zwischenbuild der Produktionsbibliothek bestand; er erfolgte vor den
+letzten Änderungen. Die neuen nativen Regressionen und insbesondere die echte
+PHY-Empfangsvalidierung sind noch fertigzustellen und auszuführen. Auf Wunsch
+des Nutzers wurde die Arbeit wegen des Sitzungsbudgets hier angehalten.
+Der genaue Plan und Wiederaufnahmepunkt stehen in
+`doc/mu-mimo-4.4-improvement-plan-2026-09-07.md`.
+Frühere Abnahmeaussagen in Abschnitt 4.4/7.6 sind historische Aussagen und
+werden durch diesen Reviewstatus eingeschränkt.
+
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 
 - SionnaMimoHelper überträgt eine gemeinsame TX- und RX-Geometrie für die
