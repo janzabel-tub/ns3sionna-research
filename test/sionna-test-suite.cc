@@ -4,6 +4,7 @@
  * Copyright (c) 2026
  */
 
+#include "ns3/boolean.h"
 #include "ns3/constant-position-mobility-model.h"
 #include "ns3/dl-mu-mimo-link-model.h"
 #include "ns3/double.h"
@@ -38,6 +39,7 @@
 #include "ns3/wifi-spectrum-value-helper.h"
 #include "ns3/wifi-tx-vector.h"
 
+#include <array>
 #include <cmath>
 #include <complex>
 #include <iterator>
@@ -85,6 +87,69 @@ IntegrateSpectrumBand(const SpectrumValue& psd, const WifiSpectrumBandIndices& i
     }
     return powerW;
 }
+
+class HeDlMuTestHePhy : public HePhy
+{
+  public:
+    explicit HeDlMuTestHePhy(uint16_t staId)
+        : m_staId(staId)
+    {
+    }
+
+    uint16_t GetStaId(const Ptr<const WifiPpdu> ppdu) const override
+    {
+        return ppdu->GetType() == WIFI_PPDU_TYPE_DL_MU ? m_staId : HePhy::GetStaId(ppdu);
+    }
+
+  private:
+    uint16_t m_staId;
+};
+
+class HeDlMuTestSpectrumWifiPhy : public SpectrumWifiPhy
+{
+  public:
+    static TypeId GetTypeId()
+    {
+        static TypeId tid =
+            TypeId("ns3::HeDlMuTestSpectrumWifiPhy")
+                .SetParent<SpectrumWifiPhy>()
+                .AddConstructor<HeDlMuTestSpectrumWifiPhy>()
+                .AddAttribute("StaId",
+                              "STA-ID returned while receiving a DL MU PPDU",
+                              UintegerValue(0),
+                              MakeUintegerAccessor(&HeDlMuTestSpectrumWifiPhy::m_staId),
+                              MakeUintegerChecker<uint16_t>());
+        return tid;
+    }
+
+  private:
+    void DoInitialize() override
+    {
+        m_testHePhy = Create<HeDlMuTestHePhy>(m_staId);
+        m_testHePhy->SetOwner(this);
+        m_phyEntities[WIFI_MOD_CLASS_HE] = m_testHePhy;
+        SpectrumWifiPhy::DoInitialize();
+    }
+
+    void DoDispose() override
+    {
+        m_testHePhy = nullptr;
+        SpectrumWifiPhy::DoDispose();
+    }
+
+    uint16_t m_staId{0};
+    Ptr<HeDlMuTestHePhy> m_testHePhy;
+};
+
+class HeDlMuTestSpectrumWifiPhyHelper : public SpectrumWifiPhyHelper
+{
+  public:
+    explicit HeDlMuTestSpectrumWifiPhyHelper(uint16_t staId)
+    {
+        m_phys.at(0).SetTypeId(HeDlMuTestSpectrumWifiPhy::GetTypeId());
+        Set("StaId", UintegerValue(staId));
+    }
+};
 
 SionnaMimoConfiguration
 MakeOpenLoop2x2Configuration()
@@ -3252,6 +3317,257 @@ class HeDlMuMimoSpectrumPpduIntegrationTest : public TestCase
     }
 };
 
+class HeDlMuMimoSpectrumChannelReceptionTest : public TestCase
+{
+  public:
+    HeDlMuMimoSpectrumChannelReceptionTest()
+        : TestCase("HE DL MU traverses SpectrumChannel and reaches addressed PHY payloads")
+    {
+    }
+
+  private:
+    void RxSuccess(std::size_t i, Ptr<const WifiPsdu>, RxSignalInfo info, WifiTxVector, std::vector<bool>)
+    {
+        ++m_success[i];
+        m_successSnr[i].push_back(info.snr);
+    }
+    void RxFailure(std::size_t i, Ptr<const WifiPsdu>) { ++m_failure[i]; }
+    void RxBegin(std::size_t i, Ptr<const Packet>, RxPowerWattPerChannelBand) { ++m_rxBegin[i]; }
+    void PayloadBegin(std::size_t i, WifiTxVector, Time) { ++m_payloadBegin[i]; }
+
+    void MimoRx(uint64_t, uint32_t, uint32_t rxNodeId, double sinr, double, uint32_t)
+    {
+        for (std::size_t i = 0; i < 2; ++i)
+        {
+            if (rxNodeId == m_scheduledNodeIds[i])
+            {
+                m_adapterSinr[i].push_back(sinr);
+            }
+        }
+    }
+
+    void SendCorrelated(Ptr<SionnaSpectrumPropagationLossModel> adapter,
+                        MultiUserChannelSnapshot snapshot,
+                        DlMuMimoPrecodingMatrix precoding,
+                        Ptr<SpectrumWifiPhy> apPhy,
+                        WifiConstPsduMap psdus,
+                        WifiTxVector txVector)
+    {
+        adapter->SetDlMuMimoState(snapshot, precoding);
+        apPhy->Send(psdus, txVector);
+    }
+
+    void CheckBystanderBusy(Ptr<SpectrumWifiPhy> phy)
+    {
+        ++m_bystanderBusyChecks;
+        NS_TEST_ASSERT_MSG_EQ(phy->GetState()->GetState(),
+                              WifiPhyState::CCA_BUSY,
+                              "Unaddressed station did not retain MU payload energy as CCA");
+    }
+
+    void DoRun() override
+    {
+        constexpr double noiseFigureDb = 7.0;
+        constexpr double txPowerDbm = -20.0;
+        constexpr uint16_t width = 20;
+        const std::array<uint16_t, 3> staIds{7, 11, 13};
+
+        auto channel = CreateObject<MultiModelSpectrumChannel>();
+        auto adapter = CreateObject<SionnaSpectrumPropagationLossModel>();
+        adapter->SetReceiverNoiseFigureDb(noiseFigureDb);
+        adapter->SetEesmBeta(11, 2.0);
+        channel->AddSpectrumPropagationLossModel(adapter);
+
+        NodeContainer apNode;
+        NodeContainer staNodes;
+        apNode.Create(1);
+        staNodes.Create(3);
+        apNode.Get(0)->AggregateObject(CreateObject<ConstantPositionMobilityModel>());
+        for (uint32_t i = 0; i < staNodes.GetN(); ++i)
+        {
+            staNodes.Get(i)->AggregateObject(CreateObject<ConstantPositionMobilityModel>());
+            staNodes.Get(i)->GetObject<MobilityModel>()->SetPosition({double(i + 1), 0.0, 0.0});
+        }
+
+        SpectrumWifiPhyHelper apPhyHelper;
+        apPhyHelper.SetChannel(channel);
+        ConfigureManualPhy(apPhyHelper, 2, 2, noiseFigureDb);
+        apPhyHelper.Set("TxPowerStart", DoubleValue(txPowerDbm));
+        apPhyHelper.Set("TxPowerEnd", DoubleValue(txPowerDbm));
+        WifiHelper wifi;
+        wifi.SetStandard(WIFI_STANDARD_80211ax);
+        WifiMacHelper mac;
+        mac.SetType("ns3::ApWifiMac", "BeaconGeneration", BooleanValue(false));
+        auto apDevice = DynamicCast<WifiNetDevice>(wifi.Install(apPhyHelper, mac, apNode).Get(0));
+        auto apPhy = DynamicCast<SpectrumWifiPhy>(apDevice->GetPhy());
+
+        std::array<Ptr<WifiNetDevice>, 3> staDevices;
+        std::array<Ptr<SpectrumWifiPhy>, 3> staPhys;
+        mac.SetType("ns3::StaWifiMac", "ActiveProbing", BooleanValue(false));
+        for (std::size_t i = 0; i < staIds.size(); ++i)
+        {
+            HeDlMuTestSpectrumWifiPhyHelper staPhyHelper(staIds[i]);
+            staPhyHelper.SetChannel(channel);
+            ConfigureManualPhy(staPhyHelper, 1, 1, noiseFigureDb);
+            staPhyHelper.SetPreambleDetectionModel("ns3::ThresholdPreambleDetectionModel");
+            staDevices[i] = DynamicCast<WifiNetDevice>(
+                wifi.Install(staPhyHelper, mac, staNodes.Get(i)).Get(0));
+            staPhys[i] = DynamicCast<SpectrumWifiPhy>(staDevices[i]->GetPhy());
+            staPhys[i]->SetReceiveOkCallback(
+                MakeCallback(&HeDlMuMimoSpectrumChannelReceptionTest::RxSuccess, this).Bind(i));
+            staPhys[i]->SetReceiveErrorCallback(
+                MakeCallback(&HeDlMuMimoSpectrumChannelReceptionTest::RxFailure, this).Bind(i));
+            staPhys[i]->TraceConnectWithoutContext(
+                "PhyRxBegin",
+                MakeCallback(&HeDlMuMimoSpectrumChannelReceptionTest::RxBegin, this).Bind(i));
+            staPhys[i]->TraceConnectWithoutContext(
+                "PhyRxPayloadBegin",
+                MakeCallback(&HeDlMuMimoSpectrumChannelReceptionTest::PayloadBegin, this).Bind(i));
+        }
+        apNode.Get(0)->GetObject<MobilityModel>()->SetPosition({0.0, 0.0, 0.0});
+        for (uint32_t i = 0; i < staNodes.GetN(); ++i)
+        {
+            staNodes.Get(i)->GetObject<MobilityModel>()->SetPosition({double(i + 1), 0.0, 0.0});
+        }
+
+        const WifiPhy::ChannelTuple operatingChannel{36, width, WIFI_PHY_BAND_5GHZ, 0};
+        apPhy->SetOperatingChannel(operatingChannel);
+        for (const auto& phy : staPhys)
+        {
+            phy->SetOperatingChannel(operatingChannel);
+        }
+
+        const HeRu::RuSpec fullRu(HeRu::RU_242_TONE, 1, true);
+        WifiTxVector txVector;
+        txVector.SetPreambleType(WIFI_PREAMBLE_HE_MU);
+        txVector.SetChannelWidth(width);
+        txVector.SetGuardInterval(800);
+        txVector.SetSigBMode(HePhy::GetVhtMcs(5));
+        txVector.SetHeMuUserInfo(staIds[0], {fullRu, 11, 1});
+        txVector.SetHeMuUserInfo(staIds[1], {fullRu, 11, 1});
+        NS_TEST_ASSERT_MSG_EQ(txVector.IsValid(), true, "Reception test TXVECTOR is invalid");
+
+        WifiConstPsduMap psdus;
+        for (std::size_t i = 0; i < 2; ++i)
+        {
+            WifiMacHeader header;
+            header.SetType(WIFI_MAC_QOSDATA);
+            header.SetQosTid(0);
+            header.SetAddr1(staDevices[i]->GetMac()->GetAddress());
+            header.SetAddr2(apDevice->GetMac()->GetAddress());
+            header.SetSequenceNumber(i + 1);
+            psdus.emplace(staIds[i], Create<WifiPsdu>(Create<Packet>(1200), header));
+            m_scheduledNodeIds[i] = staNodes.Get(i)->GetId();
+        }
+
+        const uint16_t center =
+            apPhy->GetOperatingChannel().GetPrimaryChannelCenterFrequency(width);
+        auto txPsd = WifiSpectrumValueHelper::CreateHeOfdmTxPowerSpectralDensity(
+            center,
+            width,
+            std::pow(10.0, (txPowerDbm - 30.0) / 10.0),
+            apPhy->GetGuardBandwidth(width));
+        const uint32_t numSubcarriers = txPsd->GetValuesN() - 1;
+        MimoChannelMatrix orthogonal3(numSubcarriers, 1, 2);
+        MimoChannelMatrix orthogonal9(numSubcarriers, 1, 2);
+        MimoChannelMatrix correlated3(numSubcarriers, 1, 2);
+        MimoChannelMatrix correlated9(numSubcarriers, 1, 2);
+        MimoChannelMatrix bystander(numSubcarriers, 1, 1);
+        for (uint32_t sc = 0; sc < numSubcarriers; ++sc)
+        {
+            orthogonal3.Set(sc, 0, 0, {1.0, 0.0});
+            orthogonal9.Set(sc, 0, 1, {1.0, 0.0});
+            correlated3.Set(sc, 0, 0, {1.0, 0.0});
+            correlated3.Set(sc, 0, 1, {1.0, 0.0});
+            correlated9.Set(sc, 0, 0, {1.0, 0.0});
+            correlated9.Set(sc, 0, 1, {1.0, 0.0});
+            bystander.Set(sc, 0, 0, {1.0, 0.0});
+        }
+        auto orthogonal = MakeDlMuSnapshot({{3, orthogonal3}, {9, orthogonal9}});
+        auto correlated = MakeDlMuSnapshot({{3, correlated3}, {9, correlated9}});
+        for (std::size_t i = 0; i < 2; ++i)
+        {
+            orthogonal.users[i].txNodeId = apNode.Get(0)->GetId();
+            orthogonal.users[i].rxNodeId = m_scheduledNodeIds[i];
+            orthogonal.users[i].widebandLossDb = 0.0;
+            correlated.users[i].txNodeId = apNode.Get(0)->GetId();
+            correlated.users[i].rxNodeId = m_scheduledNodeIds[i];
+            correlated.users[i].widebandLossDb = 0.0;
+        }
+        const auto precoding = MakeIdentityDlMuPrecoding(numSubcarriers);
+        adapter->SetFixedChannelMatrix(bystander, 0.0);
+        adapter->SetDlMuMimoState(orthogonal, precoding);
+        adapter->TraceConnectWithoutContext(
+            "MimoRx",
+            MakeCallback(&HeDlMuMimoSpectrumChannelReceptionTest::MimoRx, this));
+
+        const auto ruBand = DynamicCast<HePhy>(apPhy->GetPhyEntity(WIFI_MOD_CLASS_HE))
+                                ->GetRuBandForTx(txVector, staIds[0]);
+        const double ruPowerW = IntegrateSpectrumBand(*txPsd, ruBand.indices);
+        const double noisePowerW =
+            WifiLinkBudget::Calculate(0.0, 0.0,
+                                      HeRu::GetBandwidth(HeRu::RU_242_TONE) * 1e6,
+                                      290.0, noiseFigureDb).GetReceiverNoisePowerW();
+        m_expectedOrthogonalSinr = ruPowerW / (2.0 * noisePowerW);
+        m_expectedCorrelatedSinr = m_expectedOrthogonalSinr / (m_expectedOrthogonalSinr + 1.0);
+
+        apPhy->AssignStreams(1);
+        for (const auto& phy : staPhys) { phy->AssignStreams(1); }
+        const Time firstStart = MilliSeconds(1);
+        const Time ppduDuration = WifiPhy::CalculateTxDuration(psdus, txVector, WIFI_PHY_BAND_5GHZ);
+        const Time secondStart = firstStart + ppduDuration + MilliSeconds(1);
+        const Time payloadCheck = WifiPhy::CalculatePhyPreambleAndHeaderDuration(txVector) + NanoSeconds(1);
+        Simulator::Schedule(firstStart, [apPhy, psdus, txVector]() { apPhy->Send(psdus, txVector); });
+        Simulator::Schedule(firstStart + payloadCheck, &HeDlMuMimoSpectrumChannelReceptionTest::CheckBystanderBusy, this, staPhys[2]);
+        Simulator::Schedule(secondStart, &HeDlMuMimoSpectrumChannelReceptionTest::SendCorrelated,
+                            this, adapter, correlated, precoding, apPhy, psdus, txVector);
+        Simulator::Schedule(secondStart + payloadCheck, &HeDlMuMimoSpectrumChannelReceptionTest::CheckBystanderBusy, this, staPhys[2]);
+        Simulator::Stop(secondStart + ppduDuration + MicroSeconds(100));
+        Simulator::Run();
+
+        for (std::size_t i = 0; i < 2; ++i)
+        {
+            NS_TEST_ASSERT_MSG_EQ(m_success[i], 1, "Orthogonal MU payload was not decoded");
+            NS_TEST_ASSERT_MSG_EQ(m_failure[i], 1, "Correlated MU payload did not fail");
+            NS_TEST_ASSERT_MSG_EQ(m_rxBegin[i], 2, "Scheduled STA missed a common preamble");
+            NS_TEST_ASSERT_MSG_EQ(m_payloadBegin[i], 4, "Scheduled STA missed an MU spectrum portion");
+            NS_TEST_ASSERT_MSG_EQ(m_adapterSinr[i].size(), 2, "Adapter missed an MU payload");
+            if (m_adapterSinr[i].size() == 2)
+            {
+                NS_TEST_ASSERT_MSG_EQ_TOL(m_adapterSinr[i][0], m_expectedOrthogonalSinr,
+                                          m_expectedOrthogonalSinr * 1e-10,
+                                          "Orthogonal SINR disagrees with the link budget");
+                NS_TEST_ASSERT_MSG_EQ_TOL(m_adapterSinr[i][1], m_expectedCorrelatedSinr, 1e-10,
+                                          "Correlated SINR disagrees with the IUI expectation");
+            }
+            NS_TEST_ASSERT_MSG_EQ(m_successSnr[i].size(), 1, "Unexpected PHY SINR reports");
+            if (m_successSnr[i].size() == 1)
+            {
+                NS_TEST_ASSERT_MSG_EQ_TOL(m_successSnr[i][0], m_expectedOrthogonalSinr,
+                                          m_expectedOrthogonalSinr * 1e-6,
+                                          "Decoded PHY SINR disagrees with the link budget");
+            }
+        }
+        NS_TEST_ASSERT_MSG_EQ(m_success[2], 0, "Bystander decoded an MU PSDU");
+        NS_TEST_ASSERT_MSG_EQ(m_failure[2], 0, "Bystander received an addressed failure");
+        NS_TEST_ASSERT_MSG_EQ(m_rxBegin[2], 0, "Bystander reported an addressed RX begin");
+        NS_TEST_ASSERT_MSG_EQ(m_payloadBegin[2], 2, "Bystander did not track each MU payload as interference");
+        NS_TEST_ASSERT_MSG_EQ(m_bystanderBusyChecks, 2, "Bystander CCA was not checked twice");
+        Simulator::Destroy();
+    }
+
+    std::array<uint32_t, 3> m_success{};
+    std::array<uint32_t, 3> m_failure{};
+    std::array<uint32_t, 3> m_rxBegin{};
+    std::array<uint32_t, 3> m_payloadBegin{};
+    std::array<uint32_t, 2> m_scheduledNodeIds{};
+    std::array<std::vector<double>, 2> m_adapterSinr;
+    std::array<std::vector<double>, 2> m_successSnr;
+    uint32_t m_bystanderBusyChecks{0};
+    double m_expectedOrthogonalSinr{0.0};
+    double m_expectedCorrelatedSinr{0.0};
+};
+
 class DlMuMimoZfRzfAnalyticalTest : public TestCase
 {
   public:
@@ -3928,6 +4244,7 @@ class SionnaTestSuite : public TestSuite
         AddTestCase(new HeDlMuMimoSpectrumAdapterTest, TestCase::QUICK);
         AddTestCase(new HeDlMuMimoSpectrumAdapterRejectionTest, TestCase::QUICK);
         AddTestCase(new HeDlMuMimoSpectrumPpduIntegrationTest, TestCase::QUICK);
+        AddTestCase(new HeDlMuMimoSpectrumChannelReceptionTest, TestCase::QUICK);
         AddTestCase(new DlMuMimoZfRzfAnalyticalTest, TestCase::QUICK);
         AddTestCase(new DlMuMimoZfRzfRejectionTest, TestCase::QUICK);
         AddTestCase(new DlMuMimoRejectionTest, TestCase::QUICK);

@@ -114,6 +114,8 @@ build_lib(
         test/sionna-test-suite.cc
         test/mimo-csi-feedback-test-suite.cc
         test/dl-mu-mimo-runtime-test-suite.cc
+        test/dl-mu-mimo-ru-test-suite.cc
+        test/he-dl-mu-spectrum-ru-test-suite.cc
         ${examples_as_tests_sources}
 )
 

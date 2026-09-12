@@ -514,12 +514,6 @@ DlMuMimoLinkModel::Calculate(const MultiUserChannelSnapshot& snapshot,
 
     const auto& matrix = precoding.GetPrecodingMatrix();
     const uint32_t totalStreams = matrix.GetNumStreams();
-    std::map<uint32_t, uint32_t> streamsByGroup;
-    for (uint32_t column = 0; column < totalStreams; ++column)
-    {
-        const auto& mapping = precoding.GetStreamMapping(column);
-        ++streamsByGroup[groupByUser.at(mapping.userId)];
-    }
     DlMuMimoLinkResult result;
     result.m_users.reserve(snapshot.users.size());
 
@@ -529,9 +523,6 @@ DlMuMimoLinkModel::Calculate(const MultiUserChannelSnapshot& snapshot,
         const uint32_t numRxAntennas = user.channel.GetNumRxAntennas();
         const uint32_t numUserStreams = precoding.GetNumStreamsForUser(user.userId);
         const uint32_t userGroup = groupByUser.at(user.userId);
-        const double streamSnr =
-            snrByUser.at(user.userId) / streamsByGroup.at(userGroup);
-
         DlMuMimoUserResult userResult;
         userResult.m_userId = user.userId;
         userResult.m_numSubcarriers = numSubcarriers;
@@ -544,6 +535,26 @@ DlMuMimoLinkModel::Calculate(const MultiUserChannelSnapshot& snapshot,
 
         for (uint32_t sc = 0; sc < numSubcarriers; ++sc)
         {
+            double activePrecoderPower = 0.0;
+            for (uint32_t column = 0; column < totalStreams; ++column)
+            {
+                const auto& mapping = precoding.GetStreamMapping(column);
+                if (groupByUser.at(mapping.userId) == userGroup)
+                {
+                    activePrecoderPower += precoding.GetStreamPower(sc, column);
+                }
+            }
+            if (!std::isfinite(activePrecoderPower) || activePrecoderPower <= 0.0)
+            {
+                Reject("every orthogonality group must have finite positive active precoder "
+                       "power on every subcarrier");
+            }
+            const double streamSnr = snrByUser.at(user.userId) / activePrecoderPower;
+            if (!std::isfinite(streamSnr))
+            {
+                Reject("orthogonality-group precoder normalization produced a non-finite SNR");
+            }
+
             Eigen::MatrixXcd effective(numRxAntennas, totalStreams);
             for (uint32_t rx = 0; rx < numRxAntennas; ++rx)
             {

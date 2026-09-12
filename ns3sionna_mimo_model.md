@@ -1,6 +1,6 @@
 # ns3sionna: MIMO-Abstraktionsmodell für IEEE 802.11ax/be
 
-Stand: 21. August 2026, Unterphase 4.3 abgeschlossen und validiert
+Stand: 12. September 2026, Unterphase 4.5 implementiert; Korrektur 4.4 abgeschlossen und validiert
 
 Arbeitszweig: feature/su-mimo-minimal
 
@@ -15,7 +15,7 @@ Precoding und MU-MIMO, wird ausschließlich in ns-3 ausgeführt.
 
 Die Entwicklung erfolgt in kleinen, einzeln testbaren Schritten. Der aktuelle
 Stand umfasst die Unterphasen 1.1 bis 1.4, die vollständige Phase 2 sowie
-die Unterphasen 3.1 bis 3.5 sowie 4.1 bis 4.3: den numerischen SU-MIMO-Kern, konfigurierbare
+die Unterphasen 3.1 bis 3.5 sowie 4.1 bis 4.5: den numerischen SU-MIMO-Kern, konfigurierbare
 Sionna-Arrays, einen
 dimensionssicheren MIMO-Datenvertrag, explizit kalibrierbare
 802.11ax-EESM-/PER-Abbildung und die
@@ -527,7 +527,7 @@ lehnen Überlast und Rangverlust ab und skalieren erst das fertige Ergebnis auf
 die Phase-4.2-Gesamtleistung. Die schnellen nativen Referenzfälle in
 Abschnitt 7.5 erfüllen das Abnahmekriterium.
 
-#### Unterphase 4.4: HE-Downlink-MU-PHY-Integration (implementiert)
+#### Unterphase 4.4: HE-Downlink-MU-PHY-Integration (korrigiert und validiert)
 
 - Den gemeinsamen MU-Zustand in den schmalsten geeigneten
   SpectrumWifiPhy-Pfad für `WIFI_PREAMBLE_HE_MU` einkoppeln.
@@ -549,14 +549,14 @@ Empfänger verändern keinen MU-Zustand. Der bestehende SU-Pfad bleibt
 bit- und funktionskompatibel. EHT bleibt bis zu einer expliziten
 EHT-Link-/PER-Abstraktion als nicht unterstützt gekennzeichnet.
 
-Dieses Kriterium ist erfüllt: Der Spectrumadapter übernimmt für
-`WIFI_PREAMBLE_HE_MU` einen vollständig validierten Phase-4.1-Snapshot samt
-gemeinsamem Phase-4.2-/4.3-Precoder. Empfängeradressen werden eindeutig auf
-STA-IDs und damit auf RU, MCS und NSS des vorhandenen `HeMuUserInfoMap`
-abgebildet. Die gemeinsame Matrixrechnung trennt gleiche und verschiedene
-RUs vor der skalaren PSD-Übergabe; synthetische und echte HE-MU-PPDU-Tests in
-Abschnitt 7.6 erfüllen das Abnahmekriterium. Die Implementierung nahm
-Unterphase 4.5 nicht vorweg.
+Die erste Implementierung vom 3. September prüfte die direkte
+PPDU-/Adapterverdrahtung. Der Review vom 5. September zeigte Fehler in der
+RU-Frequenzauswahl, RU-Leistungsnormierung, gemeinsamen Präambel und Behandlung
+mithörender Stationen. Die Korrektur ergänzt explizite belegte Tonindizes,
+gruppenweise Leistungsnormierung und getrennte Nicht-HE-/Nutzdatenpfade.
+Die neuen numerischen und echten Kanal-/PHY-Empfangstests sowie der tatsächliche
+Validierungsstand stehen in Abschnitt 7.9. Der genaue Arbeitsplan steht in
+`doc/mu-mimo-4.4-improvement-plan-2026-09-07.md`.
 
 #### Unterphase 4.5: Laufzeit-CSI und Scheduler-Schnittstelle (implementiert)
 
@@ -1960,62 +1960,111 @@ durch Unterphase 4.3 nicht geändert.
 
 ### 5.15 HE-Downlink-MU-Spectrumintegration der Unterphase 4.4
 
-`SionnaSpectrumPropagationLossModel::SetDlMuMimoState` übernimmt genau einen
-wertbasierten, zuvor vollständig geprüften Downlink-Snapshot und dessen
-gemeinsamen `DlMuMimoPrecodingMatrix`. Der Zustand ist absichtlich explizit:
-Unterphase 4.4 ergänzt weder automatische CSI-Aktualisierung noch Scheduler
-oder einen Precoder-Laufzeitcache.
+`SetDlMuMimoState` übernimmt einen wertbasierten Downlink-Snapshot und dessen
+gemeinsamen Precoder. Vor der atomaren Installation werden numerische
+Dimensionen, Zeit-/Nutzerordnung und Precoder geprüft. Zusätzlich müssen ein
+gemeinsamer Sender, eindeutige Empfänger ohne Selbstverbindung und endliche
+Widebandverluste vorliegen. Diese Installationsprüfung ersetzt nicht die
+Array-/Normalisierungsprüfung des Protobuf-Deserialisierers; die direkte
+numerische API bleibt für synthetische Referenzkanäle nutzbar.
 
-Nur ein `HePpdu` mit `WIFI_PREAMBLE_HE_MU` aktiviert den neuen Pfad. Der
-Sender muss ein AP sein. Für jeden Snapshotempfänger wird dessen MAC-Adresse
-mit der Zieladresse genau eines PSDU verknüpft und so die vorhandene STA-ID
-bestimmt. RU, MCS und NSS werden danach ausschließlich aus dem
-`WifiTxVector::HeMuUserInfoMap` gelesen. Nutzer-ID und STA-ID bleiben getrennte
-Identitäten; die Eingabereihenfolge beeinflusst das Ergebnis nicht.
+Die installierte Gruppe gilt nur für ihre gerichteten AP-/Empfängerlinks und
+tatsächlich adressierte PSDUs. Die MAC-Zieladresse wird eindeutig auf die STA-ID
+abgebildet; RU, MCS und NSS stammen aus `WifiTxVector::HeMuUserInfoMap`.
+Mithörer und andere Sender verwenden ihren physikalischen Cache-/Festkanalpfad
+und ändern den installierten MU-Zustand nicht. Auch ein Teilnehmer einer zuvor
+installierten Gruppe darf ein aktuell nicht an ihn adressiertes PPDU mithören.
+Für diese Verbindungen muss deshalb ein physikalischer Kanal konfiguriert sein.
 
-Zwei Nutzer gehören genau dann zur selben Orthogonalitätsgruppe, wenn ihre
-`HeRu::RuSpec`-Werte gleich sind. Für eine Gruppe \(g\) mit \(N_{s,g}\)
-räumlich gemultiplexten Streams gilt weiterhin die Phase-4.2-Normierung, nun
-bezogen auf die Leistung der belegten RU:
-
-\[
-  \rho_u = \frac{P_{\mathrm{RU}(u)} L_u G_{\mathrm{rx},u}}{N_u},
-  \qquad
-  \rho_{u,s}=\frac{\rho_u}{N_{s,g(u)}}.
-\]
-
-Spalten aus derselben Gruppe gehen gemeinsam in die MMSE-Kovarianz und als
-Inter-User-Interferenz ein. Spalten anderer RUs werden weder in die
-Kovarianz noch in die Interferenzsumme aufgenommen. Damit besitzt jede RU ihre
-aus der gesendeten PSD integrierte AP-Leistung; nur gleichzeitig in derselben
-RU gesendete Streams teilen diese Leistung.
-
-Der skalare SpectrumChannel-Pfadverlust liegt beim Eintritt in den Adapter
-bereits in `params->psd`. Der Adapter rekonstruiert daraus einmalig die
-AP-RU-Leistung, wendet für jeden Snapshotnutzer genau dessen Widebandverlust
-und Empfangsgewinn an und berechnet das Rauschen einmal aus RU-Bandbreite,
-290 K und der konsistenten PHY-Rauschzahl. Erst nachdem der vollständige
-Mehrnutzerkanal gemeinsam durch MMSE, EESM und ErrorRateModel gelaufen ist,
-wird für den adressierten Empfänger
+**Belegte Frequenzen.** Die Laufzeit-CFR verwendet das Sender-PSD-Gitter mit
+78,125 kHz Abstand, abzüglich des abschließenden zusätzlichen Guardbins.
+`HeRu::GetSubcarrierGroup` liefert die einzelnen belegten Teilspannen;
+`HePhy::ConvertHeRuSubcarriers` bildet sie auf dieses Sendergitter ab.
+RX-Bandindizes dürfen bei unterschiedlicher Betriebsbandbreite nicht zur
+Indizierung des Sendespektrums verwendet werden.
+Datentöne und Piloten gehen gleich gewichtet in die Abstraktion ein; DC,
+Nulltöne, Guardtöne und andere RUs werden ausgeschlossen. Dies modelliert
+keine gesonderten Pilotschätzfehler. Für die belegte Tonmenge $K_u$ gilt
 
 \[
-  P_{\mathrm{eq},u}=
-  \gamma_{\mathrm{eff},u}\,N_u/G_{\mathrm{AWGN},u}
+ \gamma_{\mathrm{eff},u}=-\beta_{m_u}\log\left(
+ \frac{1}{|K_u|N_{s,u}}\sum_{k\in K_u}\sum_s
+ e^{-\gamma_{u,s}[k]/\beta_{m_u}}\right).
 \]
 
-gebildet und dessen Empfangs-PSD skaliert. Die Skalierung erfolgt vor der
-bestehenden abschließenden `RxGain`-Multiplikation; deshalb gehen AP-Leistung,
-Pfadverlust, Rauschen, AWGN-Diversity-Kompensation und Empfangsgewinn jeweils
-genau einmal ein.
+Auch eine Vollband-RU benötigt eine explizite Tonauswahl. Die optionale Liste
+`subcarrierIndices` darf nur in der direkten numerischen API leer bleiben und
+bezeichnet dort wie bisher das gesamte übergebene Gitter. Im Laufzeitpfad ist
+sie stets nicht leer. Doppelte oder außerhalb der CFR liegende Indizes werden
+abgelehnt. Matrixdiagnostik bleibt auf dem vollständigen Gitter verfügbar;
+nur die ausgewählten Töne gehen in die EESM-/PER-Reduktion ein.
 
-Vor PSD-Skalierung, Paketmarkierung oder Zustandsänderung werden Präambel und
-Richtung, AP/STA-Rollen, Snapshotidentität, vollständige Adressierung,
-eindeutige STA-IDs, RU-/MCS-/NSS-Metadaten, Paketgrößen, Fehlerkurvenmodell,
-Rauschzahl sowie TX-, RX-, Stream-, CFR-, Precoder- und Spektrumdimensionen
-geprüft. Unbekannte, nicht adressierte oder inkonsistente Empfänger brechen
-eindeutig ab. HE-SU und alle bisherigen 1x1-, festen-W[k]-, ZF-/RZF-,
-Serialisierungs-, Batching- und Cachepfade bleiben unverändert; EHT-MU und
-EHT-TB werden ausdrücklich abgelehnt.
+**Leistung je RU.** Gleiche `HeRu::RuSpec`-Werte bilden eine Gruppe $g$. Auf
+jedem Ton wird die Energie aller in dieser Gruppe aktiven Spalten berechnet:
+
+\[
+ E_g[k]=\sum_{j\in g}\sum_t |W_{t,j}[k]|^2,\qquad
+ \rho_u=\frac{P_{\mathrm{RU}(u)}L_uG_{\mathrm{rx},u}}{N_u},\qquad
+ \rho_{u,s}[k]=\frac{\rho_u}{E_{g(u)}[k]}.
+\]
+
+Dieser letzte Faktor wird konsistent in gewünschter Leistung, MMSE-Kovarianz
+und Interferenz verwendet. Damit gilt
+$\sum_{j\in g}P_g\|w_j[k]\|^2/E_g[k]=P_g$, auch für ungleiche Spaltennormen
+und ungleiche RU-Leistungen. Relative Gewichte innerhalb einer RU bleiben
+erhalten. Beim bisherigen Ein-Gruppen-Vertrag gilt $E_g[k]=N_{s,\mathrm{ges}}$,
+also die bisherige Skalierung. Gruppenenergie muss auf jedem numerisch
+ausgewerteten Ton endlich und positiv sein; vollständig abgeschaltete
+Gruppenspalten werden explizit abgelehnt. Andere RUs gehen nicht in die
+MMSE-Kovarianz oder IUI ein.
+
+Der skalare SpectrumChannel-Pfadverlust liegt beim Eintritt bereits in der
+PSD. RU-Leistung wird über die vom PHY verwendete umschließende RU-Bandspanne
+auf dem Sendergitter integriert. Der Adapter rekonstruiert die AP-RU-Leistung
+und wendet pro Snapshotnutzer dessen Widebandverlust und Empfangsgewinn an.
+Rauschen verwendet die nominelle ns-3-RU-Bandbreite, 290 K und die konsistente
+PHY-Rauschzahl. Die skalare Nutzdatenleistung ist
+
+\[
+ P_{\mathrm{eq},u}=\gamma_{\mathrm{eff},u}N_u/G_{\mathrm{AWGN},u}.
+\]
+
+Nur die RU-Bandspanne des aktuellen Nutzers wird auf diese Leistung skaliert;
+der nachgelagerte PHY-Empfangsgewinn wird vorher herausgerechnet. Außerhalb
+der RU wird auf anderen belegten RUs die tatsächliche Energie
+$\sum_{j\in g}|H[k,0,:]w_j[k]|^2/E_g[k]$ verwendet. Unbelegte
+Spektralmaskenbins verwenden die Gleichleistungs-Antennenannahme. Eine Nutzdaten-SINR darf
+nicht alle fremden Interferenzbänder skalieren.
+
+**Gemeinsame Präambel und Mithörer.** Nur die adressierte
+`HePpdu::PSD_HE_PORTION` verwendet die MU-Nutzdatenabstraktion. Die gemeinsame
+`PSD_NON_HE_PORTION` enthält keine IUI- oder MCS-Beta-Kompression. Als
+explizites physikalisches Modell gelten gleiche Leistung je TX-Antenne und
+die erste RX-Verzweigung:
+
+\[
+ G_{\mathrm{common}}[k]=\frac{1}{N_{\mathrm{tx}}}\sum_t|H[k,0,t]|^2.
+\]
+
+Die vorhandene PHY-Verarbeitung behandelt anschließend Empfangsgewinn und
+skalare Diversity. ns-3.40 sendet die Nicht-HE-Portion mit 312,5 kHz Abstand;
+die installierte HE-CFR besitzt 78,125 kHz Abstand. Bei gleichem Zentrum und
+Bandumfang wird jeder vierte CFR-Eintrag am entsprechenden Frequenzzentrum
+verwendet. Gleich aufgelöste Cache-CFR bleiben ebenfalls zulässig.
+Der physikalische HE-MU-Pfad für Mithörer verwendet dieselbe
+Gleichleistungsannahme. Dies modelliert kein separates Präambel-Beamforming
+und keine räumliche Kovarianz fremder MU-Interferenz. Gemeinsame Portionen und
+Mithörer erhalten kein MU-Payload-CFR-Tag. Die HE-Portion umfasst im
+ns-3-Spektrumpfad auch HE-Training; eine weitere feldweise Trennung wird hier
+nicht eingeführt.
+
+Inkonsistente Metadaten adressierter installierter Teilnehmer werden weiterhin
+abgelehnt. HE-SU und die bisherigen numerischen 1x1-/Precoderverträge bleiben
+kompatibel. EHT-MU und EHT-TB werden weiterhin abgelehnt. Die Gruppenrechnung
+wird noch pro Empfänger ausgeführt; diese quadratische Adapterarbeit bleibt
+eine bekannte Leistungsgrenze. Automatischer Scheduler, Helperfreigabe für
+MU, Uplink und wissenschaftliche EESM-Kalibrierung sind nicht Teil dieser
+Korrektur.
 
 ### 5.16 Laufzeit-CSI und Scheduler-Schnittstelle der Unterphase 4.5
 
@@ -2639,6 +2688,16 @@ Die native Suite sionna enthält nun 33 schnelle Fälle:
     Pfadverlusten und positivem Empfangsgewinn. Die je STA zurückgegebene
     skalare RU-PSD wird mit der zuvor gemeinsam berechneten Matrixreferenz
     verglichen.
+37. Korrigierter numerischer RU-Vertrag mit gruppenweiser Precoderleistung,
+    ungleichen Spaltennormen und Leistungsbudgets, ausgewählten EESM-Tönen,
+    Invarianz außerhalb der Auswahl sowie Ablehnung ungültiger Tonlisten.
+38. Unabhängiger Runtime-RU-Fall für 242-, 106- und mittlere 26-Ton-RUs. Er
+    prüft Nulltöne, Frequenzzuordnung, fremde RU-Energie mit dem tatsächlichen
+    Precoder, das 4:1-Präambelraster und normale Mithörer-/Fremdsenderpfade.
+39. Echter Channel-/PHY-Lauf mit zwei adressierten STAs und einem Mithörer.
+    Orthogonale Nutzer dekodieren mit analytischer SINR; korrelierte Nutzer
+    erreichen die Nutzdatenphase und scheitern. Der Mithörer hält CCA busy,
+    erhält aber kein PSDU.
 
 Die eigenständige native Suite `sionna-mimo-csi-feedback` ergänzt zwei Fälle
 für Unterphase 3.4. Der Feedbackfall prüft HE und EHT, beide SU-Codebücher,
@@ -2671,9 +2730,12 @@ Phase 4.3 prüft ZF-Interferenz und Precoderleistung innerhalb $10^{-12}$ sowie
 Einzelnutzer-/1x1-SINR innerhalb $10^{-10}$; deterministische Wiederholungen
 werden koeffizientengenau verglichen.
 Phase 4.4 prüft gleiche-RU-Interferenz, analytische SINR, EESM/PER,
-Link Budget und äquivalente Leistung innerhalb $10^{-12}$. Die echte
-HE-MU-PPDU-Integration vergleicht die skalare RU-PSD mit einer relativen
-Toleranz von $10^{-10}$.
+Link Budget und äquivalente Leistung innerhalb $10^{-12}$. Die direkte
+HE-MU-PPDU-Integration verwendet relative $10^{-10}$. Der unabhängige
+Runtime-RU-Test vergleicht EESM/Spektrum innerhalb $10^{-4}$; diese Grenze
+bleibt deutlich unter dem Abstand verschiedener Ton- oder RU-Zuordnungen.
+Exakte Invarianz-, Nullenergie-, Adressierungs- und PHY-Ereignisbedingungen
+werden separat geprüft.
 
 Die eigenständige native Suite `dl-mu-mimo-runtime` ergänzt zwei schnelle
 Fälle für Unterphase 4.5. Der Auswahlfall prüft feste und
@@ -2938,7 +3000,7 @@ Server- und Raytracing-Suites wurden bewusst nicht erneut ausgeführt:
 Unterphase 4.5 ändert weder Python, Protocol Buffers, Serialisierung,
 Batching, Rohkanalcache, ZMQ, Sionna RT noch einen Serverpfad.
 
-### 7.8 Korrektur und Arbeitscheckpoint vom 7. September 2026
+### 7.8 Korrektur der festen Kohärenzzeit
 
 Der Server konvertiert `fixed_coherence_time_ms` einmalig an der
 Konfigurationsgrenze in `fixed_coherence_time_ns`:
@@ -2948,24 +3010,52 @@ Konfigurationsgrenze in `fixed_coherence_time_ns`:
 Alle drei festen Zeitpfade verwenden diese Nanosekundendauer. Null aktiviert
 weiterhin die dynamische Berechnung. Die neue AST-basierte Vertragssuite prüft
 die tatsächliche Konfigurationszuweisung sowie alle drei festen und dynamischen
-Zweige ohne Raytracing. Zusammen mit den bestehenden Datenvertrags- und
-Mobilitätstests bestanden elf Tests. Ein erster vollständiger Serverlauf bestand
-die ersten drei Fälle einschließlich realer 2x2-CFR; er wurde im Mode-3-Fall
-abgebrochen, weil die alte Testkonfiguration 100000 ms nun tatsächlich 100 s
-pro Look-ahead-Schritt bedeutete. Die Testfixtures verwenden jetzt 5 ms;
-die vollständige Serversuite muss damit noch erneut ausgeführt werden.
+Zweige ohne Raytracing. Die vollständige Python-/CPU-Serversuite bestand am
+11. September mit allen 19 Fällen in 229,102 s. Sie umfasst Datenvertrag,
+deterministische Mobilität, feste und dynamische Kohärenzzeit sowie reale
+1x1-/2x2-CFRs. Die Serverfixtures verwenden 5 ms statt des früheren Testwerts
+100000 ms. Diese Korrektur wurde mit Commit `8c112b6` eingecheckt.
 
-Unterphase 4.4 bleibt nach dem Review ausdrücklich **nicht erneut abgenommen**.
-Die RU-Tonauswahl, gruppenweise Precoder-Leistungsnormierung, Trennung der
-Nicht-HE-Präambel und Mithörerbehandlung liegen als uncommitteter Arbeitsstand
-vor. Ein Zwischenbuild der Produktionsbibliothek bestand; er erfolgte vor den
-letzten Änderungen. Die neuen nativen Regressionen und insbesondere die echte
-PHY-Empfangsvalidierung sind noch fertigzustellen und auszuführen. Auf Wunsch
-des Nutzers wurde die Arbeit wegen des Sitzungsbudgets hier angehalten.
-Der genaue Plan und Wiederaufnahmepunkt stehen in
-`doc/mu-mimo-4.4-improvement-plan-2026-09-07.md`.
-Frühere Abnahmeaussagen in Abschnitt 4.4/7.6 sind historische Aussagen und
-werden durch diesen Reviewstatus eingeschränkt.
+### 7.9 Erneute Validierung der korrigierten Unterphase 4.4
+
+Am 12. September 2026 wurden nach Abschluss der Korrekturen folgende Prüfungen
+auf derselben CPU-Referenzplattform erfolgreich ausgeführt:
+
+- Build des Ziels `sionna-test` einschließlich der neuen nativen Testdateien
+- `dl-mu-mimo-ru`: Spaltenleistungen 1,5/0,5 bei gleichen und ungleichen
+  RU-Budgets, relative Gewichte innerhalb derselben RU, Ablehnung einer Gruppe
+  ohne aktive Leistung, der analytische EESM-Gegenfall `[10,0]`, Invarianz
+  außerhalb der RU sowie ungültige Tonindizes
+- `he-dl-mu-spectrum-ru`: unabhängig festgelegte belegte Tonbereiche für
+  Vollband-242-, getrennte 106- und zweigeteilte mittlere 26-Ton-RUs;
+  DC-/Null-/Guardausschluss, Frequenzselektivität, Invarianz außerhalb der RU,
+  tatsächliche `H W`-Energie einer fremden RU, 312,5-/78,125-kHz-Abbildung der
+  gemeinsamen Präambel, atomare Zustandsablehnung sowie physikalische Pfade
+  für Mithörer und einen anderen AP
+- native Suite `sionna` mit allen 37 Fällen; der neue Fall sendet zwei normale
+  HE-DL-MU-PPDUs über `MultiModelSpectrumChannel` an zwei adressierte Stationen
+  und einen Mithörer. Beide Stationen dekodieren den orthogonalen Fall mit der
+  unabhängig berechneten PHY-SINR, erreichen im korrelierten Fall die
+  Nutzdatenphase und melden einen Empfangsfehler. Der Mithörer hält CCA busy,
+  dekodiert aber kein PSDU. Gemeinsame Nicht-HE- und HE-Portionen werden damit
+  im echten PHY-Ablauf erfasst.
+- unveränderte Suite `dl-mu-mimo-runtime`; Phase-4.5-Auswahl, ZF/RZF,
+  Scheduleridentität und Negativmatrix bestanden
+- unveränderte Suite `sionna-mimo-csi-feedback` erfolgreich
+- unveränderte ExampleAsTest-Suites `sionna-example-sumimo-minimal`,
+  `sionna-example-sumimo-precoding`,
+  `sionna-example-sumimo-precoding-negative`,
+  `sionna-example-mimo-helper-configuration-negative` und
+  `sionna-example-mimo-helper-runtime-negative` jeweils erfolgreich
+- vollständige Python-/CPU-Serversuite mit allen 19 Fällen, einschließlich
+  realer 2x2-CFR, erfolgreich
+- `git diff --check` ohne Befund
+
+Damit ist das Abnahmekriterium der Unterphase 4.4 nach der Korrektur erfüllt.
+Die Gruppenrechnung wird weiterhin einmal je adressiertem Empfänger ausgeführt;
+diese bekannte Leistungseinschränkung ändert die funktionale Abnahme nicht.
+Helperfreigabe, automatischer Scheduler, Uplink und wissenschaftliche
+EESM-Kalibrierung bleiben spätere Unterphasen.
 
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 
@@ -3074,6 +3164,8 @@ Vom ns-3.40-Verzeichnis:
     ./ns3 configure --enable-examples --enable-tests
     ./ns3 build
     ./test.py -s sionna
+    ./test.py -s dl-mu-mimo-ru
+    ./test.py -s he-dl-mu-spectrum-ru
     ./test.py -s dl-mu-mimo-runtime
     ./test.py -s sionna-mimo-csi-feedback
     ./test.py -s sionna-example-sumimo-minimal
@@ -3102,6 +3194,3 @@ PDF neu erzeugen:
 
 Das Rendering-Skript benötigt nur Matplotlib und läuft im vorhandenen
 CPU-Environment.
-
-
-# Check code in ZeroForcing

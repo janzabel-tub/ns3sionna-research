@@ -65,6 +65,8 @@ struct SionnaHeDlMuMimoSpectrumUserTransmission
     double receivedPowerW;
     uint8_t rxPhyAntennas;
     uint32_t packetSizeBytes;
+    /** Occupied CFR bins (data and pilots); empty only for the direct full-grid API. */
+    std::vector<uint32_t> subcarrierIndices{};
 };
 
 /** Matrix-valued HE-DL-MU result and its per-receiver scalar PHY handoff. */

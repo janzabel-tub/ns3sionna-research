@@ -29,8 +29,9 @@ struct DlMuMimoStreamMapping
  *
  * The position in streamMappings is the corresponding column of precoding.
  * The embedded Phase-3 matrix retains ||W[k]||_F^2=N_s,total on every tone;
- * unequal column norms therefore express explicit stream-power weighting
- * without changing the total AP transmit power.
+ * unequal column norms express relative stream-power weighting. The link
+ * model normalizes active columns independently within each orthogonal
+ * allocation, so a column norm cannot change another RU's power budget.
  */
 class DlMuMimoPrecodingMatrix
 {
@@ -113,7 +114,7 @@ class DlMuMimoLinkResult
     std::vector<DlMuMimoUserResult> m_users;
 };
 
-/** Total received SNR for one user before small-scale CFR weighting. */
+/** Total received SNR for one user's orthogonal allocation before small-scale CFR weighting. */
 struct DlMuMimoUserSnr
 {
     uint32_t userId;
@@ -132,9 +133,10 @@ class DlMuMimoLinkModel
     /**
      * Calculate desired power, inter-user interference, and post-MMSE SINR.
      *
-     * One equal-power symbol convention is used across all joint streams:
-     * p_u=rho_u/N_s,total. Column norms of W[k] encode any explicit unequal
-     * allocation while ||W[k]||_F^2=N_s,total preserves total AP power.
+     * On each tone, a user's reference SNR is divided by the total precoder
+     * column power active in that user's orthogonality group. Column norms of
+     * W[k] therefore preserve explicit within-group stream-power weighting,
+     * while each orthogonal allocation receives its declared reference SNR.
      */
     static DlMuMimoLinkResult Calculate(const MultiUserChannelSnapshot& snapshot,
                                         const DlMuMimoPrecodingMatrix& precoding,

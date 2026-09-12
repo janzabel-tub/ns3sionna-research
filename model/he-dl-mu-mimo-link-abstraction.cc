@@ -12,6 +12,7 @@
 #include <cmath>
 #include <limits>
 #include <map>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -155,6 +156,8 @@ HeDlMuMimoLinkAbstraction::Calculate(
     precoding.ValidateForSnapshot(snapshot);
 
     std::map<uint32_t, const HeDlMuMimoUserTransmission*> inputs;
+    const uint32_t numSubcarriers =
+        precoding.GetPrecodingMatrix().GetNumSubcarriers();
     for (const auto& user : users)
     {
         if (!inputs.emplace(user.userId, &user).second)
@@ -191,6 +194,18 @@ HeDlMuMimoLinkAbstraction::Calculate(
         {
             Reject("every user's HE MCS requires an explicit EESM beta");
         }
+        std::set<uint32_t> selectedSubcarriers;
+        for (const uint32_t subcarrier : user.subcarrierIndices)
+        {
+            if (subcarrier >= numSubcarriers)
+            {
+                Reject("every selected subcarrier index must be in the CFR/precoder grid");
+            }
+            if (!selectedSubcarriers.insert(subcarrier).second)
+            {
+                Reject("selected subcarrier indices must be unique per user");
+            }
+        }
     }
     if (inputs.size() != snapshot.users.size())
     {
@@ -223,13 +238,28 @@ HeDlMuMimoLinkAbstraction::Calculate(
         const auto& input = *inputs.at(snapshotUser.userId);
         const auto& mimoUser = mimo.GetUserById(snapshotUser.userId);
         std::vector<double> sinrs;
-        sinrs.reserve(static_cast<std::size_t>(mimoUser.GetNumSubcarriers()) *
-                      mimoUser.GetNumStreams());
-        for (uint32_t sc = 0; sc < mimoUser.GetNumSubcarriers(); ++sc)
-        {
+        const std::size_t selectedToneCount = input.subcarrierIndices.empty()
+                                                  ? mimoUser.GetNumSubcarriers()
+                                                  : input.subcarrierIndices.size();
+        sinrs.reserve(selectedToneCount * mimoUser.GetNumStreams());
+        const auto appendToneSinrs = [&sinrs, &mimoUser](uint32_t subcarrier) {
             for (uint32_t stream = 0; stream < mimoUser.GetNumStreams(); ++stream)
             {
-                sinrs.push_back(mimoUser.GetSinrLinear(sc, stream));
+                sinrs.push_back(mimoUser.GetSinrLinear(subcarrier, stream));
+            }
+        };
+        if (input.subcarrierIndices.empty())
+        {
+            for (uint32_t sc = 0; sc < mimoUser.GetNumSubcarriers(); ++sc)
+            {
+                appendToneSinrs(sc);
+            }
+        }
+        else
+        {
+            for (const uint32_t sc : input.subcarrierIndices)
+            {
+                appendToneSinrs(sc);
             }
         }
 

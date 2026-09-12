@@ -42,23 +42,37 @@ The current checkout already contains 4.5. Preserve its runtime API and SU behav
 No scheduler, helper MU enablement, uplink, speculative cache, or calibration work
 is included. Full group evaluation remains an explicit performance limitation.
 
-## Stopped checkpoint (user requested immediate stop)
+## Resumed implementation, 11 September 2026
 
-The user requested stopping due to session budget. No 4.4 acceptance is claimed.
-- Coherence units fix: reviewed; 11 lightweight tests passed. Server fixtures now
-  use 5 ms. Full server rerun is outstanding (initial run stopped after three
-  passes because old fixtures requested 100-second look-ahead increments).
-- MU production edits are in the working tree. An intermediate `./ns3 build
-  sionna -j 2` passed before final selected-tone/runtime edits.
-- Delegated agents were interrupted at the user's stop request. Only the PHY
-  fixture helper classes have been added to `test/sionna-test-suite.cc`; the real
-  reception test is not yet written. The planned standalone RU regression file
-  and its CMake registration do not yet exist. Inspect helpers before compiling.
-- Next: build `sionna-test`, run `sionna` and the new RU suite if registered;
-  finish/execute AP + two users + bystander reception and RU-grid invariance
-  regressions, then 4.5/CSI/SU regressions. Run the corrected server suite.
-- Only then apply the detailed model rewrite prepared at
-  `/tmp/update_mu_documentation.py` (it currently says validated; adjust to actual
-  evidence), update this checkpoint, regenerate PDF once, and commit 4.4.
-- Unrelated initial `.idea/`, generated protobuf/cache files, plots, and
-  `tools/plot_current_progress.py` were present before this task; leave them alone.
+The 7 September pause was saved in `8c112b6`; work resumed on 11 September.
+The corrected Python fixtures and the complete server suite now pass: 19 tests
+in 229.102 s, including real 2x2 CFR. Native verification passed on 12 September 2026.
+
+Implementation and acceptance mapping:
+
+| Review finding | Implementation | Regression evidence passed |
+| --- | --- | --- |
+| Unscheduled receivers abort | Directed state matching; physical fallback for bystanders and unrelated transmitters | Real three-STA channel case and direct unrelated-AP case |
+| EESM includes other frequencies | Explicit occupied data/pilot CFR indices; DC/null/guard exclusion | Numerical two-bin counterexample; independent full242, split106 and centre26 RU mappings |
+| RU power changes with column norms | Per-tone active-column energy denominator | 1.5/0.5 column powers with equal/unequal budgets, same-RU weights, zero-group rejection |
+| Payload abstraction affects preamble | Separate non-HE physical contract and 4:1 frequency-centre mapping | Frequency-selective coarse-grid check; orthogonal success and correlated payload failure after preamble |
+| Only direct PPDU adapter tested | Actual `SpectrumWifiPhy::Send` through installed channel | PHY payload callbacks, measured SINR, bystander CCA and no decode |
+| Fixed time uses wrong units | Boundary conversion to nanoseconds (commit `8c112b6`) | 19 Python/CPU-server tests passed |
+
+Final review additionally corrected other allocated RUs' physical receive energy
+at an addressed receiver: use the actual `H*W` columns and group energy, not
+isotropic gain. The direct test requires zero other-RU energy when that group's
+precoder is orthogonal to the receiver. Unallocated spectral-mask bins retain
+an explicit equal-TX-power approximation.
+
+Production changes stay in the existing numerical/HE/spectrum files. New test
+files are `test/dl-mu-mimo-ru-test-suite.cc` and
+`test/he-dl-mu-spectrum-ru-test-suite.cc`; the real reception case extends
+`test/sionna-test-suite.cc`. Full group evaluation remains a known performance
+limitation. Helper MU enablement, automatic scheduling, uplink, and calibration
+remain outside this correction.
+
+Validation completed on 12 September 2026: the native `dl-mu-mimo-ru`,
+`he-dl-mu-spectrum-ru`, `sionna`, `dl-mu-mimo-runtime`, CSI-feedback, and all
+listed SU example suites passed. The complete 19-case Python/CPU-server suite
+also passed. Subphase 4.4 is accepted with the deferred limits stated above.

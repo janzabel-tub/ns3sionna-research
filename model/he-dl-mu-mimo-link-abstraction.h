@@ -34,6 +34,8 @@ struct HeDlMuMimoUserTransmission
     uint16_t staId{SU_STA_ID};
     /** Users in different groups (HE RUs in Phase 4.4) are orthogonal. */
     uint32_t orthogonalityGroup{0};
+    /** CFR/precoder tones allocated to this user; empty selects the full grid. */
+    std::vector<uint32_t> subcarrierIndices{};
 };
 
 /** Complete HE result for one downlink MU user. */

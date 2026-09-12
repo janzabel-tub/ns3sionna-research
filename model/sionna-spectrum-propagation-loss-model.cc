@@ -280,6 +280,19 @@ SionnaSpectrumPropagationLossModel::SetDlMuMimoState(
     const DlMuMimoPrecodingMatrix& precoding)
 {
     precoding.ValidateForSnapshot(snapshot);
+    // Installed runtime state has physical directed endpoints; the standalone
+    // numerical API deliberately also accepts synthetic channel identities.
+    const uint32_t txNodeId = snapshot.users.front().txNodeId;
+    std::set<uint32_t> receivers;
+    for (const auto& user : snapshot.users)
+    {
+        if (user.txNodeId != txNodeId || user.rxNodeId == txNodeId ||
+            !receivers.insert(user.rxNodeId).second || !std::isfinite(user.widebandLossDb))
+        {
+            throw std::invalid_argument(
+                "Sionna HE-DL-MU state requires one AP, unique directed receivers, and finite loss");
+        }
+    }
     m_dlMuSnapshot = snapshot;
     m_dlMuPrecoding = precoding;
 }
@@ -503,7 +516,8 @@ SionnaSpectrumPropagationLossModel::CalculateHeDlMuMimoRx(
                            txVector,
                            user.packetSizeBytes,
                            user.staId,
-                           group});
+                           group,
+                           user.subcarrierIndices});
     }
 
     for (const auto& snapshotUser : snapshot.users)
@@ -587,47 +601,72 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
     NS_ABORT_MSG_IF(preamble == WIFI_PREAMBLE_EHT_MU ||
                         preamble == WIFI_PREAMBLE_EHT_TB,
                     "The Sionna MIMO adapter does not support EHT MU PPDUs");
-    NS_ABORT_MSG_IF(HasDlMuMimoState() && preamble == WIFI_PREAMBLE_HE_TB,
-                    "The Phase-4.4 state supports downlink HE MU only");
     const bool isHeMu = preamble == WIFI_PREAMBLE_HE_MU;
 
-    NS_ABORT_MSG_IF(!isHeMu && !m_fixedChannelEnabled && !m_propagationCache,
-                    "SionnaSpectrumPropagationLossModel needs a propagation cache or fixed CFR");
-    NS_ABORT_MSG_IF(isHeMu && !HasDlMuMimoState(),
-                    "HE DL MU requires an explicitly installed Phase-4.4 state");
+    Ptr<const HePpdu> heMuPpdu =
+        isHeMu ? DynamicCast<const HePpdu>(wifiParams->ppdu) : nullptr;
+    NS_ABORT_MSG_IF(isHeMu && !heMuPpdu, "WIFI_PREAMBLE_HE_MU requires an HePpdu");
+    const bool heMuPayload = heMuPpdu &&
+                            heMuPpdu->GetTxPsdFlag() == HePpdu::PSD_HE_PORTION;
 
+    // SpectrumChannel also delivers to bystanders and hears other transmitters.
+    // An installed group applies only to its directed AP/receiver links.
     const MultiUserChannel* muReceiver = nullptr;
-    if (isHeMu)
+    if (isHeMu && HasDlMuMimoState())
     {
         for (const auto& user : m_dlMuSnapshot->users)
         {
-            if (user.rxNodeId == bId)
+            if (user.txNodeId == aId && user.rxNodeId == bId)
             {
                 NS_ABORT_MSG_IF(muReceiver,
-                                "HE DL MU snapshot contains the receiver node more than once");
+                                "HE DL MU snapshot contains the directed receiver twice");
                 muReceiver = &user;
             }
-            NS_ABORT_MSG_IF(user.txNodeId != aId ||
-                                user.direction != MultiUserChannelDirection::DOWNLINK,
-                            "HE DL MU snapshot direction or transmitter is inconsistent");
         }
-        NS_ABORT_MSG_IF(!muReceiver,
-                        "Unknown or unaddressed HE DL MU receiver");
     }
+    if (muReceiver)
+    {
+        Ptr<WifiSpectrumPhyInterface> txInterface =
+            DynamicCast<WifiSpectrumPhyInterface>(params->txPhy);
+        NS_ABORT_MSG_IF(!txInterface, "Wi-Fi transmitter has no spectrum PHY interface");
+        const auto rxPhy = GetSpectrumWifiPhy(b, txInterface->GetChannel());
+        const auto rxDevice = DynamicCast<WifiNetDevice>(rxPhy->GetDevice());
+        bool addressed = false;
+        for (const auto& [staId, userInfo] : heMuPpdu->GetTxVector().GetHeMuUserInfoMap())
+        {
+            static_cast<void>(userInfo);
+            const auto psdu = heMuPpdu->GetPsdu(0, staId);
+            addressed |= psdu && psdu->GetAddr1() == rxDevice->GetMac()->GetAddress();
+        }
+        if (!addressed)
+        {
+            // A receiver from an older installed group can also overhear a PPDU.
+            muReceiver = nullptr;
+        }
+    }
+    NS_ABORT_MSG_IF(!muReceiver && !m_fixedChannelEnabled && !m_propagationCache,
+                    "Physical propagation for this link requires a cache or fixed CFR");
 
     // SpectrumChannel has already applied the scalar wideband path loss.
     const double wbLoss =
-        isHeMu ? muReceiver->widebandLossDb
-               : (m_fixedChannelEnabled
-                      ? m_fixedPathLossDb
-                      : m_propagationCache->GetPropagationLoss(a, b));
+        muReceiver ? muReceiver->widebandLossDb
+                   : (m_fixedChannelEnabled
+                          ? m_fixedPathLossDb
+                          : m_propagationCache->GetPropagationLoss(a, b));
     const MimoChannelMatrix channel =
-        isHeMu ? muReceiver->channel
-               : (m_fixedChannelEnabled
-                      ? m_fixedChannel
-                      : m_propagationCache->GetPropagationChannelMatrix(a, b));
-    NS_ABORT_MSG_IF(channel.GetNumSubcarriers() + 1 != params->psd->GetValuesN(),
-                    "PSD must contain exactly one more guard bin than the Sionna CFR");
+        muReceiver ? muReceiver->channel
+                   : (m_fixedChannelEnabled
+                          ? m_fixedChannel
+                          : m_propagationCache->GetPropagationChannelMatrix(a, b));
+    const uint32_t psdSubcarriers = params->psd->GetValuesN() - 1;
+    // ns-3 sends the common non-HE part on a 312.5 kHz grid; the installed
+    // HE CFR uses 78.125 kHz. Sample the same frequency centres for that part.
+    const bool coarseCommonGrid = !heMuPayload && preamble != WIFI_PREAMBLE_HE_SU &&
+                                  spectrum_bin_size == 312500.0 &&
+                                  channel.GetNumSubcarriers() == 4 * psdSubcarriers;
+    NS_ABORT_MSG_IF(channel.GetNumSubcarriers() != psdSubcarriers && !coarseCommonGrid,
+                    "PSD/CFR grids must coincide, or use the common-preamble 4:1 grid");
+    const uint32_t scalarStride = coarseCommonGrid ? 4 : 1;
 
     const bool isHeSu =
         hasWifiPpdu &&
@@ -654,7 +693,7 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
     const bool scalarCompatibilityPath = legacySiso || !isHeSu;
 
     Ptr<const WifiPsdu> addressedMuPsdu;
-    if (isHeMu)
+    if (heMuPayload && muReceiver)
     {
         Ptr<SpectrumWifiPhy> txPhy = GetTransmitterSpectrumWifiPhy(params);
         Ptr<WifiSpectrumPhyInterface> txInterface =
@@ -680,8 +719,8 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
         Ptr<SpectrumWifiPhy> currentRxPhy =
             GetSpectrumWifiPhy(b, txInterface->GetChannel());
         Ptr<HePhy> hePhy =
-            DynamicCast<HePhy>(currentRxPhy->GetPhyEntity(WIFI_MOD_CLASS_HE));
-        NS_ABORT_MSG_IF(!hePhy, "Receiver PHY has no HE entity");
+            DynamicCast<HePhy>(txPhy->GetPhyEntity(WIFI_MOD_CLASS_HE));
+        NS_ABORT_MSG_IF(!hePhy, "Transmitter PHY has no HE entity");
         Ptr<ErrorRateModel> errorRateModel = GetErrorRateModel(currentRxPhy);
 
         std::vector<SionnaHeDlMuMimoSpectrumUserTransmission> users;
@@ -728,7 +767,30 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
                                 errorRateModel->GetInstanceTypeId(),
                             "HE DL MU receivers must use the same ErrorRateModel type");
 
-            const auto ruBand = hePhy->GetRuBandForRx(txVector, staId);
+            // params->psd and the snapshot use the transmitter spectrum grid,
+            // which can differ from a receiver's operating-channel grid.
+            const auto ruBand = hePhy->GetRuBandForTx(txVector, staId);
+            const auto width = txVector.GetChannelWidth();
+            const auto ru = userInfo.ru;
+            const auto tones = HeRu::GetSubcarrierGroup(
+                width,
+                ru.GetRuType(),
+                ru.GetPhyIndex(width, txPhy->GetOperatingChannel().GetPrimaryChannelIndex(20)));
+            NS_ABORT_MSG_IF(spectrum_bin_size != 78125.0,
+                            "HE MU payload requires the 78.125 kHz CFR grid");
+            std::vector<uint32_t> occupiedBins;
+            for (const auto& range : tones)
+            {
+                const auto bins = HePhy::ConvertHeRuSubcarriers(
+                    width, txPhy->GetGuardBandwidth(width), 78125, range, 0);
+                NS_ABORT_MSG_IF(bins.second >= snapshotUser.channel.GetNumSubcarriers(),
+                                "Occupied RU tone is outside the CFR grid");
+                for (uint32_t bin = bins.first; bin <= bins.second; ++bin)
+                {
+                    occupiedBins.push_back(bin);
+                }
+            }
+            NS_ABORT_MSG_IF(occupiedBins.empty(), "HE MU RU contains no occupied tones");
             const double currentPathAttenuatedRuPowerW =
                 IntegralBand(*params->psd, ruBand.indices);
             NS_ABORT_MSG_IF(!std::isfinite(currentPathAttenuatedRuPowerW) ||
@@ -743,7 +805,8 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
                              staId,
                              userReceivedPowerW,
                              userPhy->GetNumberOfAntennas(),
-                             psdu->GetSize()});
+                             psdu->GetSize(),
+                             occupiedBins});
             if (snapshotUser.rxNodeId == bId)
             {
                 addressedMuPsdu = psdu;
@@ -767,7 +830,63 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
             IntegralBand(*rxPsd, *currentRuIndices);
         NS_ABORT_MSG_IF(currentPowerBeforeRxGain <= 0.0,
                         "Path-loss-attenuated HE MU RU PSD has no power");
-        *rxPsd *= equivalentPowerBeforeRxGain / currentPowerBeforeRxGain;
+        // For physical energy on another allocated RU, retain its actual
+        // precoder instead of assigning an isotropic antenna gain.
+        std::map<uint32_t, HeRu::RuSpec> ruByUser;
+        for (const auto& user : users)
+        {
+            ruByUser.emplace(user.userId, txVector.GetRu(user.staId));
+        }
+        const double scale = equivalentPowerBeforeRxGain / currentPowerBeforeRxGain;
+        // Only the user's RU carries its equivalent payload power. Outside it,
+        // preserve physical energy for the receiving PHY's interference bands.
+        auto value = rxPsd->ValuesBegin();
+        for (uint32_t sc = 0; sc < channel.GetNumSubcarriers(); ++sc, ++value)
+        {
+            if (sc >= currentRuIndices->first && sc <= currentRuIndices->second)
+            {
+                *value *= scale;
+            }
+            else
+            {
+                double gain = 0.0;
+                for (uint32_t tx = 0; tx < channel.GetNumTxAntennas(); ++tx)
+                {
+                    gain += std::norm(channel.Get(sc, 0, tx));
+                }
+                gain /= channel.GetNumTxAntennas(); // unallocated spectral-mask bins
+                for (const auto& user : users)
+                {
+                    if (!std::binary_search(user.subcarrierIndices.begin(),
+                                            user.subcarrierIndices.end(), sc))
+                    {
+                        continue;
+                    }
+                    double received = 0.0;
+                    double activePower = 0.0;
+                    const auto& matrix = m_dlMuPrecoding->GetPrecodingMatrix();
+                    for (uint32_t column = 0; column < m_dlMuPrecoding->GetNumStreams(); ++column)
+                    {
+                        const auto owner = m_dlMuPrecoding->GetStreamMapping(column).userId;
+                        if (ruByUser.at(owner) != ruByUser.at(user.userId))
+                        {
+                            continue;
+                        }
+                        std::complex<double> effective{0.0, 0.0};
+                        for (uint32_t tx = 0; tx < channel.GetNumTxAntennas(); ++tx)
+                        {
+                            effective += channel.Get(sc, 0, tx) * matrix.Get(sc, tx, column);
+                        }
+                        received += std::norm(effective);
+                        activePower += m_dlMuPrecoding->GetStreamPower(sc, column);
+                    }
+                    // The numerical calculation already validated positive group power.
+                    gain = received / activePower;
+                    break;
+                }
+                *value *= gain;
+            }
+        }
 
         const auto& userResult = muRx.GetLinkResult().GetUserById(muReceiver->userId);
         m_mimoRxTrace(wifiParams->ppdu->GetUid(),
@@ -783,9 +902,21 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
         // Preserve the established 1x1 path. Non-HE control frames on a MIMO
         // PHY use the first antenna pair because Phase 1 models HE SU payloads only.
         auto value = rxPsd->ValuesBegin();
-        for (uint32_t sc = 0; sc < channel.GetNumSubcarriers(); ++sc, ++value)
+        for (uint32_t sc = 0; sc < psdSubcarriers; ++sc, ++value)
         {
-            *value *= std::norm(channel.Get(sc, 0, 0));
+            double gain = std::norm(channel.Get(sc * scalarStride, 0, 0));
+            if (isHeMu)
+            {
+                // Common fields and overheard HE MU energy use equal power
+                // across TX antennas, with no payload precoder or EESM beta.
+                gain = 0.0;
+                for (uint32_t tx = 0; tx < channel.GetNumTxAntennas(); ++tx)
+                {
+                    gain += std::norm(channel.Get(sc * scalarStride, 0, tx));
+                }
+                gain /= channel.GetNumTxAntennas();
+            }
+            *value *= gain;
         }
     }
     else
@@ -834,6 +965,12 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
                       mimoRx.GetLinkResult().GetEffectiveSinrLinear(),
                       mimoRx.GetLinkResult().GetPacketErrorRate(),
                       mimoRx.GetLinkResult().GetMimoResult().GetMinimumChannelRank());
+    }
+
+    // Common fields and bystanders have no addressed MU payload to annotate.
+    if (isHeMu && !addressedMuPsdu)
+    {
+        return rxPsd;
     }
 
     auto tagCoefficients = channel.GetCoefficients();
