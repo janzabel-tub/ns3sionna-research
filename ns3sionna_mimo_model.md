@@ -1,6 +1,6 @@
 # ns3sionna: MIMO-Abstraktionsmodell für IEEE 802.11ax/be
 
-Stand: 13. September 2026, Unterphase 4.6 implementiert; Unterphasen 4.7 und 4.8 nicht begonnen
+Stand: 13. September 2026, Unterphase 4.7 implementiert; Unterphase 4.8 nicht begonnen
 
 Arbeitszweig: feature/su-mimo-minimal
 
@@ -72,7 +72,8 @@ ordnet STA-ID, RU, MCS und NSS zu und begrenzt räumliche Interferenz auf
 dieselbe RU. Unterphase 4.5 bindet nun den Laufzeit-CSI-Zustand an die
 MultiUserScheduler-Ausgabe und ergänzt feste sowie korrelationsbasierte
 Gruppen. Unterphase 4.6 ergänzt die Helper-Installation, den konkreten Downlink-Scheduler und den
-deterministischen CPU-Vergleich; Unterphase 4.7 und 4.8 bleiben offen.
+deterministischen CPU-Vergleich. Unterphase 4.7 ergänzt den gemeinsamen
+Uplink-ZF-/MMSE-Numerikkern und nutzerweise PER; Unterphase 4.8 bleibt offen.
 
 ## 2. Reproduzierbare Ausgangsbasis
 
@@ -641,7 +642,7 @@ ZF-Unterschied: orthogonales aktuelles ZF erreicht 75,226685740 Mbit/s je
 Airtime-Sekunde gegenüber 49,586776860 für SU-MRT. Die Ausgabe trennt
 tatsächliche PHY-Drops und empirische PER von der numerischen EESM/PER-Prognose.
 
-#### Unterphase 4.7: Uplink-MU-Numerikkern (nicht begonnen)
+#### Unterphase 4.7: Uplink-MU-Numerikkern (implementiert)
 
 - Das Uplink-Signalmodell
 
@@ -661,6 +662,15 @@ tatsächliche PHY-Drops und empirische PER von der numerischen EESM/PER-Prognose
 Abnahmekriterium: Der Einzelnutzerfall reproduziert die vorhandene
 SU-Empfangsabstraktion; analytische Mehrnutzerkanäle und Nah-Fern-Fälle
 liefern die erwarteten ZF-/MMSE-SINRs, ohne Nutzerleistungen zu vermischen.
+
+Dieses Kriterium ist erfüllt: `UlMuMimoLinkModel` stapelt die gerichteten
+Ein-Stream-Uplinkkanäle am gemeinsamen AP, hält jede Nutzer-SNR getrennt und
+liefert für ZF beziehungsweise lineares MMSE gewünschte Leistung,
+Inter-User-Interferenz, verstärkte Rauschleistung und SINR je Subcarrier.
+`HeUlMuMimoLinkAbstraction` verwendet danach nutzerweise den vorhandenen
+EESM-/ErrorRateModel-Vertrag. Der Einzelnutzer-, Orthogonal-, Rangverlust- und
+Nah-Fern-Fall stimmen mit den analytischen Referenzen überein. HE-TB-/Trigger-
+und Gleichzeitigkeitseinbindung bleiben ausschließlich Unterphase 4.8.
 
 #### Unterphase 4.8: Uplink-PHY-Integration und Gesamtabschluss (nicht begonnen)
 
@@ -2186,6 +2196,97 @@ bleiben unverändert. Unterphase 4.6 ergänzt den konkreten End-to-End-Scheduler
 Helperfreigabe. Automatische Sounding-/Feedbackereignisse, EHT und Uplink
 bleiben ausdrücklich offen.
 
+### 5.17 Gemeinsame Uplink-ZF-/MMSE-Detektion der Unterphase 4.7
+
+Der gerichtete Uplink-Snapshot enthält je Nutzer genau einen Sendekanal
+
+\[
+  h_u[k]\in\mathbb C^{N_{\mathrm{rx,AP}}\times1}.
+\]
+
+Alle Nutzer enden am selben AP, besitzen dasselbe Frequenzraster und denselben
+CSI-Zeitstempel. Unterphase 4.7 nimmt ausdrücklich ideale Zeit- und
+Frequenzsynchronisation, eine Sendeantenne und den lokalen Stream null je
+Nutzer an. Mehrere Nutzerstreams, Synchronisationsfehler sowie die Bindung an
+HE-TB-Trigger und tatsächliche gleichzeitige PHY-Empfänge bleiben Unterphase
+4.8.
+
+Die nutzerspezifische Referenz-SNR
+
+\[
+  \rho_u=\frac{P_{\mathrm{tx},u}10^{-L_u/10}}{N_{\mathrm{AP}}}
+\]
+
+enthält Sendeleistung, Wideband-Pfadverlust und AP-Rauschleistung genau
+einmal. `UlMuMimoUserSnr` übergibt diese Werte getrennt; es gibt keine
+Gruppenmittelung oder gemeinsame Leistungsnormierung. Die HE-Abstraktion
+trägt dafür je Nutzer einen eigenen `WifiLinkBudgetResult`. Der im Snapshot
+separat sichtbare Pfadverlust wird im Numerikkern nicht erneut angewendet.
+Mit
+
+\[
+  H_{\mathrm{UL}}[k]=[h_0[k],\ldots,h_{U-1}[k]]
+\]
+
+lautet das rausch-normalisierte Signalmodell
+
+\[
+  y[k]=\sum_u\sqrt{\rho_u}\,h_u[k]x_u[k]+n[k],
+  \qquad E[nn^H]=I.
+\]
+
+Der ZF-Detektor verlangt \(U\leq N_{\mathrm{rx,AP}}\) und vollen
+numerischen Rang auf jedem Subcarrier. Mit derselben relativen
+Standardrangschwelle \(10^{-12}\) wie die bisherigen SVD-Kerne werden seine
+Kombinierer als Spalten von
+
+\[
+  F_{\mathrm{ZF}}[k]
+    =H_{\mathrm{UL}}[k]
+      \bigl(H_{\mathrm{UL}}^H[k]H_{\mathrm{UL}}[k]\bigr)^{-1}
+\]
+
+mittels dünner Jacobi-SVD berechnet. Überlast oder Rangverlust werden vor
+einem Ergebnis als `std::invalid_argument` abgelehnt. Das lineare MMSE bleibt
+auch für rangdefiziente Gruppen definiert:
+
+\[
+  R[k]=I+\sum_v\rho_v h_v[k]h_v^H[k],
+  \qquad f_u[k]=R^{-1}[k]h_u[k].
+\]
+
+Für beide Detektoren werden die nicht beliebig normierten Kombinierer
+vollständig ausgewertet:
+
+\[
+  D_u[k]=\rho_u|f_u^H[k]h_u[k]|^2,
+\]
+
+\[
+  I_u[k]=\sum_{v\ne u}\rho_v|f_u^H[k]h_v[k]|^2,
+  \qquad N_u[k]=\lVert f_u[k]\rVert_2^2,
+\]
+
+\[
+  \gamma_u[k]=\frac{D_u[k]}{I_u[k]+N_u[k]}.
+\]
+
+Damit bleiben insbesondere Nah-Fern-Leistungen dem verursachenden Nutzer
+zugeordnet. Für einen Nutzer reduzieren ZF und MMSE auf
+\(\gamma=\rho\lVert h\rVert_2^2\) und reproduzieren den vorhandenen
+SU-SIMO-/MRC-Grenzfall.
+
+`HeUlMuMimoLinkAbstraction` komprimiert ausschließlich die SINRs des
+jeweiligen Nutzers mit dessen explizitem MCS-Beta und fragt anschließend das
+vorhandene `ErrorRateModel` mit dessen `WifiTxVector` und Paketgröße ab.
+STA-ID, MCS, Paketlänge, Link Budget, effektive SINR und PER bleiben damit
+nutzerweise getrennt. Diese wertbasierte API installiert keinen PHY-Zustand.
+
+Vor jeder Rechnung werden Uplinkrichtung, stabile Nutzerordnung, gemeinsamer
+AP und Empfangsarray, Zeitstempel, Frequenzraster, CFR-Endlichkeit,
+Ein-Stream-Grenze, vollständige Zuordnungen, getrennte endliche SNRs und
+gegebenenfalls ZF-Rang geprüft. Snapshot und Eingaben werden nur gelesen.
+
 ## 6. High-Level-API-Vertrag bis Unterphase 4.6
 
 ### 6.1 Typen, Besitz und Defaults
@@ -2590,7 +2691,7 @@ Simulator-Timer, keine implizite CSI-Abfrage und keinen MAC-Feedbacktransport;
 diese Grenzen verhindern, dass das explizite Forschungsmodell eine
 vollständige 802.11-Soundingprozedur vortäuscht.
 
-## 7. Validierung der Unterphasen 1.1 bis 4.6
+## 7. Validierung der Unterphasen 1.1 bis 4.7
 
 Die native Suite sionna enthält die schnellen API-, Numerik- und Adapterfälle:
 
@@ -2732,6 +2833,13 @@ Die native Suite sionna enthält die schnellen API-, Numerik- und Adapterfälle:
     erreichen die Nutzdatenphase und scheitern. Der Mithörer hält CCA busy,
     erhält aber kein PSDU.
 
+Die eigenständige native Suite `ul-mu-mimo` ergänzt den analytischen
+Unterphase-4.7-Fall. Sie prüft den Einzelnutzervergleich mit dem bestehenden
+SU-MMSE-/MRC-Kern, orthogonale Nutzer, ZF-Rangverlust, rangdefiniertes MMSE,
+den Nah-Fern-Fall mit Referenz-SNRs 100 und 1 sowie getrennte HE-EESM-/PER-
+Abbildung für verschiedene MCS und Paketgrößen. ZF liefert im korrelierten
+Fall 75 und 0,75; MMSE liefert 87,5 und 0,752475247524752.
+
 Die eigenständige native Suite `sionna-mimo-csi-feedback` ergänzt zwei Fälle
 für Unterphase 3.4. Der Feedbackfall prüft HE und EHT, beide SU-Codebücher,
 Bitbreiten und Payloadgrößen, exakt rekonstruierte Grenzindizes, deterministische
@@ -2761,7 +2869,9 @@ gewünschte Leistung, Inter-User-Interferenz, Precoderleistung, EESM und
 ErrorRateModel-Parität werden innerhalb $10^{-12}$ geprüft.
 Phase 4.3 prüft ZF-Interferenz und Precoderleistung innerhalb $10^{-12}$ sowie
 Einzelnutzer-/1x1-SINR innerhalb $10^{-10}$; deterministische Wiederholungen
-werden koeffizientengenau verglichen.
+werden koeffizientengenau verglichen. Phase 4.7 prüft ZF-/MMSE-SINR und
+Einzelnutzerparität innerhalb $10^{-10}$ sowie Interferenz, EESM und PER
+innerhalb $10^{-12}$.
 Phase 4.4 prüft gleiche-RU-Interferenz, analytische SINR, EESM/PER,
 Link Budget und äquivalente Leistung innerhalb $10^{-12}$. Die direkte
 HE-MU-PPDU-Integration verwendet relative $10^{-10}$. Der unabhängige
@@ -3114,6 +3224,27 @@ Der MU-Pfad verändert weder Python, Protocol Buffers, Cache-Serialisierung noch
 den Server. Ein optionaler RTX-3060-Raytracing-Lauf bleibt daher eine Regression
 des bestehenden Pfads und keine Voraussetzung für die CPU-Abnahme.
 
+### 7.11 Validierung der Unterphase 4.7
+
+Am 13. September 2026 wurden auf der CPU-Referenzplattform folgende
+Prüfungen erfolgreich ausgeführt:
+
+- gezielter Build von `libsionna` und `libsionna-test`; die beiden neuen
+  Uplink-Quelldateien und die eigenständige Testsuite wurden übersetzt und
+  gelinkt
+- `./test.py --no-build -s ul-mu-mimo`: eine von einer Suite bestanden. Der
+  analytische Fall prüft beide Detektoren im Einzelnutzergrenzfall,
+  orthogonale Nutzer, ZF-Rangverlust, rangdefiniertes MMSE, Nah-Fern-SNRs 100
+  und 1 sowie getrennte HE-EESM-/PER-Abbildung
+- die Regressionen `sionna`, `dl-mu-mimo-runtime`, `dl-mu-mimo-ru`,
+  `he-dl-mu-spectrum-ru` und `sionna-mimo-csi-feedback`: jeweils eine von
+  einer Suite bestanden, ohne Fehler, Überspringen oder Absturz
+- `git diff --check` ohne Befund
+
+Der neue Kern ändert weder Python, Protocol Buffers, Cache, Server, Scheduler
+noch SpectrumWifiPhy. Diese Pfade bleiben für die koordinierte
+Uplink-Integration der Unterphase 4.8 unverändert.
+
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 
 - SionnaMimoHelper überträgt eine gemeinsame TX- und RX-Geometrie für die
@@ -3140,6 +3271,13 @@ des bestehenden Pfads und keine Voraussetzung für die CPU-Abnahme.
   Unterphase 4.6 installiert sie mit `InstallDownlink` am AP und setzt am
   tatsächlichen Sendezeitpunkt den getrennten Übertragungskanal. Automatisches
   Sounding und MAC-Feedbackrahmen bleiben offen.
+- Der direkte Uplinkkern der Unterphase 4.7 verlangt pro Nutzer eine
+  Sendeantenne und Stream null, einen gemeinsamen AP-Empfänger sowie ideale
+  Zeit- und Frequenzsynchronisation. ZF verlangt zusätzlich
+  \(U\leq N_{\mathrm{rx,AP}}\) und vollen Rang; lineares MMSE bleibt bei
+  Rangverlust definiert. Eine koordinierte HE-TB-/Triggerintegration und die
+  Auswahl tatsächlich gleichzeitig eintreffender Nutzer existieren erst mit
+  Unterphase 4.8.
 - MRT bleibt der eindeutige perfekte 2x1-MISO-Ein-Stream-Fall. Quantisierung
   und positives CSI-Alter gelten nur für gleichleistungs-SVD. Wasserfüllung
   bleibt auf unquantisiertes aktuelles CSI beschränkt, weil die semantische
@@ -3210,9 +3348,11 @@ Einzelnutzer- und 1x1-Grenzfall sowie alle Phase-1-/2-/3-Pfade bleiben
 kompatibel. Die Laufzeit-CSI-/Scheduler-Schnittstelle der Unterphase 4.5
 verwaltet jetzt den neuesten exakten AP-/Gruppen-/RU-/NSS-Zustand, übernimmt
 Phase-3-Zeiten und installiert ausschließlich denselben gerichteten Snapshot
-im PHY. Automatische Sounding-/Feedbackabläufe sowie die Uplink-Unterphasen 4.7 und
-4.8 wurden nicht begonnen; Helperintegration und das End-to-End-
-Schedulerbeispiel sind mit Unterphase 4.6 abgeschlossen.
+im PHY. Unterphase 4.7 ergänzt getrennte Nutzerleistungen, gemeinsame
+ZF-/MMSE-Detektion und nutzerweise EESM/PER im direkten Uplink-Numerikkern.
+Automatische Sounding-/Feedbackabläufe sowie Uplink-PHY-/Triggerintegration
+bleiben Unterphase 4.8; Helperintegration und das End-to-End-Schedulerbeispiel
+des Downlinks sind mit Unterphase 4.6 abgeschlossen.
 
 ## 9. Ausführung
 
@@ -3223,6 +3363,7 @@ Vom ns-3.40-Verzeichnis:
     ./test.py -s sionna
     ./test.py -s dl-mu-mimo-ru
     ./test.py -s he-dl-mu-spectrum-ru
+    ./test.py -s ul-mu-mimo
     ./test.py -s dl-mu-mimo-runtime
     ./test.py -s sionna-mimo-csi-feedback
     ./test.py -s sionna-example-sumimo-minimal

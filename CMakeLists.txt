@@ -48,11 +48,13 @@ set(SOURCE_FILES
         model/dl-mu-mimo-runtime.cc
         model/dl-mu-mimo-link-model.cc
         model/he-dl-mu-mimo-link-abstraction.cc
+        model/he-ul-mu-mimo-link-abstraction.cc
         model/he-su-mimo-link-abstraction.cc
         model/mimo-channel-matrix.cc
         model/mimo-csi-feedback.cc
         model/mimo-precoding-matrix.cc
         model/su-mimo-link-model.cc
+        model/ul-mu-mimo-link-model.cc
         model/wifi-link-budget.cc
         model/sionna-mobility-model.cc
         model/sionna-propagation-cache.cc
@@ -70,11 +72,13 @@ set(HEADER_FILES
         model/dl-mu-mimo-runtime.h
         model/dl-mu-mimo-link-model.h
         model/he-dl-mu-mimo-link-abstraction.h
+        model/he-ul-mu-mimo-link-abstraction.h
         model/he-su-mimo-link-abstraction.h
         model/mimo-channel-matrix.h
         model/mimo-csi-feedback.h
         model/mimo-precoding-matrix.h
         model/su-mimo-link-model.h
+        model/ul-mu-mimo-link-model.h
         model/wifi-link-budget.h
         model/sionna-mobility-model.h
         model/sionna-propagation-cache.h
@@ -116,6 +120,7 @@ build_lib(
         test/dl-mu-mimo-runtime-test-suite.cc
         test/dl-mu-mimo-ru-test-suite.cc
         test/he-dl-mu-spectrum-ru-test-suite.cc
+        test/ul-mu-mimo-link-test-suite.cc
         ${examples_as_tests_sources}
 )
 
