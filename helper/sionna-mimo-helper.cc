@@ -8,13 +8,28 @@
 
 #include "sionna-helper.h"
 #include "../model/sionna-spectrum-propagation-loss-model.h"
+#include "ns3/ap-wifi-mac.h"
 #include "ns3/double.h"
+#include "ns3/he-configuration.h"
+#include "ns3/he-frame-exchange-manager.h"
+#include "ns3/mpdu-aggregator.h"
+#include "ns3/qos-txop.h"
+#include "ns3/simulator.h"
+#include "ns3/spectrum-wifi-phy.h"
+#include "ns3/wifi-mac-header.h"
+#include "ns3/wifi-net-device.h"
+#include "ns3/wifi-phy.h"
+#include "ns3/wifi-psdu.h"
+#include "ns3/wifi-remote-station-manager.h"
+#include "ns3/wifi-utils.h"
 #include "ns3/spectrum-wifi-helper.h"
 #include "ns3/uinteger.h"
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <map>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -277,6 +292,342 @@ MakeCsiArrayIdentity(const SionnaMimoArrayConfiguration& array,
     return identity;
 }
 
+MultiUserChannelSnapshot
+SubsetSnapshot(const MultiUserChannelSnapshot& snapshot, const std::set<uint32_t>& userIds)
+{
+    MultiUserChannelSnapshot subset{snapshot.csiTimestamp, snapshot.direction, {}};
+    for (const auto& user : snapshot.users)
+    {
+        if (userIds.count(user.userId) != 0)
+        {
+            subset.users.push_back(user);
+        }
+    }
+    if (subset.users.size() != userIds.size())
+    {
+        Reject("the downlink snapshot does not contain every scheduled stable user ID");
+    }
+    return subset;
+}
+
+class SionnaMimoDownlinkScheduler final : public MultiUserScheduler
+{
+  public:
+    void Configure(Ptr<WifiNetDevice> apDevice,
+                   std::vector<SionnaMimoStationBinding> stationBindings,
+                   Ptr<SionnaSpectrumPropagationLossModel> spectrumModel,
+                   SionnaMimoDownlinkSnapshotProvider snapshotProvider,
+                   DlMuMimoRuntimeConfiguration runtimeConfiguration,
+                   SionnaMimoDownlinkScheduling scheduling)
+    {
+        std::sort(stationBindings.begin(),
+                  stationBindings.end(),
+                  [](const auto& lhs, const auto& rhs) { return lhs.userId < rhs.userId; });
+        m_apDevice = apDevice;
+        m_stationBindings = std::move(stationBindings);
+        m_spectrumModel = spectrumModel;
+        m_snapshotProvider = std::move(snapshotProvider);
+        m_runtimeConfiguration = runtimeConfiguration;
+        m_runtime.emplace(std::move(runtimeConfiguration));
+        m_scheduling = scheduling;
+        m_phy = apDevice->GetPhy();
+        m_phy->TraceConnectWithoutContext(
+            "PhyTxPsduBegin",
+            MakeCallback(&SionnaMimoDownlinkScheduler::InstallAtTransmissionTime, this));
+    }
+
+  private:
+    struct Candidate
+    {
+        uint32_t userId;
+        uint16_t staId;
+        Mac48Address address;
+        Ptr<WifiMpdu> mpdu;
+        uint8_t mcs;
+    };
+
+    TxFormat SelectTxFormat() override
+    {
+        m_hasPendingDlMu = false;
+        if (m_scheduling == SionnaMimoDownlinkScheduling::SU_ROUND_ROBIN)
+        {
+            return SU_TX;
+        }
+        return BuildDlMuInfo() ? DL_MU_TX : SU_TX;
+    }
+
+    DlMuInfo ComputeDlMuInfo() override
+    {
+        NS_ABORT_MSG_IF(!m_hasPendingDlMu, "Sionna downlink scheduler has no prepared MU PPDU");
+        m_hasPendingDlMu = false;
+        return std::move(m_pendingDlMu);
+    }
+
+    UlMuInfo ComputeUlMuInfo() override
+    {
+        return UlMuInfo{};
+    }
+
+    bool BuildDlMuInfo()
+    {
+        if (m_allowedWidth != 20 || !m_edca || !m_runtime)
+        {
+            ++m_rejectedGroups;
+            return false;
+        }
+        Ptr<WifiMpdu> first = m_edca->PeekNextMpdu(m_linkId);
+        if (!first || !first->GetHeader().IsQosData())
+        {
+            return false;
+        }
+        const uint8_t tid = first->GetHeader().GetQosTid();
+        const HeRu::RuSpec ru{HeRu::RU_242_TONE, 1, true};
+        std::vector<Candidate> candidates;
+        DlMuInfo candidateInfo;
+        candidateInfo.txParams.m_txVector.SetPreambleType(WIFI_PREAMBLE_HE_MU);
+        candidateInfo.txParams.m_txVector.SetChannelWidth(m_allowedWidth);
+        candidateInfo.txParams.m_txVector.SetGuardInterval(
+            m_apMac->GetHeConfiguration()->GetGuardInterval().GetNanoSeconds());
+        candidateInfo.txParams.m_txVector.SetBssColor(m_apMac->GetHeConfiguration()->GetBssColor());
+
+        for (const auto& binding : m_stationBindings)
+        {
+            const Mac48Address address = binding.stationDevice->GetMac()->GetAddress();
+            const uint16_t staId = m_apMac->GetAssociationId(address, m_linkId);
+            if (staId == SU_STA_ID || !m_apMac->GetBaAgreementEstablishedAsOriginator(address, tid) ||
+                !GetWifiRemoteStationManager(m_linkId)->GetHeSupported(address))
+            {
+                continue;
+            }
+            Ptr<WifiMpdu> mpdu = m_edca->PeekNextMpdu(m_linkId, tid, address);
+            if (!mpdu)
+            {
+                continue;
+            }
+            const WifiTxVector suTx =
+                GetWifiRemoteStationManager(m_linkId)->GetDataTxVector(mpdu->GetHeader(), m_allowedWidth);
+            if (!suTx.GetModeInitialized() || suTx.GetMode().GetModulationClass() != WIFI_MOD_CLASS_HE ||
+                !m_spectrumModel->HasEesmBeta(suTx.GetMode().GetMcsValue()))
+            {
+                ++m_rejectedGroups;
+                return false;
+            }
+            const uint8_t mcs = suTx.GetMode().GetMcsValue();
+            candidateInfo.txParams.m_txVector.SetHeMuUserInfo(staId, {ru, mcs, 1});
+            candidateInfo.psduMap.emplace(staId, Create<WifiPsdu>(mpdu, true));
+            candidates.push_back({binding.userId, staId, address, mpdu, mcs});
+        }
+        if (candidates.size() < 2)
+        {
+            return false;
+        }
+
+        std::vector<DlMuMimoStaUserBinding> runtimeBindings;
+        std::set<uint32_t> candidateUserIds;
+        for (const auto& candidate : candidates)
+        {
+            runtimeBindings.push_back({candidate.staId, candidate.userId});
+            candidateUserIds.insert(candidate.userId);
+        }
+
+        std::optional<DlMuMimoRuntimeSelection> selection;
+        try
+        {
+            const Time now = Simulator::Now();
+            const Time csiTime = m_runtimeConfiguration.timing.ResolveCsiTimestamp(now);
+            selection = m_runtime->SelectAndStore(
+                m_apDevice->GetNode()->GetId(),
+                SubsetSnapshot(m_snapshotProvider(csiTime), candidateUserIds),
+                candidateInfo,
+                runtimeBindings,
+                now);
+        }
+        catch (const std::invalid_argument&)
+        {
+            ++m_rejectedGroups;
+            return false;
+        }
+
+        DlMuInfo finalInfo;
+        finalInfo.txParams.m_txVector.SetPreambleType(WIFI_PREAMBLE_HE_MU);
+        finalInfo.txParams.m_txVector.SetChannelWidth(m_allowedWidth);
+        finalInfo.txParams.m_txVector.SetGuardInterval(
+            m_apMac->GetHeConfiguration()->GetGuardInterval().GetNanoSeconds());
+        finalInfo.txParams.m_txVector.SetBssColor(m_apMac->GetHeConfiguration()->GetBssColor());
+        std::vector<Candidate> selected;
+        for (const auto& selectedUser : selection->GetUsers())
+        {
+            const auto candidate = std::find_if(candidates.begin(),
+                                                candidates.end(),
+                                                [&](const auto& value) {
+                                                    return value.userId == selectedUser.userId &&
+                                                           value.staId == selectedUser.staId;
+                                                });
+            if (candidate == candidates.end())
+            {
+                ++m_rejectedGroups;
+                return false;
+            }
+            finalInfo.txParams.m_txVector.SetHeMuUserInfo(
+                candidate->staId, {ru, candidate->mcs, 1});
+            selected.push_back(*candidate);
+        }
+        if (selected.size() < 2)
+        {
+            ++m_rejectedGroups;
+            return false;
+        }
+
+        const Time available = m_initialFrame ? Time::Min() : m_availableTime;
+        for (const auto& candidate : selected)
+        {
+            if (!GetHeFem(m_linkId)->TryAddMpdu(candidate.mpdu, finalInfo.txParams, available))
+            {
+                ++m_rejectedGroups;
+                return false;
+            }
+        }
+        for (const auto& candidate : selected)
+        {
+            Ptr<WifiMpdu> item = candidate.mpdu;
+            if (!item->GetHeader().IsRetry())
+            {
+                item = GetHeFem(m_linkId)->GetMsduAggregator()->GetNextAmsdu(
+                    candidate.mpdu, finalInfo.txParams, m_availableTime);
+                if (!item)
+                {
+                    item = candidate.mpdu;
+                }
+                m_edca->AssignSequenceNumber(item);
+            }
+            auto mpduList = GetHeFem(m_linkId)->GetMpduAggregator()->GetNextAmpdu(
+                item, finalInfo.txParams, m_availableTime);
+            finalInfo.psduMap[candidate.staId] =
+                mpduList.size() > 1 ? Create<WifiPsdu>(std::move(mpduList))
+                                    : Create<WifiPsdu>(item, true);
+        }
+        m_pendingDlMu = std::move(finalInfo);
+        m_hasPendingDlMu = true;
+        ++m_muTransmissions;
+        return true;
+    }
+
+    void InstallAtTransmissionTime(WifiConstPsduMap psduMap, WifiTxVector txVector, double)
+    {
+        if (!m_apMac)
+        {
+            return;
+        }
+        try
+        {
+            if (txVector.GetPreambleType() == WIFI_PREAMBLE_HE_SU)
+            {
+                if (psduMap.empty())
+                {
+                    return;
+                }
+                const Mac48Address receiver = psduMap.begin()->second->GetAddr1();
+                const auto binding = std::find_if(m_stationBindings.begin(),
+                                                  m_stationBindings.end(),
+                                                  [&](const auto& value) {
+                                                      return value.stationDevice->GetMac()->GetAddress() ==
+                                                             receiver;
+                                                  });
+                if (binding == m_stationBindings.end())
+                {
+                    return;
+                }
+                const auto snapshot = m_snapshotProvider(Simulator::Now());
+                const auto user = std::find_if(snapshot.users.begin(),
+                                               snapshot.users.end(),
+                                               [&](const auto& value) {
+                                                   return value.userId == binding->userId &&
+                                                          value.txNodeId == m_apDevice->GetNode()->GetId();
+                                               });
+                if (user == snapshot.users.end())
+                {
+                    Reject("the current SU transmission snapshot has no destination user");
+                }
+                m_spectrumModel->SetDownlinkTransmissionSnapshot(snapshot);
+                m_spectrumModel->SetPrecodingMatrix(
+                    MimoPrecodingMatrix::MaximumRatioTransmission(user->channel));
+                return;
+            }
+            if (txVector.GetPreambleType() != WIFI_PREAMBLE_HE_MU || !m_runtime)
+            {
+                return;
+            }
+            DlMuInfo emitted;
+            emitted.txParams.m_txVector = txVector;
+            std::vector<DlMuMimoStaUserBinding> bindings;
+            std::set<uint32_t> userIds;
+            for (const auto& binding : m_stationBindings)
+            {
+                const uint16_t staId =
+                    m_apMac->GetAssociationId(binding.stationDevice->GetMac()->GetAddress(), m_linkId);
+                const auto psdu = psduMap.find(staId);
+                if (staId != SU_STA_ID && psdu != psduMap.end() &&
+                    txVector.GetHeMuUserInfoMap().count(staId) != 0)
+                {
+                    emitted.psduMap.emplace(staId, ConstCast<WifiPsdu>(psdu->second));
+                    bindings.push_back({staId, binding.userId});
+                    userIds.insert(binding.userId);
+                }
+            }
+            const Time now = Simulator::Now();
+            const Time csiTime = m_runtimeConfiguration.timing.ResolveCsiTimestamp(now);
+            const auto csiSnapshot = SubsetSnapshot(m_snapshotProvider(csiTime), userIds);
+            const auto transmissionSnapshot = SubsetSnapshot(m_snapshotProvider(now), userIds);
+            m_runtime->SelectAndStore(m_apDevice->GetNode()->GetId(),
+                                      csiSnapshot,
+                                      emitted,
+                                      bindings,
+                                      now);
+            m_spectrumModel->ClearPrecodingMatrix();
+            m_runtime->Install(*m_spectrumModel,
+                               m_apDevice->GetNode()->GetId(),
+                               emitted,
+                               bindings,
+                               transmissionSnapshot,
+                               now);
+            m_spectrumModel->SetDownlinkTransmissionSnapshot(m_snapshotProvider(now));
+        }
+        catch (const std::invalid_argument& error)
+        {
+            NS_ABORT_MSG("Sionna downlink scheduler rejected the emitted MU PPDU: " << error.what());
+        }
+    }
+
+    void DoDispose() override
+    {
+        if (m_phy)
+        {
+            m_phy->TraceDisconnectWithoutContext(
+                "PhyTxPsduBegin",
+                MakeCallback(&SionnaMimoDownlinkScheduler::InstallAtTransmissionTime, this));
+        }
+        m_phy = nullptr;
+        m_apDevice = nullptr;
+        m_spectrumModel = nullptr;
+        m_stationBindings.clear();
+        m_runtime.reset();
+        MultiUserScheduler::DoDispose();
+    }
+
+    Ptr<WifiNetDevice> m_apDevice;
+    Ptr<WifiPhy> m_phy;
+    std::vector<SionnaMimoStationBinding> m_stationBindings;
+    Ptr<SionnaSpectrumPropagationLossModel> m_spectrumModel;
+    SionnaMimoDownlinkSnapshotProvider m_snapshotProvider;
+    std::optional<DlMuMimoRuntime> m_runtime;
+    DlMuMimoRuntimeConfiguration m_runtimeConfiguration;
+    SionnaMimoDownlinkScheduling m_scheduling{SionnaMimoDownlinkScheduling::MU};
+    DlMuInfo m_pendingDlMu;
+    bool m_hasPendingDlMu{false};
+    uint64_t m_muTransmissions{0};
+    uint64_t m_rejectedGroups{0};
+};
+
 } // namespace
 
 uint64_t
@@ -476,14 +827,22 @@ SionnaMimoHelper::Apply(
             orientation.rollDegrees);
     }
 
-    auto configurePhy = [&config](SpectrumWifiPhyHelper& phyHelper, uint32_t numAntennas) {
+    const uint32_t apStreams =
+        config.mode == SionnaMimoMode::MU_MIMO
+            ? (config.dlMu->groupingMode == DlMuMimoGroupingMode::FIXED
+                   ? config.dlMu->requestedUserIds.size()
+                   : config.dlMu->requestedGroupSize)
+            : config.maxNss;
+    auto configurePhy = [&config](SpectrumWifiPhyHelper& phyHelper,
+                                  uint32_t numAntennas,
+                                  uint32_t streams) {
         phyHelper.Set("Antennas", UintegerValue(numAntennas));
-        phyHelper.Set("MaxSupportedTxSpatialStreams", UintegerValue(config.maxNss));
-        phyHelper.Set("MaxSupportedRxSpatialStreams", UintegerValue(config.maxNss));
+        phyHelper.Set("MaxSupportedTxSpatialStreams", UintegerValue(streams));
+        phyHelper.Set("MaxSupportedRxSpatialStreams", UintegerValue(streams));
         phyHelper.Set("RxNoiseFigure", DoubleValue(config.receiverNoiseFigureDb));
     };
-    configurePhy(txPhyHelper, config.numTxAntennas);
-    configurePhy(rxPhyHelper, config.numRxAntennas);
+    configurePhy(txPhyHelper, config.numTxAntennas, apStreams);
+    configurePhy(rxPhyHelper, config.numRxAntennas, config.maxNss);
 
     spectrumModel->SetReceiverNoiseFigureDb(config.receiverNoiseFigureDb);
     spectrumModel->ConfigureEesmBetas(config.eesmBetaLinear);
@@ -511,6 +870,75 @@ SionnaMimoHelper::ApplyForHeMcs(
 {
     ValidateForHeMcs(m_configuration, heMcs);
     Apply(sionnaHelper, txPhyHelper, rxPhyHelper, spectrumModel);
+}
+
+Ptr<MultiUserScheduler>
+SionnaMimoHelper::InstallDownlink(
+    Ptr<WifiNetDevice> apDevice,
+    const std::vector<SionnaMimoStationBinding>& stationBindings,
+    Ptr<SionnaSpectrumPropagationLossModel> spectrumModel,
+    SionnaMimoDownlinkSnapshotProvider snapshotProvider,
+    SionnaMimoDownlinkScheduling scheduling) const
+{
+    Validate(m_configuration);
+    if (m_configuration.mode != SionnaMimoMode::MU_MIMO || !m_configuration.dlMu)
+    {
+        Reject("downlink installation requires an explicit MU-MIMO runtime configuration");
+    }
+    if (!apDevice || !spectrumModel || !snapshotProvider)
+    {
+        Reject("downlink installation requires an AP device, spectrum model, and snapshot provider");
+    }
+    Ptr<ApWifiMac> apMac = DynamicCast<ApWifiMac>(apDevice->GetMac());
+    Ptr<SpectrumWifiPhy> apPhy = DynamicCast<SpectrumWifiPhy>(apDevice->GetPhy());
+    if (!apMac || !apPhy || !apMac->GetHeConfiguration() ||
+        apPhy->GetNumberOfAntennas() != m_configuration.numTxAntennas)
+    {
+        Reject("downlink installation requires a configured HE AP using SpectrumWifiPhy");
+    }
+
+    std::set<uint32_t> userIds;
+    std::set<Ptr<WifiNetDevice>> devices;
+    for (const auto& binding : stationBindings)
+    {
+        if (!binding.stationDevice || binding.stationDevice == apDevice ||
+            !userIds.insert(binding.userId).second || !devices.insert(binding.stationDevice).second)
+        {
+            Reject("downlink station bindings must have unique users and station devices");
+        }
+        Ptr<SpectrumWifiPhy> staPhy = DynamicCast<SpectrumWifiPhy>(binding.stationDevice->GetPhy());
+        if (!staPhy || !binding.stationDevice->GetMac() ||
+            staPhy->GetNumberOfAntennas() != 1 ||
+            staPhy->GetMaxSupportedRxSpatialStreams() != 1 ||
+            staPhy->GetMaxSupportedTxSpatialStreams() != 1)
+        {
+            Reject("downlink stations require SpectrumWifiPhy with one antenna and one stream");
+        }
+    }
+    if (stationBindings.size() < 2)
+    {
+        Reject("downlink installation requires at least two station bindings");
+    }
+
+    uint32_t groupSize = m_configuration.dlMu->groupingMode == DlMuMimoGroupingMode::FIXED
+                             ? m_configuration.dlMu->requestedUserIds.size()
+                             : m_configuration.dlMu->requestedGroupSize;
+    if (groupSize < 2 || groupSize > m_configuration.numTxAntennas ||
+        groupSize > stationBindings.size() ||
+        apPhy->GetMaxSupportedTxSpatialStreams() < groupSize)
+    {
+        Reject("configured MU group size is incompatible with AP or station capabilities");
+    }
+
+    Ptr<SionnaMimoDownlinkScheduler> scheduler = CreateObject<SionnaMimoDownlinkScheduler>();
+    scheduler->Configure(apDevice,
+                         stationBindings,
+                         spectrumModel,
+                         std::move(snapshotProvider),
+                         *m_configuration.dlMu,
+                         scheduling);
+    apMac->AggregateObject(scheduler);
+    return scheduler;
 }
 
 void
@@ -695,13 +1123,14 @@ SionnaMimoHelper::GetSelectedPrecoding() const
     return *m_selectedPrecoding;
 }
 
-const std::array<SionnaMimoMode, 3>&
+const std::array<SionnaMimoMode, 4>&
 SionnaMimoHelper::GetSupportedModes()
 {
-    static const std::array<SionnaMimoMode, 3> modes{
+    static const std::array<SionnaMimoMode, 4> modes{
         SionnaMimoMode::SISO,
         SionnaMimoMode::SU_MIMO_SPATIAL_MULTIPLEXING,
-        SionnaMimoMode::SU_BEAMFORMING};
+        SionnaMimoMode::SU_BEAMFORMING,
+        SionnaMimoMode::MU_MIMO};
     return modes;
 }
 
@@ -717,7 +1146,7 @@ SionnaMimoHelper::Validate(const SionnaMimoConfiguration& configuration)
 {
     if (!IsModeSupported(configuration.mode))
     {
-        Reject("only SISO, SU-MIMO spatial multiplexing, and SU beamforming are supported");
+        Reject("only SISO, SU-MIMO spatial multiplexing, SU beamforming, and MU-MIMO are supported");
     }
 
     ValidateArray(configuration.txArray, "TX");
@@ -781,7 +1210,7 @@ SionnaMimoHelper::Validate(const SionnaMimoConfiguration& configuration)
             Reject("open-loop SU-MIMO uses one stream per TX antenna");
         }
     }
-    else
+    else if (configuration.mode == SionnaMimoMode::SU_BEAMFORMING)
     {
         if (configuration.numTxAntennas < 2)
         {
@@ -802,6 +1231,42 @@ SionnaMimoHelper::Validate(const SionnaMimoConfiguration& configuration)
         {
             Reject("MRT requires exactly one RX antenna and one spatial stream");
         }
+    }
+
+    else if (configuration.mode == SionnaMimoMode::MU_MIMO)
+    {
+        if (configuration.numTxAntennas < 2 || configuration.numRxAntennas != 1 ||
+            configuration.maxNss != 1)
+        {
+            Reject("MU-MIMO requires two to eight AP antennas, one station RX antenna, and per-user NSS one");
+        }
+        if (configuration.precodingMatrix || configuration.beamforming)
+        {
+            Reject("MU-MIMO cannot combine SU fixed precoding or SU beamforming");
+        }
+        if (!configuration.dlMu)
+        {
+            Reject("MU-MIMO requires an explicit downlink MU runtime configuration");
+        }
+        if (configuration.eesmBetaLinear.empty())
+        {
+            Reject("MU-MIMO requires at least one explicit EESM beta");
+        }
+        DlMuMimoRuntime runtime(*configuration.dlMu);
+        static_cast<void>(runtime);
+        const uint32_t groupSize =
+            configuration.dlMu->groupingMode == DlMuMimoGroupingMode::FIXED
+                ? configuration.dlMu->requestedUserIds.size()
+                : configuration.dlMu->requestedGroupSize;
+        if (groupSize < 2 || groupSize > configuration.numTxAntennas)
+        {
+            Reject("MU-MIMO group size must be between two and the AP antenna count");
+        }
+    }
+
+    if (configuration.mode != SionnaMimoMode::MU_MIMO && configuration.dlMu)
+    {
+        Reject("a downlink MU runtime configuration requires MU-MIMO mode");
     }
 
     if (configuration.precodingMatrix)
@@ -850,10 +1315,13 @@ SionnaMimoHelper::ValidateForHeMcs(const SionnaMimoConfiguration& configuration,
     {
         Reject("HE MCS must be in [0, 11]");
     }
-    if (configuration.mode == SionnaMimoMode::SU_MIMO_SPATIAL_MULTIPLEXING &&
+    if ((configuration.mode == SionnaMimoMode::SU_MIMO_SPATIAL_MULTIPLEXING ||
+         configuration.mode == SionnaMimoMode::MU_MIMO) &&
         configuration.eesmBetaLinear.count(mcs) == 0)
     {
-        Reject("open-loop SU-MIMO requires an explicit EESM beta for HE MCS " +
+        Reject((configuration.mode == SionnaMimoMode::MU_MIMO
+                    ? std::string("MU-MIMO requires an explicit EESM beta for HE MCS ")
+                    : std::string("open-loop SU-MIMO requires an explicit EESM beta for HE MCS ")) +
                std::to_string(mcs));
     }
     else if (configuration.mode == SionnaMimoMode::SU_BEAMFORMING &&

@@ -8,19 +8,24 @@
 #define SIONNA_MIMO_HELPER_H
 
 #include "ns3/mimo-csi-feedback.h"
+#include "ns3/dl-mu-mimo-runtime.h"
 #include "ns3/mimo-precoding-matrix.h"
 #include "ns3/ptr.h"
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <optional>
+#include <vector>
 
 namespace ns3
 {
 class SionnaHelper;
 class SionnaSpectrumPropagationLossModel;
 class SpectrumWifiPhyHelper;
+class WifiNetDevice;
+class MultiUserScheduler;
 
 /** Operating modes represented by the high-level MIMO API. */
 enum class SionnaMimoMode
@@ -30,6 +35,23 @@ enum class SionnaMimoMode
     SU_BEAMFORMING,
     MU_MIMO
 };
+
+/** Downlink scheduling policy installed by SionnaMimoHelper. */
+enum class SionnaMimoDownlinkScheduling
+{
+    MU,
+    SU_ROUND_ROBIN
+};
+
+/** Stable application user binding for one associated station device. */
+struct SionnaMimoStationBinding
+{
+    uint32_t userId;
+    Ptr<WifiNetDevice> stationDevice;
+};
+
+/** Supplies a deterministic multi-user channel snapshot for an exact time. */
+using SionnaMimoDownlinkSnapshotProvider = std::function<MultiUserChannelSnapshot(Time)>;
 
 /** Sionna antenna element patterns represented by the high-level API. */
 enum class SionnaMimoAntennaPattern
@@ -148,6 +170,8 @@ struct SionnaMimoConfiguration
     std::map<uint32_t, SionnaMimoOrientation> nodeOrientations;
     std::optional<MimoPrecodingMatrix> precodingMatrix;
     std::optional<SionnaMimoBeamformingConfiguration> beamforming;
+    /** Required runtime grouping, CSI timing, and MU precoder configuration. */
+    std::optional<DlMuMimoRuntimeConfiguration> dlMu;
 };
 
 /**
@@ -260,6 +284,18 @@ class SionnaMimoHelper
                        SpectrumWifiPhyHelper& rxPhyHelper,
                        Ptr<SionnaSpectrumPropagationLossModel> spectrumModel) const;
 
+    /**
+     * Install an AP-owned deterministic HE downlink scheduler after devices
+     * exist and before Simulator::Run().  Association IDs are resolved by the
+     * AP when a transmission is scheduled.
+     */
+    Ptr<MultiUserScheduler> InstallDownlink(
+        Ptr<WifiNetDevice> apDevice,
+        const std::vector<SionnaMimoStationBinding>& stationBindings,
+        Ptr<SionnaSpectrumPropagationLossModel> spectrumModel,
+        SionnaMimoDownlinkSnapshotProvider snapshotProvider,
+        SionnaMimoDownlinkScheduling scheduling) const;
+
     /** Validate and set the orientation of one ns-3 node ID. */
     void SetNodeOrientation(uint32_t nodeId, const SionnaMimoOrientation& orientation);
 
@@ -324,10 +360,10 @@ class SionnaMimoHelper
     /** Return the selected beamforming result, throwing if absent. */
     const SionnaMimoPrecodingSelection& GetSelectedPrecoding() const;
 
-    /** Return the modes that are functional through Phase 3.5. */
-    static const std::array<SionnaMimoMode, 3>& GetSupportedModes();
+    /** Return the modes that are functional through Phase 4.6. */
+    static const std::array<SionnaMimoMode, 4>& GetSupportedModes();
 
-    /** Return whether a mode is functional through Phase 3.5. */
+    /** Return whether a mode is functional through Phase 4.6. */
     static bool IsModeSupported(SionnaMimoMode mode);
 
     /**

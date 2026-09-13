@@ -198,3 +198,32 @@ class SionnaSuMimoPrecodingNegativeSuite : public ns3::TestSuite
 };
 
 static SionnaSuMimoPrecodingNegativeSuite g_sionnaSuMimoPrecodingNegativeSuite;
+
+class SionnaMuMimoExampleTest : public ns3::ExampleAsTestCase
+{
+  public:
+    SionnaMuMimoExampleTest()
+        : ExampleAsTestCase("sionna-example-mumimo",
+                            "ns3_wifi_mumimo",
+                            NS_TEST_SOURCEDIR,
+                            "--eesmBetaLinear=2 --rzfAlpha=0.25 --verify=1")
+    {
+    }
+
+    std::string GetPostProcessingCommand() const override
+    {
+        return "| sed \"/^Env: /d\"";
+    }
+};
+
+class SionnaMuMimoExampleSuite : public ns3::TestSuite
+{
+  public:
+    SionnaMuMimoExampleSuite()
+        : TestSuite("sionna-example-mumimo", EXAMPLE)
+    {
+        AddTestCase(new SionnaMuMimoExampleTest, QUICK);
+    }
+};
+
+static SionnaMuMimoExampleSuite g_sionnaMuMimoExampleSuite;

@@ -1,1 +1,1 @@
-configuration_error=SionnaMimoHelper: only SISO, SU-MIMO spatial multiplexing, and SU beamforming are supported
+configuration_error=SionnaMimoHelper: MU-MIMO requires an explicit downlink MU runtime configuration

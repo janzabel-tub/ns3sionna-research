@@ -18,6 +18,7 @@
 
 #include <cstdint>
 #include <map>
+#include <optional>
 #include <vector>
 
 namespace ns3
@@ -43,6 +44,7 @@ enum class DlMuMimoGroupingMode
 /** Joint precoder selected from the complete MU channel snapshot. */
 enum class DlMuMimoRuntimePrecoder
 {
+    FIXED,
     ZERO_FORCING,
     REGULARIZED_ZERO_FORCING
 };
@@ -75,6 +77,8 @@ struct DlMuMimoRuntimeConfiguration
     double rzfAlpha{0.0};
     double rankTolerance{MimoSvdPrecodingOptions::DEFAULT_RANK_TOLERANCE};
     MimoCsiTimingConfiguration timing;
+    /** Explicit joint precoder required when precoder is FIXED. */
+    std::optional<DlMuMimoPrecodingMatrix> fixedPrecoding;
 };
 
 /**
@@ -154,6 +158,14 @@ class DlMuMimoRuntime
                  uint32_t apNodeId,
                  const MultiUserScheduler::DlMuInfo& schedulerInfo,
                  const std::vector<DlMuMimoStaUserBinding>& bindings,
+                 Time transmissionTimestamp) const;
+
+    /** Install retained CSI state with a separate physical TX snapshot. */
+    void Install(SionnaSpectrumPropagationLossModel& model,
+                 uint32_t apNodeId,
+                 const MultiUserScheduler::DlMuInfo& schedulerInfo,
+                 const std::vector<DlMuMimoStaUserBinding>& bindings,
+                 const MultiUserChannelSnapshot& transmissionSnapshot,
                  Time transmissionTimestamp) const;
 
   private:

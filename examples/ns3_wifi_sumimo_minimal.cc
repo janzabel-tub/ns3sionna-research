@@ -401,6 +401,9 @@ main(int argc, char* argv[])
         else
         {
             invalidConfiguration.mode = SionnaMimoMode::MU_MIMO;
+            invalidConfiguration.rxArray.numColumns = 1;
+            invalidConfiguration.numRxAntennas = 1;
+            invalidConfiguration.maxNss = 1;
         }
         try
         {

@@ -33,6 +33,7 @@
 #include <limits>
 #include <map>
 #include <optional>
+#include <vector>
 
 namespace ns3
 {
@@ -140,6 +141,19 @@ class SionnaSpectrumPropagationLossModel : public SpectrumPropagationLossModel
     const MimoPrecodingMatrix& GetPrecodingMatrix() const;
 
     /**
+     * Install actual directed AP-to-STA channels for downlink propagation.
+     * This state is independent of the CSI snapshot that selected an MU
+     * precoder and also supplies HE-SU reception and MU overhearing.
+     */
+    void SetDownlinkTransmissionSnapshot(const MultiUserChannelSnapshot& snapshot);
+
+    /** Remove explicit directed downlink transmission channels. */
+    void ClearDownlinkTransmissionSnapshot();
+
+    /** Return whether explicit directed downlink transmission channels exist. */
+    bool HasDownlinkTransmissionSnapshot() const;
+
+    /**
      * Install one immutable Phase-4.4 downlink MU snapshot and joint precoder.
      *
      * Runtime CSI lookup and scheduler integration deliberately remain outside
@@ -206,6 +220,7 @@ class SionnaSpectrumPropagationLossModel : public SpectrumPropagationLossModel
     Ptr<SionnaPropagationCache> m_propagationCache;
     Ptr<HeSuMimoLinkAbstraction> m_linkAbstraction;
     std::optional<MimoPrecodingMatrix> m_precodingMatrix;
+    std::optional<MultiUserChannelSnapshot> m_downlinkTransmissionSnapshot;
     std::optional<MultiUserChannelSnapshot> m_dlMuSnapshot;
     std::optional<DlMuMimoPrecodingMatrix> m_dlMuPrecoding;
     std::map<uint8_t, double> m_eesmBetas;
@@ -216,6 +231,8 @@ class SionnaSpectrumPropagationLossModel : public SpectrumPropagationLossModel
         std::numeric_limits<double>::quiet_NaN()};
 
     TracedCallback<uint64_t, uint32_t, uint32_t, double, double, uint32_t> m_mimoRxTrace;
+    /** Addressed HE-MU payload result: UID, user ID, TX/RX node IDs, and numerical result. */
+    TracedCallback<uint64_t, uint32_t, uint32_t, uint32_t, HeDlMuMimoUserResult> m_dlMuMimoRxTrace;
 };
 
 } // namespace ns3

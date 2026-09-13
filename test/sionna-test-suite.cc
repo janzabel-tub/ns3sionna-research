@@ -268,7 +268,7 @@ class SionnaMimoHelperDefaultsTest : public TestCase
                                   "Default roll is not zero");
 
         const auto& supportedModes = SionnaMimoHelper::GetSupportedModes();
-        NS_TEST_ASSERT_MSG_EQ(supportedModes.size(), 3, "Unexpected number of supported modes");
+        NS_TEST_ASSERT_MSG_EQ(supportedModes.size(), 4, "Unexpected number of supported modes");
         NS_TEST_ASSERT_MSG_EQ(SionnaMimoHelper::IsModeSupported(SionnaMimoMode::SISO),
                               true,
                               "SISO is not reported as supported");
@@ -282,8 +282,8 @@ class SionnaMimoHelperDefaultsTest : public TestCase
             true,
             "Completed SU beamforming is not reported as supported");
         NS_TEST_ASSERT_MSG_EQ(SionnaMimoHelper::IsModeSupported(SionnaMimoMode::MU_MIMO),
-                              false,
-                              "MU-MIMO is falsely reported as supported");
+                              true,
+                              "Completed MU-MIMO is not reported as supported");
     }
 };
 
@@ -658,7 +658,7 @@ class SionnaMimoHelperInvalidConfigurationTest : public TestCase
 
         configuration = {};
         configuration.mode = SionnaMimoMode::MU_MIMO;
-        expectRejected(configuration, "Phase-4 MU-MIMO was accepted");
+        expectRejected(configuration, "an incomplete MU-MIMO configuration was accepted");
 
         configuration = {};
         configuration.receiverType = SionnaMimoReceiverType::ZERO_FORCING;

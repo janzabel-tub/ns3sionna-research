@@ -134,6 +134,54 @@ IntegralBand(const SpectrumValue& psd, const WifiSpectrumBandIndices& indices)
     return powerW;
 }
 
+void
+ValidateDownlinkTransmissionSnapshot(const MultiUserChannelSnapshot& snapshot)
+{
+    if (snapshot.direction != MultiUserChannelDirection::DOWNLINK || snapshot.users.empty())
+    {
+        throw std::invalid_argument("Sionna downlink transmission snapshot must contain downlink users");
+    }
+
+    const auto& first = snapshot.users.front();
+    const uint32_t txNodeId = first.txNodeId;
+    const uint32_t numSubcarriers = first.channel.GetNumSubcarriers();
+    const uint32_t numTxAntennas = first.channel.GetNumTxAntennas();
+    const auto frequencies = first.frequencies;
+    if (numSubcarriers == 0 || numTxAntennas == 0 || frequencies.size() != numSubcarriers)
+    {
+        throw std::invalid_argument("Sionna downlink transmission snapshot has invalid dimensions");
+    }
+
+    std::set<uint32_t> receivers;
+    uint32_t previousUserId = 0;
+    bool isFirst = true;
+    for (const auto& user : snapshot.users)
+    {
+        if ((!isFirst && user.userId <= previousUserId) ||
+            user.txNodeId != txNodeId || user.rxNodeId == txNodeId ||
+            !receivers.insert(user.rxNodeId).second ||
+            user.direction != snapshot.direction || user.csiTimestamp != snapshot.csiTimestamp ||
+            user.channel.GetNumSubcarriers() != numSubcarriers ||
+            user.channel.GetNumTxAntennas() != numTxAntennas ||
+            user.channel.GetNumRxAntennas() == 0 || user.frequencies != frequencies ||
+            !std::isfinite(user.widebandLossDb))
+        {
+            throw std::invalid_argument(
+                "Sionna downlink transmission snapshot has inconsistent directed users");
+        }
+        for (const auto coefficient : user.channel.GetCoefficients())
+        {
+            if (!std::isfinite(coefficient.real()) || !std::isfinite(coefficient.imag()))
+            {
+                throw std::invalid_argument(
+                    "Sionna downlink transmission snapshot has non-finite CFR coefficients");
+            }
+        }
+        isFirst = false;
+        previousUserId = user.userId;
+    }
+}
+
 } // namespace
 
 const HeSuMimoLinkResult&
@@ -193,7 +241,13 @@ SionnaSpectrumPropagationLossModel::GetTypeId()
                             "and minimum channel rank",
                             MakeTraceSourceAccessor(
                                 &SionnaSpectrumPropagationLossModel::m_mimoRxTrace),
-                            "ns3::TracedCallback::Uint64Uint32Uint32DoubleDoubleUint32");
+                            "ns3::TracedCallback::Uint64Uint32Uint32DoubleDoubleUint32")
+            .AddTraceSource("DlMuMimoRx",
+                            "Addressed HE-MU payload numerical result: UID, user ID, TX node, RX "
+                            "node, and per-user link result",
+                            MakeTraceSourceAccessor(
+                                &SionnaSpectrumPropagationLossModel::m_dlMuMimoRxTrace),
+                            "ns3::TracedCallback::Uint64Uint32Uint32Uint32HeDlMuMimoUserResult");
     return tid;
 }
 
@@ -272,6 +326,26 @@ SionnaSpectrumPropagationLossModel::GetPrecodingMatrix() const
 {
     NS_ABORT_MSG_IF(!m_precodingMatrix, "No fixed precoding matrix is configured");
     return *m_precodingMatrix;
+}
+
+void
+SionnaSpectrumPropagationLossModel::SetDownlinkTransmissionSnapshot(
+    const MultiUserChannelSnapshot& snapshot)
+{
+    ValidateDownlinkTransmissionSnapshot(snapshot);
+    m_downlinkTransmissionSnapshot = snapshot;
+}
+
+void
+SionnaSpectrumPropagationLossModel::ClearDownlinkTransmissionSnapshot()
+{
+    m_downlinkTransmissionSnapshot.reset();
+}
+
+bool
+SionnaSpectrumPropagationLossModel::HasDownlinkTransmissionSnapshot() const
+{
+    return m_downlinkTransmissionSnapshot.has_value();
 }
 
 void
@@ -610,7 +684,22 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
                             heMuPpdu->GetTxPsdFlag() == HePpdu::PSD_HE_PORTION;
 
     // SpectrumChannel also delivers to bystanders and hears other transmitters.
-    // An installed group applies only to its directed AP/receiver links.
+    // Physical directed channels apply to every AP-to-STA transmission, while
+    // the selected MU state applies only to an addressed MU payload.
+    const MultiUserChannel* transmissionReceiver = nullptr;
+    if (m_downlinkTransmissionSnapshot)
+    {
+        for (const auto& user : m_downlinkTransmissionSnapshot->users)
+        {
+            if (user.txNodeId == aId && user.rxNodeId == bId)
+            {
+                NS_ABORT_MSG_IF(transmissionReceiver,
+                                "Directed downlink snapshot contains the receiver twice");
+                transmissionReceiver = &user;
+            }
+        }
+    }
+
     const MultiUserChannel* muReceiver = nullptr;
     if (isHeMu && HasDlMuMimoState())
     {
@@ -644,20 +733,22 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
             muReceiver = nullptr;
         }
     }
-    NS_ABORT_MSG_IF(!muReceiver && !m_fixedChannelEnabled && !m_propagationCache,
+    NS_ABORT_MSG_IF(!transmissionReceiver && !muReceiver && !m_fixedChannelEnabled && !m_propagationCache,
                     "Physical propagation for this link requires a cache or fixed CFR");
 
     // SpectrumChannel has already applied the scalar wideband path loss.
     const double wbLoss =
-        muReceiver ? muReceiver->widebandLossDb
+        transmissionReceiver ? transmissionReceiver->widebandLossDb
+                             : (muReceiver ? muReceiver->widebandLossDb
                    : (m_fixedChannelEnabled
                           ? m_fixedPathLossDb
-                          : m_propagationCache->GetPropagationLoss(a, b));
+                          : m_propagationCache->GetPropagationLoss(a, b)));
     const MimoChannelMatrix channel =
-        muReceiver ? muReceiver->channel
+        transmissionReceiver ? transmissionReceiver->channel
+                             : (muReceiver ? muReceiver->channel
                    : (m_fixedChannelEnabled
                           ? m_fixedChannel
-                          : m_propagationCache->GetPropagationChannelMatrix(a, b));
+                          : m_propagationCache->GetPropagationChannelMatrix(a, b)));
     const uint32_t psdSubcarriers = params->psd->GetValuesN() - 1;
     // ns-3 sends the common non-HE part on a 312.5 kHz grid; the installed
     // HE CFR uses 78.125 kHz. Sample the same frequency centres for that part.
@@ -895,6 +986,11 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
                       userResult.GetEffectiveSinrLinear(),
                       userResult.GetPacketErrorRate(),
                       0);
+        m_dlMuMimoRxTrace(wifiParams->ppdu->GetUid(),
+                          muReceiver->userId,
+                          aId,
+                          bId,
+                          userResult);
     }
 
     else if (scalarCompatibilityPath)

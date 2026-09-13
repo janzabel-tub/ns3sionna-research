@@ -1,6 +1,6 @@
 # ns3sionna: MIMO-Abstraktionsmodell für IEEE 802.11ax/be
 
-Stand: 12. September 2026, Unterphase 4.5 implementiert; Korrektur 4.4 abgeschlossen und validiert
+Stand: 13. September 2026, Unterphase 4.6 implementiert; Unterphasen 4.7 und 4.8 nicht begonnen
 
 Arbeitszweig: feature/su-mimo-minimal
 
@@ -15,7 +15,7 @@ Precoding und MU-MIMO, wird ausschließlich in ns-3 ausgeführt.
 
 Die Entwicklung erfolgt in kleinen, einzeln testbaren Schritten. Der aktuelle
 Stand umfasst die Unterphasen 1.1 bis 1.4, die vollständige Phase 2 sowie
-die Unterphasen 3.1 bis 3.5 sowie 4.1 bis 4.5: den numerischen SU-MIMO-Kern, konfigurierbare
+die Unterphasen 3.1 bis 3.5 sowie 4.1 bis 4.6: den numerischen SU-MIMO-Kern, konfigurierbare
 Sionna-Arrays, einen
 dimensionssicheren MIMO-Datenvertrag, explizit kalibrierbare
 802.11ax-EESM-/PER-Abbildung und die
@@ -71,8 +71,8 @@ Ergebnisse werden auf die gemeinsame Phase-4.2-Gesamtleistung normalisiert;
 ordnet STA-ID, RU, MCS und NSS zu und begrenzt räumliche Interferenz auf
 dieselbe RU. Unterphase 4.5 bindet nun den Laufzeit-CSI-Zustand an die
 MultiUserScheduler-Ausgabe und ergänzt feste sowie korrelationsbasierte
-Gruppen. High-Level-Helper-Integration, ein konkreter End-to-End-Scheduler und
-Unterphase 4.6 oder später wurden nicht begonnen.
+Gruppen. Unterphase 4.6 ergänzt die Helper-Installation, den konkreten Downlink-Scheduler und den
+deterministischen CPU-Vergleich; Unterphase 4.7 und 4.8 bleiben offen.
 
 ## 2. Reproduzierbare Ausgangsbasis
 
@@ -587,9 +587,9 @@ korrelationsbasierte Gruppenauswahl. Erst wenn der Scheduler genau diese
 Auswahl für denselben Sendezeitpunkt ausgibt, installiert Install den
 unveränderten Snapshot und ZF-/RZF-Precoder im Phase-4.4-Adapter. Falsche,
 veraltete, anders gerichtete oder nicht unterstützte Zustände werden vor
-jeder Änderung abgelehnt. Unterphase 4.6 wurde nicht begonnen.
+jeder Änderung abgelehnt. Unterphase 4.6 verwendet den getrennten Übertragungsschnappschuss und ersetzt den CSI-Zustand dabei nicht.
 
-#### Unterphase 4.6: Downlink-Benutzbarkeit und Phasenvalidierung
+#### Unterphase 4.6: Downlink-Benutzbarkeit und Phasenvalidierung (implementiert)
 
 - `SionnaMimoHelper` den Modus `MU_MIMO` erst nach erfolgreicher
   End-to-End-Integration als unterstützt melden lassen.
@@ -610,7 +610,38 @@ zusätzliche AP-Sendeleistung zu erzeugen; bei hoher Korrelation verschlechtert
 sich das Ergebnis nachvollziehbar oder die Gruppe wird abgelehnt. Beispiele
 benötigen keine manuelle Verdrahtung interner Objekte.
 
-#### Unterphase 4.7: Uplink-MU-Numerikkern
+Dieses Kriterium ist erfüllt: `InstallDownlink` übernimmt einen AP, stabile
+Nutzerbindungen, Spectrumadapter und einen zeitabhängigen Snapshotanbieter in
+ein AP-eigenes `MultiUserScheduler`-Objekt. Die Installation verlangt zwei bis
+acht AP-Sendeantennen, eine Empfangsantenne und NSS eins je Station, eine
+explizite MU-Laufzeitkonfiguration sowie ein EESM-Beta für den verwendeten MCS.
+Am tatsächlichen `PhyTxPsduBegin`-Zeitpunkt wählt sie CSI erneut, behält die
+ausgegebene Gruppe bei und installiert den physischen Downlink-Snapshot getrennt
+vom CSI-Snapshot. Der Adapter verwendet damit auch für SU-Empfang und
+Mithörer die gerichtete Übertragungs-CFR.
+
+Das CPU-Beispiel verwendet einen Zweiantennen-AP und zwei Einantennen-HE-
+Stationen auf Kanal 36 mit 20 MHz, 800 ns GI, 7 dB Rauschzahl, 0 dBm AP-Leistung,
+MCS 5, statischem ARP sowie einem MPDU je Nutzer und PPDU. Sein
+frequenzflacher Kanal lautet
+
+\[
+ h_1(t)=[1,e^{j\theta(t)}],\qquad
+ h_2(t)=[1,e^{j(\theta(t)+\phi)}],\qquad
+ \theta(t)=2\pi f t .
+\]
+
+Dabei sind \(\phi=\pi\) und \(\phi=0{,}2\) die orthogonale und korrelierte
+Variante; \(f=25\,\mathrm{Hz}\). Aktuelles CSI verwendet Nullintervall und
+Nullverzögerung, altes CSI 5 ms und 2 ms. Der Verifikationslauf mit
+`--eesmBetaLinear=2 --rzfAlpha=0.25 --verify=1` bestätigt die konstante
+AP-Leistung von 0,001 W, zwei adressierte Nutzer pro HE-MU-PPDU, endliches
+normalisiertes RZF, nichtverschwindende Alterungsinterferenz und den erwarteten
+ZF-Unterschied: orthogonales aktuelles ZF erreicht 75,226685740 Mbit/s je
+Airtime-Sekunde gegenüber 49,586776860 für SU-MRT. Die Ausgabe trennt
+tatsächliche PHY-Drops und empirische PER von der numerischen EESM/PER-Prognose.
+
+#### Unterphase 4.7: Uplink-MU-Numerikkern (nicht begonnen)
 
 - Das Uplink-Signalmodell
 
@@ -631,7 +662,7 @@ Abnahmekriterium: Der Einzelnutzerfall reproduziert die vorhandene
 SU-Empfangsabstraktion; analytische Mehrnutzerkanäle und Nah-Fern-Fälle
 liefern die erwarteten ZF-/MMSE-SINRs, ohne Nutzerleistungen zu vermischen.
 
-#### Unterphase 4.8: Uplink-PHY-Integration und Gesamtabschluss
+#### Unterphase 4.8: Uplink-PHY-Integration und Gesamtabschluss (nicht begonnen)
 
 - Den Uplink-Kern an koordinierte HE-TB-/UL-MU-Übertragungen, Triggerrahmen,
   STA-ID-, RU- und MCS-Zuordnungen anbinden.
@@ -2151,11 +2182,11 @@ Richtung, Zeit, Endpunkte, Nutzer-, STA-ID-, PSDU-, RU- und NSS-Mengen,
 Frequenz-/Antennendimensionen, Endlichkeit, Last und Rang vor einer
 Zustandsänderung. Protocol Buffers, Serialisierung, Batching, Rohkanalcache,
 ZMQ, Server, Sionna RT, SU-Helper, EESM/PER und der Spectrum-Rechenpfad
-bleiben unverändert. Ein konkreter End-to-End-Scheduler, automatische
-Sounding-/Feedbackereignisse, Helperfreigabe, EHT und Uplink bleiben
-Unterphase 4.6 oder später vorbehalten.
+bleiben unverändert. Unterphase 4.6 ergänzt den konkreten End-to-End-Scheduler und die
+Helperfreigabe. Automatische Sounding-/Feedbackereignisse, EHT und Uplink
+bleiben ausdrücklich offen.
 
-## 6. High-Level-API-Vertrag bis Unterphase 3.5
+## 6. High-Level-API-Vertrag bis Unterphase 4.6
 
 ### 6.1 Typen, Besitz und Defaults
 
@@ -2213,7 +2244,7 @@ wertbasierter Vertrag und verändert Simulationsobjekte erst mit Apply.
 
 ### 6.2 Unterstützte Betriebsarten
 
-GetSupportedModes und IsModeSupported melden genau drei akzeptierte Modi:
+GetSupportedModes und IsModeSupported melden vier akzeptierte Modi:
 
 1. SISO mit genau einer TX- und einer RX-Antenne sowie NSS eins;
 2. SU_MIMO_SPATIAL_MULTIPLEXING mit linearem MMSE-Empfänger. Ohne W[k]
@@ -2222,6 +2253,9 @@ GetSupportedModes und IsModeSupported melden genau drei akzeptierte Modi:
 3. SU_BEAMFORMING mit explizit gewähltem MRT oder SVD. SelectPrecoding erzeugt
    aus der übergebenen CSI-Matrix genau eine unveränderliche Auswahl, die
    Apply anschließend über den vorhandenen festen-W[k]-Pfad installiert.
+4. MU_MIMO für den Helper-installierten HE-Downlink mit einem Stream und einer
+   Empfangsantenne je Station, einer Vollband-242-Ton-RU und expliziter
+   Laufzeitkonfiguration.
 
 Festes benutzergegebenes Precoding bleibt bewusst
 SU_MIMO_SPATIAL_MULTIPLEXING zugeordnet, weil es keine aus H[k] abgeleitete
@@ -2230,8 +2264,8 @@ Strahlformung implementiert. MRT ist weiterhin auf perfektes aktuelles
 quantisiertes HE-/EHT-SU-Feedback und explizites CSI-Alter. Räumliche
 Wasserfüllung ist mit unquantisiertem aktuellem CSI verfügbar; ihre
 Kombination mit Feedbackquantisierung oder Alterung bleibt aufgrund des
-semi-unitären Feedbackvertrags unzulässig. MU_MIMO bleibt der einzige
-reservierte Modus und wird eindeutig abgelehnt. Ebenso werden der
+semi-unitären Feedbackvertrags unzulässig. MU_MIMO wird nur ohne explizite `dlMu`-Konfiguration oder außerhalb von
+`InstallDownlink` eindeutig abgelehnt. Ebenso werden der
 repräsentierte Zero-Forcing-Empfänger, eine unnormalisierte CFR und Mutual
 Information als PER-wirksames Effective-SINR-Modell abgelehnt. Die
 MI-Kompression aus Abschnitt 5.4 bleibt eine Diagnosemetrik.
@@ -2556,13 +2590,12 @@ Simulator-Timer, keine implizite CSI-Abfrage und keinen MAC-Feedbacktransport;
 diese Grenzen verhindern, dass das explizite Forschungsmodell eine
 vollständige 802.11-Soundingprozedur vortäuscht.
 
-## 7. Validierung der Unterphasen 1.1 bis 4.5
+## 7. Validierung der Unterphasen 1.1 bis 4.6
 
-Die native Suite sionna enthält nun 33 schnelle Fälle:
+Die native Suite sionna enthält die schnellen API-, Numerik- und Adapterfälle:
 
 1. API-Defaulttest für den vollständigen legacy-kompatiblen SISO-Vertrag,
-   leere EESM-Kalibrierung, fehlendes W[k] und exakt drei gemeldete
-   Betriebsarten.
+   leere EESM-Kalibrierung, fehlendes W[k] und alle vier gemeldeten Betriebsarten.
 2. Gültiger 2x2-Vertrag mit dual polarisiertem TX-Element, knotenspezifischer
    Orientierung, explizitem Beta, Identitäts-Precoding, frequenzselektiver
    2x1-Streamauswahl sowie zulässigem 2-TX-/1-RX-/1-Stream-Grenzfall.
@@ -3054,8 +3087,32 @@ auf derselben CPU-Referenzplattform erfolgreich ausgeführt:
 Damit ist das Abnahmekriterium der Unterphase 4.4 nach der Korrektur erfüllt.
 Die Gruppenrechnung wird weiterhin einmal je adressiertem Empfänger ausgeführt;
 diese bekannte Leistungseinschränkung ändert die funktionale Abnahme nicht.
-Helperfreigabe, automatischer Scheduler, Uplink und wissenschaftliche
-EESM-Kalibrierung bleiben spätere Unterphasen.
+Uplink und wissenschaftliche EESM-Kalibrierung bleiben spätere Unterphasen;
+der Downlink-Helper und Scheduler gehören seit Unterphase 4.6 zum getesteten
+CPU-Pfad.
+
+### 7.10 Validierung der Unterphase 4.6
+
+Am 13. September 2026 wurden auf der CPU-Referenzplattform folgende Prüfungen
+erfolgreich ausgeführt:
+
+- `./ns3 build sionna-test ns3_wifi_mumimo ns3_wifi_sumimo_minimal
+  ns3_wifi_sumimo_precoding`
+- die nativen Suites `sionna`, `dl-mu-mimo-runtime`, `dl-mu-mimo-ru`,
+  `he-dl-mu-spectrum-ru` und `sionna-mimo-csi-feedback`
+- die ExampleAsTest-Suites für SU-Minimal, SU-Precoding, dessen Negativfälle,
+  Helper-Konfiguration, Helper-Laufzeit und `sionna-example-mumimo`; der neue
+  MU-Vergleich bestand in 206,905 s mit dem stabilen Referenzlog
+- `./ns3 run "ns3_wifi_mumimo --eesmBetaLinear=2 --rzfAlpha=0.25 --verify=1"`;
+  die Ausgabe endete mit `validation=passed methods=4 channels=2 timings=2`
+- `conda run -n sionna-venv python tests/test_imports.py` sowie die Python-
+  Vertragstests für Datenvertrag, deterministische Mobilität, Kohärenzzeit und
+  Server-Unit-Tests. Die Umgebung meldete Sionna/Sionna RT 2.0.1, Mitsuba 3.8.0
+  mit `llvm_ad_mono_polarized`, PyTorch 2.9.1+cpu und keine CUDA-Laufzeit.
+
+Der MU-Pfad verändert weder Python, Protocol Buffers, Cache-Serialisierung noch
+den Server. Ein optionaler RTX-3060-Raytracing-Lauf bleibt daher eine Regression
+des bestehenden Pfads und keine Voraussetzung für die CPU-Abnahme.
 
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 
@@ -3079,10 +3136,10 @@ EESM-Kalibrierung bleiben spätere Unterphasen.
   einer Empfangsantenne und einem Stream je Nutzer. Unterphase 4.4 integriert
   einen explizit installierten gemeinsamen Zustand für HE-DL-MU direkt in den
   Spectrumadapter und liest die HE-MU-PHY-Metadaten aus dem TxVector.
-  Unterphase 4.5 ergänzt nun die wertbasierte Laufzeit- und
-  Scheduler-Schnittstelle für HE-Downlink. SionnaMimoHelper-Freigabe, ein
-  konkreter End-to-End-Scheduler und automatische Ablaufsteuerung bleiben
-  Unterphase 4.6 oder später vorbehalten.
+  Unterphase 4.5 ergänzt die wertbasierte Laufzeit- und Scheduler-Schnittstelle;
+  Unterphase 4.6 installiert sie mit `InstallDownlink` am AP und setzt am
+  tatsächlichen Sendezeitpunkt den getrennten Übertragungskanal. Automatisches
+  Sounding und MAC-Feedbackrahmen bleiben offen.
 - MRT bleibt der eindeutige perfekte 2x1-MISO-Ein-Stream-Fall. Quantisierung
   und positives CSI-Alter gelten nur für gleichleistungs-SVD. Wasserfüllung
   bleibt auf unquantisiertes aktuelles CSI beschränkt, weil die semantische
@@ -3153,9 +3210,9 @@ Einzelnutzer- und 1x1-Grenzfall sowie alle Phase-1-/2-/3-Pfade bleiben
 kompatibel. Die Laufzeit-CSI-/Scheduler-Schnittstelle der Unterphase 4.5
 verwaltet jetzt den neuesten exakten AP-/Gruppen-/RU-/NSS-Zustand, übernimmt
 Phase-3-Zeiten und installiert ausschließlich denselben gerichteten Snapshot
-im PHY. Automatische Sounding-/Feedbackabläufe, Helperintegration, ein
-End-to-End-Schedulerbeispiel und sämtliche Unterphasen ab 4.6 wurden nicht
-begonnen.
+im PHY. Automatische Sounding-/Feedbackabläufe sowie die Uplink-Unterphasen 4.7 und
+4.8 wurden nicht begonnen; Helperintegration und das End-to-End-
+Schedulerbeispiel sind mit Unterphase 4.6 abgeschlossen.
 
 ## 9. Ausführung
 
@@ -3173,10 +3230,13 @@ Vom ns-3.40-Verzeichnis:
     ./test.py -s sionna-example-mimo-helper-runtime-negative
     ./test.py -s sionna-example-sumimo-precoding
     ./test.py -s sionna-example-sumimo-precoding-negative
+    ./test.py -s sionna-example-mumimo
     ./ns3 run "ns3_wifi_sumimo_minimal --eesmBetaLinear=2"
     ./ns3 run "ns3_wifi_sumimo_precoding --eesmBetaLinear=2"
     ./ns3 run "ns3_wifi_sumimo_precoding --eesmBetaLinear=2 \
       --quantization=coarse --csiUpdateIntervalMs=5 --feedbackDelayMs=2"
+
+    ./ns3 run "ns3_wifi_mumimo --eesmBetaLinear=2 --rzfAlpha=0.25 --verify=1"
 
 Python-Vertrag und Server vom Verzeichnis contrib/sionna/model/ns3sionna:
 

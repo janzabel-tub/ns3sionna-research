@@ -399,6 +399,139 @@ class DlMuMimoRuntimeRejectionTest : public TestCase
     }
 };
 
+class DlMuMimoRuntimeFixedTransmissionTest : public TestCase
+{
+  public:
+    DlMuMimoRuntimeFixedTransmissionTest()
+        : TestCase("DL MU runtime retains fixed precoding and atomically installs a distinct transmission channel")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        const DlMuMimoPrecodingMatrix fixed(
+            MimoPrecodingMatrix::FrequencyFlat(1, 2, 2, {{1.0, 0.0}, {0.0, 0.0},
+                                                          {0.0, 0.0}, {1.0, 0.0}}),
+            {{3, 0}, {12, 0}});
+        DlMuMimoRuntimeConfiguration configuration;
+        configuration.requestedUserIds = {3, 12};
+        configuration.precoder = DlMuMimoRuntimePrecoder::FIXED;
+        configuration.fixedPrecoding = fixed;
+        configuration.timing.feedbackDelay = NanoSeconds(100);
+        DlMuMimoRuntime runtime(configuration);
+        const auto selection = runtime.SelectAndStore(42,
+                                                      MakeSnapshot(),
+                                                      MakeInfo(),
+                                                      Bindings(),
+                                                      NanoSeconds(100));
+        NS_TEST_ASSERT_MSG_EQ(SamePrecoder(selection.GetPrecoding(), fixed),
+                              true,
+                              "fixed runtime coefficients changed during selection");
+
+        auto transmission = selection.GetSnapshot();
+        transmission.csiTimestamp = NanoSeconds(100);
+        for (auto& user : transmission.users)
+        {
+            user.csiTimestamp = NanoSeconds(100);
+            user.widebandLossDb += 3.0;
+            user.channel.Set(0, 0, 0, user.channel.Get(0, 0, 0) + std::complex<double>(0.25, 0.0));
+        }
+        const auto selectedInfo = MakeInfo({7, 15});
+        const std::vector<DlMuMimoStaUserBinding> selectedBindings{{7, 3}, {15, 12}};
+        auto adapter = CreateObject<SionnaSpectrumPropagationLossModel>();
+        runtime.Install(*adapter,
+                        42,
+                        selectedInfo,
+                        selectedBindings,
+                        transmission,
+                        NanoSeconds(100));
+        NS_TEST_ASSERT_MSG_EQ(adapter->HasDlMuMimoState(), true,
+                              "fixed runtime install did not retain MU state");
+        NS_TEST_ASSERT_MSG_EQ(adapter->HasDownlinkTransmissionSnapshot(), true,
+                              "fixed runtime install did not retain the physical channel");
+        NS_TEST_ASSERT_MSG_EQ(SamePrecoder(runtime.Lookup(42,
+                                                        selectedInfo,
+                                                        selectedBindings,
+                                                        NanoSeconds(100))
+                                                .GetPrecoding(),
+                                      fixed),
+                              true,
+                              "transmission-channel install changed retained fixed precoding");
+        NS_TEST_ASSERT_MSG_EQ(selection.GetSnapshot().csiTimestamp,
+                              NanoSeconds(0),
+                              "transmission-channel install changed retained CSI timestamp");
+
+        auto expectRejected = [this](const auto& operation, const std::string& reason) {
+            bool rejected = false;
+            try
+            {
+                operation();
+            }
+            catch (const std::invalid_argument&)
+            {
+                rejected = true;
+            }
+            NS_TEST_ASSERT_MSG_EQ(rejected, true, reason);
+        };
+        auto wrongTimestamp = transmission;
+        wrongTimestamp.csiTimestamp = NanoSeconds(99);
+        for (auto& user : wrongTimestamp.users)
+        {
+            user.csiTimestamp = NanoSeconds(99);
+        }
+        expectRejected(
+            [&]() {
+                runtime.Install(*adapter,
+                                42,
+                                selectedInfo,
+                                selectedBindings,
+                                wrongTimestamp,
+                                NanoSeconds(100));
+            },
+            "a transmission snapshot with another timestamp was accepted");
+        auto wrongEndpoint = transmission;
+        wrongEndpoint.users.front().rxNodeId = 99;
+        expectRejected(
+            [&]() {
+                runtime.Install(*adapter,
+                                42,
+                                selectedInfo,
+                                selectedBindings,
+                                wrongEndpoint,
+                                NanoSeconds(100));
+            },
+            "a transmission snapshot with another endpoint was accepted");
+        auto wrongGrid = transmission;
+        wrongGrid.users.front().frequencies = {1};
+        expectRejected(
+            [&]() {
+                runtime.Install(*adapter,
+                                42,
+                                selectedInfo,
+                                selectedBindings,
+                                wrongGrid,
+                                NanoSeconds(100));
+            },
+            "a transmission snapshot with another grid was accepted");
+        NS_TEST_ASSERT_MSG_EQ(adapter->HasDlMuMimoState(), true,
+                              "an invalid transmission snapshot cleared MU state");
+        NS_TEST_ASSERT_MSG_EQ(adapter->HasDownlinkTransmissionSnapshot(), true,
+                              "an invalid transmission snapshot cleared physical channel state");
+
+        auto missingFixed = configuration;
+        missingFixed.fixedPrecoding.reset();
+        expectRejected([&]() { static_cast<void>(DlMuMimoRuntime(missingFixed)); },
+                       "fixed precoding without a matrix was accepted");
+        auto incompatibleFixed = configuration;
+        incompatibleFixed.groupingMode = DlMuMimoGroupingMode::MINIMUM_CORRELATION;
+        incompatibleFixed.requestedUserIds.clear();
+        incompatibleFixed.requestedGroupSize = 2;
+        expectRejected([&]() { static_cast<void>(DlMuMimoRuntime(incompatibleFixed)); },
+                       "fixed precoding with correlation grouping was accepted");
+    }
+};
+
 class DlMuMimoRuntimeTestSuite : public TestSuite
 {
   public:
@@ -407,6 +540,7 @@ class DlMuMimoRuntimeTestSuite : public TestSuite
     {
         AddTestCase(new DlMuMimoRuntimeSelectionTest, TestCase::QUICK);
         AddTestCase(new DlMuMimoRuntimeRejectionTest, TestCase::QUICK);
+        AddTestCase(new DlMuMimoRuntimeFixedTransmissionTest, TestCase::QUICK);
     }
 };
 

@@ -96,8 +96,30 @@ ValidateConfiguration(const DlMuMimoRuntimeConfiguration& configuration)
         Reject("requested user IDs must be unique");
     }
 
+    if (configuration.precoder == DlMuMimoRuntimePrecoder::FIXED)
+    {
+        if (configuration.groupingMode != DlMuMimoGroupingMode::FIXED)
+        {
+            Reject("fixed precoding requires fixed user grouping");
+        }
+        if (!configuration.fixedPrecoding)
+        {
+            Reject("fixed precoding requires an explicit precoding matrix");
+        }
+        if (configuration.rzfAlpha != 0.0)
+        {
+            Reject("fixed precoding does not accept an RZF regularization parameter");
+        }
+    }
+    else if (configuration.fixedPrecoding)
+    {
+        Reject("a fixed precoding matrix requires the FIXED precoder option");
+    }
+
     switch (configuration.precoder)
     {
+    case DlMuMimoRuntimePrecoder::FIXED:
+        break;
     case DlMuMimoRuntimePrecoder::ZERO_FORCING:
         if (configuration.rzfAlpha != 0.0)
         {
@@ -284,6 +306,11 @@ SelectPrecoder(const MultiUserChannelSnapshot& snapshot,
         mappings.push_back({user.userId, 0});
     }
     return TranslateInvalidArgument([&]() {
+        if (configuration.precoder == DlMuMimoRuntimePrecoder::FIXED)
+        {
+            configuration.fixedPrecoding->ValidateForSnapshot(snapshot);
+            return *configuration.fixedPrecoding;
+        }
         if (configuration.precoder == DlMuMimoRuntimePrecoder::ZERO_FORCING)
         {
             return DlMuMimoPrecodingMatrix::ZeroForcing(snapshot,
@@ -393,6 +420,45 @@ SameSnapshot(const MultiUserChannelSnapshot& lhs, const MultiUserChannelSnapshot
         }
     }
     return true;
+}
+
+void
+ValidateTransmissionSnapshot(const MultiUserChannelSnapshot& transmission,
+                             const MultiUserChannelSnapshot& csi,
+                             uint32_t apNodeId,
+                             const std::vector<DlMuMimoRuntimeUser>& users,
+                             Time transmissionTimestamp)
+{
+    // Reuse the complete dimensional, finite-value, and ordering checks.  A
+    // TX snapshot is intentionally allowed to differ in CFR and path loss.
+    ValidateSnapshot(transmission, apNodeId, users, transmissionTimestamp);
+    if (transmission.users.size() != csi.users.size())
+    {
+        Reject("transmission and CSI snapshots must contain the same users");
+    }
+    for (std::size_t index = 0; index < transmission.users.size(); ++index)
+    {
+        const auto& txUser = transmission.users[index];
+        const auto& csiUser = csi.users[index];
+        if (txUser.userId != csiUser.userId || txUser.txNodeId != csiUser.txNodeId ||
+            txUser.rxNodeId != csiUser.rxNodeId || txUser.direction != csiUser.direction ||
+            txUser.rxArray.numRows != csiUser.rxArray.numRows ||
+            txUser.rxArray.numColumns != csiUser.rxArray.numColumns ||
+            txUser.rxArray.verticalSpacing != csiUser.rxArray.verticalSpacing ||
+            txUser.rxArray.horizontalSpacing != csiUser.rxArray.horizontalSpacing ||
+            txUser.rxArray.pattern != csiUser.rxArray.pattern ||
+            txUser.rxArray.polarization != csiUser.rxArray.polarization)
+        {
+            Reject("transmission snapshot endpoints, users, or receive arrays differ from CSI");
+        }
+        if (txUser.frequencies != csiUser.frequencies ||
+            txUser.channel.GetNumSubcarriers() != csiUser.channel.GetNumSubcarriers() ||
+            txUser.channel.GetNumTxAntennas() != csiUser.channel.GetNumTxAntennas() ||
+            txUser.channel.GetNumRxAntennas() != csiUser.channel.GetNumRxAntennas())
+        {
+            Reject("transmission snapshot dimensions or frequency grid differ from CSI");
+        }
+    }
 }
 
 } // namespace
@@ -688,6 +754,28 @@ DlMuMimoRuntime::Install(
     const auto& state =
         Lookup(apNodeId, schedulerInfo, bindings, transmissionTimestamp);
     model.SetDlMuMimoState(state.GetSnapshot(), state.GetPrecoding());
+}
+
+void
+DlMuMimoRuntime::Install(
+    SionnaSpectrumPropagationLossModel& model,
+    uint32_t apNodeId,
+    const MultiUserScheduler::DlMuInfo& schedulerInfo,
+    const std::vector<DlMuMimoStaUserBinding>& bindings,
+    const MultiUserChannelSnapshot& transmissionSnapshot,
+    Time transmissionTimestamp) const
+{
+    // Lookup first enforces the exact scheduler assignment and CSI timestamp.
+    const auto& state = Lookup(apNodeId, schedulerInfo, bindings, transmissionTimestamp);
+    ValidateTransmissionSnapshot(transmissionSnapshot,
+                                 state.GetSnapshot(),
+                                 apNodeId,
+                                 state.GetUsers(),
+                                 transmissionTimestamp);
+    // SetDlMuMimoState validates once more before replacing its optional state,
+    // so an invalid input cannot partially update the adapter.
+    model.SetDownlinkTransmissionSnapshot(transmissionSnapshot);
+    model.SetDlMuMimoState(transmissionSnapshot, state.GetPrecoding());
 }
 
 } // namespace ns3
