@@ -17,6 +17,8 @@ Sionna (https://nvlabs.github.io/sionna/) to the widely used ns-3 network simula
 </tr>
 </table>
 
+The implemented MIMO model and its validation are documented in [ns3sionna_mimo_model.md](./ns3sionna_mimo_model.md).
+
 
 More information can be found in our paper: [Ns3Sionna paper](https://arxiv.org/abs/2412.20524)
 
@@ -129,8 +131,9 @@ Using singularity [here](./singularity/singularity_howto.md)
 
 Current limitations
 ========
-* SISO only
-* under development: MIMO
+* HE SU-MIMO and the documented DL-/UL-MU-MIMO abstractions require explicit CSI and EESM calibration.
+* Automatic sounding, MAC feedback, trigger-scheduler installation, and synchronization impairments are not modeled.
+  See [the MIMO model documentation](./ns3sionna_mimo_model.md) for the exact contracts.
 
 Contact
 ============

@@ -46,4 +46,7 @@ record=group method=mu-zf channel=correlated timing=aged ap_power_W=0.001000000 
 record=user method=mu-rzf channel=correlated timing=aged user=1 delivered_bytes=2768400 goodput_Mbps=22.147200000 attempted=2306 failed=0 empirical_PER=0.000000000 model_PER=1.000000000 stream_SINR_linear=0.324094838 normalized_desired_power=0.000000000 normalized_iui_power=0.000000000 mcs=5 ru=242 nss=1
 record=user method=mu-rzf channel=correlated timing=aged user=2 delivered_bytes=2767200 goodput_Mbps=22.137600000 attempted=2306 failed=0 empirical_PER=0.000000000 model_PER=1.000000000 stream_SINR_linear=4.702370609 normalized_desired_power=0.000000001 normalized_iui_power=0.000000000 mcs=5 ru=242 nss=1
 record=group method=mu-rzf channel=correlated timing=aged ap_power_W=0.001000000 data_airtime_s=0.588627200 airtime_normalized_goodput_Mbps=75.234036076 jain_fairness=0.999999953
-validation=passed methods=4 channels=2 timings=2 deterministic_seed=7
+record=ul-user method=ul-mu-zf channel=orthogonal synchronization=ideal user=1 stream_SINR_linear=10000.000000000 model_PER=0.000000000 ru=242 nss=1
+record=ul-user method=ul-mu-zf channel=orthogonal synchronization=ideal user=2 stream_SINR_linear=10000.000000000 model_PER=0.000000000 ru=242 nss=1
+record=ul-group synchronization=ideal missing=0 non_simultaneous=0 sequential_SU_Mbps=50.000000000 simultaneous_UL_MU_Mbps=100.000000000 concurrency_gain=2.000000000 near_SINR_linear=75.000000000 far_SINR_linear=0.750000000 rank_loss_ZF=rejected rank_loss_MMSE_SINR_linear=0.500000000
+validation=passed dl_methods=4 channels=2 timings=2 ul_methods=3 deterministic_seed=7

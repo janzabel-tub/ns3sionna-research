@@ -1,6 +1,6 @@
 # ns3sionna: MIMO-Abstraktionsmodell für IEEE 802.11ax/be
 
-Stand: 13. September 2026, Unterphase 4.7 implementiert; Unterphase 4.8 nicht begonnen
+Stand: 14. September 2026, Phase 4 einschließlich Unterphase 4.8 implementiert
 
 Arbeitszweig: feature/su-mimo-minimal
 
@@ -14,8 +14,8 @@ Post-Processing-SINR, Effective-SINR, MCS/PER und später die Auswahl von
 Precoding und MU-MIMO, wird ausschließlich in ns-3 ausgeführt.
 
 Die Entwicklung erfolgt in kleinen, einzeln testbaren Schritten. Der aktuelle
-Stand umfasst die Unterphasen 1.1 bis 1.4, die vollständige Phase 2 sowie
-die Unterphasen 3.1 bis 3.5 sowie 4.1 bis 4.6: den numerischen SU-MIMO-Kern, konfigurierbare
+Stand umfasst die Unterphasen 1.1 bis 1.4 sowie die vollständigen Phasen 2,
+3 und 4: den numerischen SU-MIMO-Kern, konfigurierbare
 Sionna-Arrays, einen
 dimensionssicheren MIMO-Datenvertrag, explizit kalibrierbare
 802.11ax-EESM-/PER-Abbildung und die
@@ -73,7 +73,9 @@ dieselbe RU. Unterphase 4.5 bindet nun den Laufzeit-CSI-Zustand an die
 MultiUserScheduler-Ausgabe und ergänzt feste sowie korrelationsbasierte
 Gruppen. Unterphase 4.6 ergänzt die Helper-Installation, den konkreten Downlink-Scheduler und den
 deterministischen CPU-Vergleich. Unterphase 4.7 ergänzt den gemeinsamen
-Uplink-ZF-/MMSE-Numerikkern und nutzerweise PER; Unterphase 4.8 bleibt offen.
+Uplink-ZF-/MMSE-Numerikkern und nutzerweise PER. Unterphase 4.8 bindet reale
+HE-Basic-Trigger- und HE-TB-PHY-Metadaten an diesen Kern und berücksichtigt
+nur exakt gleichzeitig am AP empfangene Nutzer innerhalb derselben RU.
 
 ## 2. Reproduzierbare Ausgangsbasis
 
@@ -672,7 +674,7 @@ EESM-/ErrorRateModel-Vertrag. Der Einzelnutzer-, Orthogonal-, Rangverlust- und
 Nah-Fern-Fall stimmen mit den analytischen Referenzen überein. HE-TB-/Trigger-
 und Gleichzeitigkeitseinbindung bleiben ausschließlich Unterphase 4.8.
 
-#### Unterphase 4.8: Uplink-PHY-Integration und Gesamtabschluss (nicht begonnen)
+#### Unterphase 4.8: Uplink-PHY-Integration und Gesamtabschluss (implementiert)
 
 - Den Uplink-Kern an koordinierte HE-TB-/UL-MU-Übertragungen, Triggerrahmen,
   STA-ID-, RU- und MCS-Zuordnungen anbinden.
@@ -689,6 +691,18 @@ Abnahmekriterium: Eine koordinierte UL-MU-Gruppe liefert pro Nutzer
 reproduzierbare SINR-, PER- und Durchsatzwerte; der erwartete
 Gleichzeitigkeitsgewinn sowie Nah-Fern- und Rangverlusteffekte sind sichtbar,
 und alle Phase-1- bis Phase-3-Regressionen bleiben erfolgreich.
+
+Dieses Kriterium ist erfüllt: `HeUlMuMimoPhyAdapter` validiert einen
+HE-Basic-Trigger gemeinsam mit den tatsächlich am AP beobachteten
+`HePpdu`-Objekten. Stabile Nutzer-, STA- und Senderbindungen sowie Trigger-UID,
+HE-TB-Präambel, PPDU-Dauer, NSS, MCS-Beta und AP-Antennendimension werden vor
+der Rechnung geprüft. Nur PPDUs mit exakt dem expliziten gemeinsamen
+Empfangsintervall werden nach RU gruppiert; verschiedene RUs bleiben
+orthogonal. Fehlende und nicht gleichzeitige STA-IDs werden getrennt im
+Ergebnis ausgewiesen. Das erweiterte CPU-Beispiel vergleicht dieselben
+orthogonalen Nutzer sequenziell und gleichzeitig, kennzeichnet die ideale
+Synchronisation maschinenlesbar und zeigt außerdem Nah-Fern- sowie
+Rangverlustverhalten.
 
 ### Phase 5: Kalibrierung, Skalierung und Reproduzierbarkeit
 
@@ -2287,7 +2301,64 @@ AP und Empfangsarray, Zeitstempel, Frequenzraster, CFR-Endlichkeit,
 Ein-Stream-Grenze, vollständige Zuordnungen, getrennte endliche SNRs und
 gegebenenfalls ZF-Rang geprüft. Snapshot und Eingaben werden nur gelesen.
 
-## 6. High-Level-API-Vertrag bis Unterphase 4.6
+### 5.18 HE-TB-/Triggerintegration der Unterphase 4.8
+
+`HeUlMuMimoPhyAdapter` bildet die schmale Grenze zwischen ns-3-Wi-Fi-PHY-
+Objekten und dem wertbasierten Uplinkkern. Der Aufrufer übergibt den
+dekodierten `CtrlTriggerHeader`, dessen PPDU-UID, stabile Bindungen
+\((u,\mathrm{STA-ID},n_\mathrm{tx})\), den gerichteten
+Uplink-Snapshot sowie die am AP beobachteten `HePpdu`-Empfangsintervalle.
+Zulässig sind ausschließlich HE-Basic-Trigger und davon ausgelöste
+`WIFI_PREAMBLE_HE_TB`-PPDUs mit derselben UID. RU, MCS und NSS stammen
+ausschließlich aus den User-Info-Feldern des Triggers; das entspricht der
+ns-3-HE-TB-Semantik, bei der der AP diese nicht selbsttragenden PHY-Angaben
+aus seinem TRIGVECTOR ergänzt.
+
+Für das explizite ideale Empfangsintervall
+\([t_0,t_1)\) und eine RU \(r\) lautet die tatsächlich gemeinsam detektierte
+Nutzermenge
+
+\[
+  \mathcal A_r =
+  \left\{u\;\middle|\;
+    \mathrm{uid}_u=\mathrm{uid}_\mathrm{TF},
+    \mathrm{RU}_u=r,
+    t_{\mathrm{start},u}=t_0,
+    t_{\mathrm{end},u}=t_1
+  \right\}.
+\]
+
+Der Adapter konstruiert für jede nichtleere Menge \(\mathcal A_r\) einen
+unveränderten, nach Nutzer-ID geordneten Teilsnapshot und ruft genau einmal
+`HeUlMuMimoLinkAbstraction` auf. Nutzer verschiedener RUs gehen nie in
+dieselbe Interferenzkovarianz ein. Ein im Trigger angekündigter Nutzer ohne
+PPDU erscheint in `GetMissingStaIds()`; ein gültiges HE-TB-PPDU mit
+abweichendem Start oder Ende erscheint in
+`GetNonSimultaneousStaIds()`. Beide Kategorien bleiben aus jedem
+Detektionszustand ausgeschlossen. Unbekannte oder doppelte STA-IDs, falsche
+Sender-/AP-Knoten, andere Trigger-UIDs, falsche Präambeln, ungültige Leistung
+oder Dauer, Antennendimensionsfehler und fehlende MCS-Betas brechen atomar als
+`std::invalid_argument` ab.
+
+Je tatsächlich teilnehmendem Nutzer berechnet der Adapter das Link Budget mit
+der Bandbreite seiner RU und reicht Paketgröße, belegte CFR-Töne und
+Trigger-TxVector an die bestehende nutzerweise EESM-/PER-Abbildung weiter.
+Für eine nachfolgende skalare SpectrumWifiPhy-Einkopplung steht analog zum
+Downlink die äquivalente Empfangsleistung
+
+\[
+  P_{\mathrm{eq},u} =
+    \frac{\gamma_{\mathrm{eff},u}N_{\mathrm{AP},u}}
+         {G_{\mathrm{div},u}}
+\]
+
+bereit. \(N_{\mathrm{AP},u}\) enthält thermisches Rauschen, RU-Bandbreite und
+Rauschzahl genau einmal; \(G_{\mathrm{div},u}=N_{\mathrm{rx,AP}}\) korrigiert
+nur den zusätzlichen AWGN-Diversityfaktor des ns-3-ErrorRateModel. Die
+matrixwertige gewünschte Leistung, Inter-User-Interferenz, Rauschverstärkung,
+SINR und PER bleiben zusätzlich vollständig im Gruppenergebnis erhalten.
+
+## 6. High-Level-API-Vertrag bis Unterphase 4.8
 
 ### 6.1 Typen, Besitz und Defaults
 
@@ -2691,7 +2762,7 @@ Simulator-Timer, keine implizite CSI-Abfrage und keinen MAC-Feedbacktransport;
 diese Grenzen verhindern, dass das explizite Forschungsmodell eine
 vollständige 802.11-Soundingprozedur vortäuscht.
 
-## 7. Validierung der Unterphasen 1.1 bis 4.7
+## 7. Validierung der Unterphasen 1.1 bis 4.8
 
 Die native Suite sionna enthält die schnellen API-, Numerik- und Adapterfälle:
 
@@ -2839,6 +2910,15 @@ SU-MMSE-/MRC-Kern, orthogonale Nutzer, ZF-Rangverlust, rangdefiniertes MMSE,
 den Nah-Fern-Fall mit Referenz-SNRs 100 und 1 sowie getrennte HE-EESM-/PER-
 Abbildung für verschiedene MCS und Paketgrößen. ZF liefert im korrelierten
 Fall 75 und 0,75; MMSE liefert 87,5 und 0,752475247524752.
+
+Die eigenständige native Suite `he-ul-mu-mimo-phy-adapter` ergänzt zwei
+Unterphase-4.8-Fälle mit echten `CtrlTriggerHeader`- und `HePpdu`-Objekten.
+Der positive Fall prüft umgekehrte Empfangsreihenfolge, zwei MCS, gemeinsame
+242-Ton-RU, analytische orthogonale MMSE-SINRs 4 und 9, PER und äquivalente
+Empfangsleistung sowie die orthogonale Trennung zweier 106-Ton-RUs. Der
+Teilnahmefall weist nach, dass ein fehlender und ein um eine Nanosekunde
+verspäteter Nutzer nicht detektiert und getrennt gemeldet werden. Eine
+fremde Trigger-UID wird atomar abgelehnt.
 
 Die eigenständige native Suite `sionna-mimo-csi-feedback` ergänzt zwei Fälle
 für Unterphase 3.4. Der Feedbackfall prüft HE und EHT, beide SU-Codebücher,
@@ -3245,6 +3325,40 @@ Der neue Kern ändert weder Python, Protocol Buffers, Cache, Server, Scheduler
 noch SpectrumWifiPhy. Diese Pfade bleiben für die koordinierte
 Uplink-Integration der Unterphase 4.8 unverändert.
 
+### 7.12 Validierung der Unterphase 4.8
+
+Am 14. September 2026 wurden auf der CPU-Referenzplattform folgende
+Prüfungen erfolgreich ausgeführt:
+
+- `./ns3 build sionna-test ns3_wifi_mumimo`; Adapter, Tests und erweitertes
+  Phasenbeispiel wurden übersetzt und gelinkt
+- `he-ul-mu-mimo-phy-adapter`: beide Fälle bestanden. Echte HE-Basic-Trigger-
+  und HE-TB-Objekte liefern für eine gemeinsame 242-Ton-RU die analytischen
+  MMSE-SINRs 4 und 9; getrennte 106-Ton-RUs bilden zwei Gruppen. Fehlende und
+  um eine Nanosekunde verspätete STAs werden getrennt gemeldet, eine fremde
+  Trigger-UID wird abgelehnt.
+- die nativen Regressionen `sionna`, `ul-mu-mimo`, `dl-mu-mimo-runtime`,
+  `dl-mu-mimo-ru`, `he-dl-mu-spectrum-ru` und
+  `sionna-mimo-csi-feedback`: jeweils eine Suite bestanden, ohne Fehler,
+  Überspringen oder Absturz
+- die unveränderten ExampleAsTest-Suites für SU-Minimal, SU-Precoding, dessen
+  Negativfälle sowie Helper-Konfiguration und Helper-Laufzeit: jeweils
+  erfolgreich
+- `sionna-example-mumimo`: der normale Referenzloglauf bestand in 221,483 s.
+  Das ideale orthogonale Uplinkbeispiel liefert bei MCS 5 je Nutzer die
+  SINR 10000 und PER null. Sequenzielles SU erreicht 50 Mbit/s, gleichzeitiges
+  UL-MU 100 Mbit/s und damit exakt den Faktor 2. Der Nah-Fern-Fall liefert
+  75 und 0,75; ZF lehnt Rangverlust ab, MMSE bleibt mit SINR 0,5 definiert.
+- vollständige Python-/CPU-Serversuite mit allen 19 Fällen in 191,753 s,
+  einschließlich Datenvertrag, deterministischer Mobilität, Kohärenzzeit und
+  realer 2x2-CFR, erfolgreich
+- `git diff --check` ohne Befund
+
+Damit ist das Abnahmekriterium der Unterphase 4.8 erfüllt. Der Adapter bindet
+die reale Trigger-/HE-TB-Metadatenebene an den unveränderten Uplinkkern; die
+weiterhin idealisierte Synchronisation bleibt in API, Beispielausgabe und
+Modellgrenzen ausdrücklich sichtbar.
+
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 
 - SionnaMimoHelper überträgt eine gemeinsame TX- und RX-Geometrie für die
@@ -3275,9 +3389,12 @@ Uplink-Integration der Unterphase 4.8 unverändert.
   Sendeantenne und Stream null, einen gemeinsamen AP-Empfänger sowie ideale
   Zeit- und Frequenzsynchronisation. ZF verlangt zusätzlich
   \(U\leq N_{\mathrm{rx,AP}}\) und vollen Rang; lineares MMSE bleibt bei
-  Rangverlust definiert. Eine koordinierte HE-TB-/Triggerintegration und die
-  Auswahl tatsächlich gleichzeitig eintreffender Nutzer existieren erst mit
-  Unterphase 4.8.
+  Rangverlust definiert. Unterphase 4.8 bindet den Kern an HE-Basic-Trigger
+  und echte HE-TB-PPDU-Metadaten, gruppiert exakt gleichzeitige Nutzer je RU
+  und meldet fehlende oder nicht gleichzeitige Teilnehmer explizit. Die
+  Gleichzeitigkeit wird über das vom Aufrufer beobachtete Empfangsintervall
+  eingebracht; automatische Trigger-Schedulerinstallation, Zeit-/
+  Frequenzoffsets und mehrere lokale Nutzerstreams bleiben offen.
 - MRT bleibt der eindeutige perfekte 2x1-MISO-Ein-Stream-Fall. Quantisierung
   und positives CSI-Alter gelten nur für gleichleistungs-SVD. Wasserfüllung
   bleibt auf unquantisiertes aktuelles CSI beschränkt, weil die semantische
@@ -3350,9 +3467,10 @@ verwaltet jetzt den neuesten exakten AP-/Gruppen-/RU-/NSS-Zustand, übernimmt
 Phase-3-Zeiten und installiert ausschließlich denselben gerichteten Snapshot
 im PHY. Unterphase 4.7 ergänzt getrennte Nutzerleistungen, gemeinsame
 ZF-/MMSE-Detektion und nutzerweise EESM/PER im direkten Uplink-Numerikkern.
-Automatische Sounding-/Feedbackabläufe sowie Uplink-PHY-/Triggerintegration
-bleiben Unterphase 4.8; Helperintegration und das End-to-End-Schedulerbeispiel
-des Downlinks sind mit Unterphase 4.6 abgeschlossen.
+Unterphase 4.8 schließt Phase 4 mit dem HE-TB-/Triggeradapter, expliziter
+Gleichzeitigkeitsauswahl und dem erweiterten CPU-Phasenbeispiel ab.
+Automatische Sounding-/Feedbackabläufe, Synchronisationsfehler und eine
+vollständige MAC-Schedulerinstallation bleiben Forschungsgrenzen für Phase 5.
 
 ## 9. Ausführung
 
@@ -3363,6 +3481,7 @@ Vom ns-3.40-Verzeichnis:
     ./test.py -s sionna
     ./test.py -s dl-mu-mimo-ru
     ./test.py -s he-dl-mu-spectrum-ru
+    ./test.py -s he-ul-mu-mimo-phy-adapter
     ./test.py -s ul-mu-mimo
     ./test.py -s dl-mu-mimo-runtime
     ./test.py -s sionna-mimo-csi-feedback

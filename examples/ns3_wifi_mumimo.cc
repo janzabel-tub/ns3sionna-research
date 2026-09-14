@@ -4,6 +4,7 @@
 #include "ns3/internet-module.h"
 #include "ns3/mobility-module.h"
 #include "ns3/network-module.h"
+#include "ns3/he-ul-mu-mimo-phy-adapter.h"
 #include "ns3/propagation-module.h"
 #include "ns3/sionna-helper.h"
 #include "ns3/sionna-mimo-helper.h"
@@ -131,6 +132,150 @@ Result Run(Method method,bool correlated,bool aged,uint8_t mcs,double beta,doubl
   sinks.Start(Seconds(0)); sources.Start(Seconds(0.5)); sources.Stop(Seconds(1.5)); Simulator::Stop(Seconds(1.6)); Simulator::Run(); for(uint32_t i=0;i<2;++i) r.bytes.at(i)=DynamicCast<PacketSink>(sinks.Get(i))->GetTotalRx(); Simulator::Destroy(); return r;
 }
 void Print(const Result& r,uint8_t mcs) { double sum=0,square=0; for(uint32_t i=0;i<2;++i) { double gp=r.bytes.at(i)*8/1e6; sum+=gp; square+=gp*gp; double per=r.attempts.at(i)?double(r.failures.at(i))/r.attempts.at(i):0; std::cout<<"record=user method="<<r.method<<" channel="<<r.channel<<" timing="<<r.timing<<" user="<<i+1<<" delivered_bytes="<<r.bytes.at(i)<<" goodput_Mbps="<<gp<<" attempted="<<r.attempts.at(i)<<" failed="<<r.failures.at(i)<<" empirical_PER="<<per<<" model_PER="<<r.modelPer.at(i)<<" stream_SINR_linear="<<r.sinr.at(i)<<" normalized_desired_power="<<r.desired.at(i)<<" normalized_iui_power="<<r.iui.at(i)<<" mcs="<<unsigned(mcs)<<" ru=242 nss=1"<<std::endl; } const double fairness=square?sum*sum/(2*square):0; const double normalized=r.airtime?sum/r.airtime:0; std::cout<<"record=group method="<<r.method<<" channel="<<r.channel<<" timing="<<r.timing<<" ap_power_W="<<r.power<<" data_airtime_s="<<r.airtime<<" airtime_normalized_goodput_Mbps="<<normalized<<" jain_fairness="<<fairness<<std::endl; }
+struct UlExampleResult
+{
+    double sequentialThroughputMbps{0.0};
+    double simultaneousThroughputMbps{0.0};
+    double nearSinr{0.0};
+    double farSinr{0.0};
+    double rankLossMmseSinr{0.0};
+    bool rankLossZfRejected{false};
+};
+
+MultiUserChannelSnapshot
+UlSnapshot(const std::string& shape)
+{
+    MultiUserChannelSnapshot snapshot{NanoSeconds(1234), MultiUserChannelDirection::UPLINK, {}};
+    for (uint32_t userId = 1; userId <= 2; ++userId)
+    {
+        MimoChannelMatrix channel(1, 2, 1);
+        if (shape == "orthogonal")
+        {
+            channel.Set(0, userId - 1, 0, {1.0, 0.0});
+        }
+        else if (shape == "near-far")
+        {
+            channel.Set(0, 0, 0, {userId == 1 ? 1.0 : 0.5, 0.0});
+            channel.Set(0, 1, 0, {userId == 1 ? 0.0 : std::sqrt(3.0) / 2.0, 0.0});
+        }
+        else
+        {
+            channel.Set(0, 0, 0, {1.0, 0.0});
+        }
+        snapshot.users.push_back({userId,
+                                  userId,
+                                  0,
+                                  MultiUserChannelDirection::UPLINK,
+                                  snapshot.csiTimestamp,
+                                  {2, 1, 0.5, 0.5, "iso", "V"},
+                                  {0},
+                                  0.0,
+                                  std::move(channel)});
+    }
+    return snapshot;
+}
+
+Ptr<const HePpdu>
+UlPpdu(const CtrlTriggerHeader& trigger, uint16_t staId, Time duration, uint64_t uid)
+{
+    WifiMacHeader header;
+    header.SetType(WIFI_MAC_QOSDATA);
+    header.SetQosTid(0);
+    header.SetAddr1(Mac48Address("00:00:00:00:00:01"));
+    header.SetAddr2(staId == 7 ? Mac48Address("00:00:00:00:00:07")
+                              : Mac48Address("00:00:00:00:00:09"));
+    WifiConstPsduMap psdus{{staId, Create<WifiPsdu>(Create<Packet>(1200), header)}};
+    static const WifiPhyOperatingChannel channel = [] {
+        WifiPhyOperatingChannel operatingChannel;
+        operatingChannel.SetDefault(20, WIFI_STANDARD_80211ax, WIFI_PHY_BAND_5GHZ);
+        return operatingChannel;
+    }();
+    return Create<HePpdu>(psdus,
+                          trigger.GetHeTbTxVector(staId),
+                          channel,
+                          duration,
+                          uid,
+                          HePpdu::PSD_HE_PORTION);
+}
+
+UlExampleResult
+RunUplink(uint8_t mcs, double beta)
+{
+    constexpr uint64_t triggerUid = 9001;
+    constexpr double boltzmann = 1.3803e-23;
+    const HeRu::RuSpec ru(HeRu::RU_242_TONE, 1, true);
+    WifiTxVector triggerVector;
+    triggerVector.SetPreambleType(WIFI_PREAMBLE_HE_TB);
+    triggerVector.SetChannelWidth(20);
+    triggerVector.SetGuardInterval(1600);
+    triggerVector.SetHeMuUserInfo(7, {ru, mcs, 1});
+    triggerVector.SetHeMuUserInfo(9, {ru, mcs, 1});
+    const auto converted = HePhy::ConvertHeTbPpduDurationToLSigLength(
+        MicroSeconds(200), triggerVector, WIFI_PHY_BAND_5GHZ);
+    triggerVector.SetLength(converted.first);
+    const Time duration = converted.second;
+    const CtrlTriggerHeader trigger(TriggerFrameType::BASIC_TRIGGER, triggerVector);
+    const Time start = MicroSeconds(100);
+    const Time end = start + duration;
+    const std::vector<HeUlMuMimoUserBinding> bindings{{1, 7, 1}, {2, 9, 2}};
+    const double noise = boltzmann * 290.0 * 20e6;
+    const auto receptions = [&](double snr1, double snr2) {
+        return std::vector<HeUlMuMimoPpduReception>{
+            {7, 1, UlPpdu(trigger, 7, duration, triggerUid), start, end, snr1 * noise, 1200, {0}},
+            {9, 2, UlPpdu(trigger, 9, duration, triggerUid), start, end, snr2 * noise, 1200, {0}}};
+    };
+    auto adapter = CreateObject<HeUlMuMimoPhyAdapter>();
+    adapter->SetErrorRateModel(CreateObject<TableBasedErrorRateModel>());
+    adapter->SetEesmBeta(mcs, beta);
+
+    UlExampleResult output;
+    const auto orthogonal = UlSnapshot("orthogonal");
+    const auto simultaneous = adapter->Calculate(orthogonal, trigger, triggerUid, bindings,
+        receptions(10000.0, 10000.0), start, end, 0, 2, 0.0, UlMuMimoDetector::ZERO_FORCING);
+    double simultaneousBits = 0.0;
+    double sequentialBits = 0.0;
+    for (uint32_t userId = 1; userId <= 2; ++userId)
+    {
+        const auto& user = simultaneous.GetUserById(userId);
+        simultaneousBits += 1200.0 * 8.0 * user.GetPacketSuccessRate();
+        const auto all = receptions(10000.0, 10000.0);
+        const std::vector<HeUlMuMimoPpduReception> one{all.at(userId - 1)};
+        const auto sequential = adapter->Calculate(orthogonal, trigger, triggerUid, bindings, one,
+            start, end, 0, 2, 0.0, UlMuMimoDetector::ZERO_FORCING);
+        sequentialBits += 1200.0 * 8.0 * sequential.GetUserById(userId).GetPacketSuccessRate();
+        std::cout << "record=ul-user method=ul-mu-zf channel=orthogonal synchronization=ideal"
+                  << " user=" << userId << " stream_SINR_linear=" << user.GetEffectiveSinrLinear()
+                  << " model_PER=" << user.GetPacketErrorRate() << " ru=242 nss=1" << std::endl;
+    }
+    output.simultaneousThroughputMbps = simultaneousBits / duration.GetSeconds() / 1e6;
+    output.sequentialThroughputMbps = sequentialBits / (2.0 * duration.GetSeconds()) / 1e6;
+
+    const auto nearFar = adapter->Calculate(UlSnapshot("near-far"), trigger, triggerUid, bindings,
+        receptions(100.0, 1.0), start, end, 0, 2, 0.0, UlMuMimoDetector::ZERO_FORCING);
+    output.nearSinr = nearFar.GetUserById(1).GetEffectiveSinrLinear();
+    output.farSinr = nearFar.GetUserById(2).GetEffectiveSinrLinear();
+    try
+    {
+        adapter->Calculate(UlSnapshot("rank-loss"), trigger, triggerUid, bindings,
+            receptions(1.0, 1.0), start, end, 0, 2, 0.0, UlMuMimoDetector::ZERO_FORCING);
+    }
+    catch (const std::invalid_argument&)
+    {
+        output.rankLossZfRejected = true;
+    }
+    const auto rankMmse = adapter->Calculate(UlSnapshot("rank-loss"), trigger, triggerUid, bindings,
+        receptions(1.0, 1.0), start, end, 0, 2, 0.0, UlMuMimoDetector::LINEAR_MMSE);
+    output.rankLossMmseSinr = rankMmse.GetUserById(1).GetEffectiveSinrLinear();
+    std::cout << "record=ul-group synchronization=ideal missing=0 non_simultaneous=0"
+              << " sequential_SU_Mbps=" << output.sequentialThroughputMbps
+              << " simultaneous_UL_MU_Mbps=" << output.simultaneousThroughputMbps
+              << " concurrency_gain="
+              << output.simultaneousThroughputMbps / output.sequentialThroughputMbps
+              << " near_SINR_linear=" << output.nearSinr << " far_SINR_linear=" << output.farSinr
+              << " rank_loss_ZF=" << (output.rankLossZfRejected ? "rejected" : "accepted")
+              << " rank_loss_MMSE_SINR_linear=" << output.rankLossMmseSinr << std::endl;
+    return output;
+}
 } // namespace
 int main(int argc, char* argv[])
 {
@@ -167,6 +312,7 @@ int main(int argc, char* argv[])
             }
         }
     }
+    const auto ul = RunUplink(mcs, beta);
     if (!verify)
     {
         return 0;
@@ -195,8 +341,14 @@ int main(int argc, char* argv[])
                        zfNormalized >= 1.5 * suNormalized &&
                        correlatedZf.sinr[0] < zf.sinr[0] && correlatedZf.sinr[1] < zf.sinr[1] &&
                        agedZf.iui[0] > 0 && agedZf.iui[1] > 0 &&
-                       agedZf.sinr[0] < zf.sinr[0] && agedZf.sinr[1] < zf.sinr[1];
+                       agedZf.sinr[0] < zf.sinr[0] && agedZf.sinr[1] < zf.sinr[1] &&
+                       ul.sequentialThroughputMbps > 0.0 &&
+                       ul.simultaneousThroughputMbps >= 1.9 * ul.sequentialThroughputMbps &&
+                       std::abs(ul.nearSinr - 75.0) < 1e-10 &&
+                       std::abs(ul.farSinr - 0.75) < 1e-10 &&
+                       ul.rankLossZfRejected &&
+                       std::isfinite(ul.rankLossMmseSinr);
     std::cout << "validation=" << (valid ? "passed" : "failed")
-              << " methods=4 channels=2 timings=2 deterministic_seed=7" << std::endl;
+              << " dl_methods=4 channels=2 timings=2 ul_methods=3 deterministic_seed=7" << std::endl;
     return valid ? 0 : 1;
 }

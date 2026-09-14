@@ -48,6 +48,7 @@ set(SOURCE_FILES
         model/dl-mu-mimo-runtime.cc
         model/dl-mu-mimo-link-model.cc
         model/he-dl-mu-mimo-link-abstraction.cc
+        model/he-ul-mu-mimo-phy-adapter.cc
         model/he-ul-mu-mimo-link-abstraction.cc
         model/he-su-mimo-link-abstraction.cc
         model/mimo-channel-matrix.cc
@@ -72,6 +73,7 @@ set(HEADER_FILES
         model/dl-mu-mimo-runtime.h
         model/dl-mu-mimo-link-model.h
         model/he-dl-mu-mimo-link-abstraction.h
+        model/he-ul-mu-mimo-phy-adapter.h
         model/he-ul-mu-mimo-link-abstraction.h
         model/he-su-mimo-link-abstraction.h
         model/mimo-channel-matrix.h
@@ -121,6 +123,7 @@ build_lib(
         test/dl-mu-mimo-ru-test-suite.cc
         test/he-dl-mu-spectrum-ru-test-suite.cc
         test/ul-mu-mimo-link-test-suite.cc
+        test/he-ul-mu-mimo-phy-adapter-test-suite.cc
         ${examples_as_tests_sources}
 )
 
