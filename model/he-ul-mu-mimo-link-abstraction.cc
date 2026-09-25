@@ -147,6 +147,13 @@ HeUlMuMimoLinkAbstraction::SetEesmBetaDb(uint8_t mcs, double betaDb)
     m_suAbstraction->SetEesmBetaDb(mcs, betaDb);
 }
 
+void
+HeUlMuMimoLinkAbstraction::SetAwgnSnrOffsetDb(const HeAwgnCalibrationKey& key,
+                                               double offsetDb)
+{
+    m_suAbstraction->SetAwgnSnrOffsetDb(key, offsetDb);
+}
+
 bool
 HeUlMuMimoLinkAbstraction::HasEesmBeta(uint8_t mcs) const
 {
@@ -276,7 +283,13 @@ HeUlMuMimoLinkAbstraction::Calculate(
         userResult.m_packetSuccessRate = GetErrorRateModel()->GetChunkSuccessRate(
             mode,
             user.txVector,
-            userResult.m_effectiveSinrLinear,
+            m_suAbstraction->GetErrorModelSinrLinear(
+                mode.GetMcsValue(),
+                user.txVector,
+                user.packetSizeBytes,
+                static_cast<uint8_t>(snapshotUser.channel.GetNumRxAntennas()),
+                user.staId,
+                userResult.m_effectiveSinrLinear),
             static_cast<uint64_t>(user.packetSizeBytes) * 8,
             static_cast<uint8_t>(snapshotUser.channel.GetNumRxAntennas()),
             WIFI_PPDU_FIELD_DATA,

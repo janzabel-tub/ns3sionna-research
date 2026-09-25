@@ -15,6 +15,7 @@
 
 #include <cstdint>
 #include <map>
+#include <tuple>
 #include <vector>
 
 namespace ns3
@@ -22,6 +23,29 @@ namespace ns3
 
 class ErrorRateModel;
 class WifiTxVector;
+
+/** Exact HE PHY context for one independently measured AWGN correction. */
+struct HeAwgnCalibrationKey
+{
+    uint8_t mcs{0};
+    bool ldpc{false};
+    uint32_t packetSizeBytes{0};
+    uint8_t nss{0};
+    uint8_t numRxAntennas{0};
+    uint16_t channelWidthMhz{0};
+    uint16_t guardIntervalNs{0};
+
+    bool IsValid() const;
+
+    bool operator<(const HeAwgnCalibrationKey& other) const
+    {
+        return std::tie(mcs, ldpc, packetSizeBytes, nss, numRxAntennas,
+                        channelWidthMhz, guardIntervalNs) <
+               std::tie(other.mcs, other.ldpc, other.packetSizeBytes, other.nss,
+                        other.numRxAntennas, other.channelWidthMhz,
+                        other.guardIntervalNs);
+    }
+};
 
 /**
  * \ingroup sionna
@@ -75,6 +99,17 @@ class HeSuMimoLinkAbstraction : public Object
     bool HasEesmBeta(uint8_t mcs) const;
     double GetEesmBeta(uint8_t mcs) const;
 
+    /** Set a measured AWGN SNR correction for an exact PHY context. */
+    void SetAwgnSnrOffsetDb(const HeAwgnCalibrationKey& key, double offsetDb);
+
+    /** Return the SINR passed to ErrorRateModel, with a matching correction. */
+    double GetErrorModelSinrLinear(uint8_t mcs,
+                                   const WifiTxVector& txVector,
+                                   uint32_t packetSizeBytes,
+                                   uint8_t numRxAntennas,
+                                   uint16_t staId,
+                                   double effectiveSinrLinear) const;
+
     /**
      * Compress every tone and spatial-stream SINR into one effective SINR.
      */
@@ -103,6 +138,7 @@ class HeSuMimoLinkAbstraction : public Object
   private:
     Ptr<ErrorRateModel> m_errorRateModel;
     std::map<uint8_t, double> m_eesmBetaLinear;
+    std::map<HeAwgnCalibrationKey, double> m_awgnSnrOffsetsDb;
 };
 
 } // namespace ns3

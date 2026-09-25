@@ -19,6 +19,16 @@
 namespace ns3
 {
 
+bool
+HeAwgnCalibrationKey::IsValid() const
+{
+    return mcs <= 11 && packetSizeBytes > 0 && nss > 0 && numRxAntennas > 0 &&
+           (channelWidthMhz == 20 || channelWidthMhz == 40 ||
+            channelWidthMhz == 80 || channelWidthMhz == 160) &&
+           (guardIntervalNs == 800 || guardIntervalNs == 1600 ||
+            guardIntervalNs == 3200);
+}
+
 NS_OBJECT_ENSURE_REGISTERED(HeSuMimoLinkAbstraction);
 
 TypeId
@@ -115,6 +125,45 @@ HeSuMimoLinkAbstraction::GetEesmBeta(uint8_t mcs) const
     return beta->second;
 }
 
+void
+HeSuMimoLinkAbstraction::SetAwgnSnrOffsetDb(const HeAwgnCalibrationKey& key,
+                                            double offsetDb)
+{
+    NS_ABORT_MSG_IF(!key.IsValid(), "Invalid HE AWGN calibration PHY context");
+    NS_ABORT_MSG_IF(!std::isfinite(offsetDb) || std::abs(offsetDb) > 30.0,
+                    "HE AWGN SNR offset must be finite and within +/-30 dB");
+    m_awgnSnrOffsetsDb[key] = offsetDb;
+}
+
+double
+HeSuMimoLinkAbstraction::GetErrorModelSinrLinear(uint8_t mcs,
+                                                 const WifiTxVector& txVector,
+                                                 uint32_t packetSizeBytes,
+                                                 uint8_t numRxAntennas,
+                                                 uint16_t staId,
+                                                 double effectiveSinrLinear) const
+{
+    NS_ABORT_MSG_IF(!std::isfinite(effectiveSinrLinear) || effectiveSinrLinear < 0.0,
+                    "Effective SINR must be finite and non-negative");
+    const HeAwgnCalibrationKey key{mcs,
+                                   txVector.IsLdpc(),
+                                   packetSizeBytes,
+                                   txVector.GetNss(staId),
+                                   numRxAntennas,
+                                   txVector.GetChannelWidth(),
+                                   txVector.GetGuardInterval()};
+    const auto calibration = m_awgnSnrOffsetsDb.find(key);
+    if (calibration == m_awgnSnrOffsetsDb.end())
+    {
+        return effectiveSinrLinear;
+    }
+    const double adjusted = effectiveSinrLinear *
+                            WifiLinkBudget::DbToLinear(calibration->second);
+    NS_ABORT_MSG_IF(!std::isfinite(adjusted),
+                    "Calibrated ErrorRateModel SINR is not finite");
+    return adjusted;
+}
+
 double
 HeSuMimoLinkAbstraction::CalculateEffectiveSinr(const SuMimoLinkResult& mimoResult,
                                                 uint8_t mcs) const
@@ -191,7 +240,12 @@ HeSuMimoLinkAbstraction::Calculate(const MimoChannelMatrix& channel,
     result.m_packetSuccessRate =
         m_errorRateModel->GetChunkSuccessRate(mode,
                                               txVector,
-                                              result.m_effectiveSinrLinear,
+                                              GetErrorModelSinrLinear(mode.GetMcsValue(),
+                                                                      txVector,
+                                                                      packetSizeBytes,
+                                                                      static_cast<uint8_t>(channel.GetNumRxAntennas()),
+                                                                      SU_STA_ID,
+                                                                      result.m_effectiveSinrLinear),
                                               static_cast<uint64_t>(packetSizeBytes) * 8,
                                               static_cast<uint8_t>(channel.GetNumRxAntennas()));
     NS_ABORT_MSG_IF(!std::isfinite(result.m_packetSuccessRate) ||
@@ -231,7 +285,12 @@ HeSuMimoLinkAbstraction::Calculate(const MimoChannelMatrix& channel,
     result.m_packetSuccessRate =
         m_errorRateModel->GetChunkSuccessRate(mode,
                                               txVector,
-                                              result.m_effectiveSinrLinear,
+                                              GetErrorModelSinrLinear(mode.GetMcsValue(),
+                                                                      txVector,
+                                                                      packetSizeBytes,
+                                                                      static_cast<uint8_t>(channel.GetNumRxAntennas()),
+                                                                      SU_STA_ID,
+                                                                      result.m_effectiveSinrLinear),
                                               static_cast<uint64_t>(packetSizeBytes) * 8,
                                               static_cast<uint8_t>(channel.GetNumRxAntennas()));
     NS_ABORT_MSG_IF(!std::isfinite(result.m_packetSuccessRate) ||

@@ -846,6 +846,7 @@ SionnaMimoHelper::Apply(
 
     spectrumModel->SetReceiverNoiseFigureDb(config.receiverNoiseFigureDb);
     spectrumModel->ConfigureEesmBetas(config.eesmBetaLinear);
+    spectrumModel->ConfigureAwgnSnrOffsetsDb(config.awgnSnrOffsetsDb);
     if (m_selectedPrecoding)
     {
         spectrumModel->SetPrecodingMatrix(m_selectedPrecoding->GetPrecodingMatrix());
@@ -976,6 +977,16 @@ SionnaMimoHelper::SetEesmBeta(uint8_t mcs, double betaLinear)
 {
     ValidateEesmBeta(mcs, betaLinear);
     m_configuration.eesmBetaLinear[mcs] = betaLinear;
+}
+
+void
+SionnaMimoHelper::SetAwgnSnrOffsetDb(const HeAwgnCalibrationKey& key,
+                                     double offsetDb)
+{
+    SionnaMimoConfiguration candidate = m_configuration;
+    candidate.awgnSnrOffsetsDb[key] = offsetDb;
+    Validate(candidate);
+    m_configuration = std::move(candidate);
 }
 
 bool
@@ -1299,6 +1310,13 @@ SionnaMimoHelper::Validate(const SionnaMimoConfiguration& configuration)
     for (const auto& [mcs, betaLinear] : configuration.eesmBetaLinear)
     {
         ValidateEesmBeta(mcs, betaLinear);
+    }
+    for (const auto& [key, offsetDb] : configuration.awgnSnrOffsetsDb)
+    {
+        if (!key.IsValid() || !std::isfinite(offsetDb) || std::abs(offsetDb) > 30.0)
+        {
+            Reject("AWGN calibration requires a valid HE PHY context and a finite +/-30 dB offset");
+        }
     }
     for (const auto& [nodeId, orientation] : configuration.nodeOrientations)
     {

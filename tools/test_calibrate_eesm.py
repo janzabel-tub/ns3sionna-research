@@ -55,9 +55,11 @@ class CalibrationTest(unittest.TestCase):
             "source_version": "1",
             "source_kind": "synthetic",
             "phy": PHY,
-            "awgn": [{"snr_db": db, "trials": 100000,
+            "awgn": [{"snr_db": db,
+                      "split": "train" if index % 2 == 0 else "validation",
+                      "trials": 100000,
                       "errors": round(100000 * self.per(db))}
-                     for db in (1, 3, 5, 7, 9)],
+                     for index, db in enumerate((1, 3, 5, 7, 9))],
             "selective": points,
         }
         self.save()
@@ -72,6 +74,7 @@ class CalibrationTest(unittest.TestCase):
     def test_recovers_known_beta_without_publishing_synthetic_coefficient(self):
         result = calibrate(self.model_path, self.reference_path)
         self.assertAlmostEqual(result["candidate_beta_linear"], self.beta, delta=0.08)
+        self.assertAlmostEqual(result["candidate_awgn_snr_offset_db"], 0.0, delta=0.02)
         self.assertLess(result["validation"]["mae"], 0.005)
         self.assertEqual(result["status"], "rejected")
         self.assertNotIn("beta_linear", result)
@@ -79,14 +82,36 @@ class CalibrationTest(unittest.TestCase):
 
     def test_rejects_awgn_mismatch(self):
         for point in self.reference["awgn"]:
-            point["errors"] = round(point["trials"] * 0.5)
+            if point["split"] == "validation":
+                point["errors"] = round(point["trials"] * 0.5)
         self.reference["source_kind"] = "link_level"
         self.save()
         result = calibrate(self.model_path, self.reference_path)
         self.assertEqual(result["status"], "rejected")
-        self.assertIn("independent AWGN reference disagrees with ns-3 error model",
+        self.assertIn("held-out AWGN PER error exceeds threshold",
                       result["reasons"])
         self.assertNotIn("beta_linear", result)
+
+    def test_recovers_independent_awgn_offset(self):
+        for point in self.reference["awgn"]:
+            point["errors"] = round(100000 * self.per(point["snr_db"] - 0.5))
+        for point in self.reference["selective"]:
+            effective = eesm(point["sinr_linear"], self.beta)
+            point["errors"] = round(100000 * self.per(10 * math.log10(effective) - 0.5))
+        self.save()
+        result = calibrate(self.model_path, self.reference_path)
+        self.assertAlmostEqual(result["candidate_awgn_snr_offset_db"], -0.5,
+                               delta=0.03)
+        self.assertAlmostEqual(result["candidate_beta_linear"], self.beta,
+                               delta=0.1)
+
+    def test_validated_result_contains_both_parameters(self):
+        self.reference["source_kind"] = "link_level"
+        self.save()
+        result = calibrate(self.model_path, self.reference_path)
+        self.assertEqual(result["status"], "validated")
+        self.assertIn("beta_linear", result)
+        self.assertIn("awgn_snr_offset_db", result)
 
     def test_rejects_bad_held_out_prediction(self):
         self.reference["source_kind"] = "link_level"

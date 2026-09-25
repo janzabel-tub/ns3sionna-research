@@ -116,9 +116,15 @@ def load_reference(path: Path, metadata):
         if not isinstance(point, dict):
             raise CalibrationError(f"awgn[{index}] must be an object")
         point["snr_db"] = number(point.get("snr_db"), f"awgn[{index}].snr_db")
+        if point.get("split") not in ("train", "validation"):
+            raise CalibrationError(f"awgn[{index}] requires train or validation split")
         validate_counts(point, f"awgn[{index}]")
     if len({point["snr_db"] for point in data["awgn"]}) < 3:
         raise CalibrationError("reference needs three distinct AWGN SNR points")
+    awgn_train = [p for p in data["awgn"] if p["split"] == "train"]
+    awgn_validation = [p for p in data["awgn"] if p["split"] == "validation"]
+    if len(awgn_train) < 2 or not awgn_validation:
+        raise CalibrationError("need at least two AWGN training points and one held-out point")
     train_ids, validation_ids = set(), set()
     sample_count = None
     for index, point in enumerate(data["selective"]):
@@ -146,7 +152,8 @@ def load_reference(path: Path, metadata):
         raise CalibrationError("case_id may not occur in both train and validation")
     if len(train_ids) < 2 or len(validation_ids) < 1:
         raise CalibrationError("need at least two training cases and one held-out case")
-    for label, points in (("AWGN", data["awgn"]),
+    for label, points in (("AWGN training", awgn_train),
+                          ("AWGN validation", awgn_validation),
                           ("training", [p for p in data["selective"] if p["split"] == "train"]),
                           ("validation", [p for p in data["selective"] if p["split"] == "validation"])):
         if not any(0 < point["errors"] < point["trials"] for point in points):
@@ -198,6 +205,44 @@ def neg_log_likelihood(points, beta, x, y):
     return total
 
 
+def awgn_neg_log_likelihood(points, offset_db, x, y):
+    total = 0.0
+    for point in points:
+        try:
+            per = model_per(point["snr_db"] + offset_db, x, y)
+        except CalibrationError:
+            return math.inf
+        per = min(1.0 - 1e-12, max(1e-12, per))
+        total -= point["errors"] * math.log(per)
+        total -= (point["trials"] - point["errors"]) * math.log1p(-per)
+    return total
+
+
+def fit_awgn_offset(points, x, y, minimum_db=-3.0, maximum_db=3.0):
+    if (not math.isfinite(minimum_db) or not math.isfinite(maximum_db) or
+        not minimum_db < maximum_db):
+        raise CalibrationError("AWGN offset bounds must be finite and increasing")
+    grid = [minimum_db + (maximum_db - minimum_db) * i / 600 for i in range(601)]
+    scores = [awgn_neg_log_likelihood(points, value, x, y) for value in grid]
+    best = min(range(len(scores)), key=scores.__getitem__)
+    if not math.isfinite(scores[best]):
+        raise CalibrationError("no AWGN offset candidate stays inside the model SNR range")
+    if best in (0, 600):
+        raise CalibrationError("AWGN offset optimum is at a search bound")
+    left, right = grid[best - 1], grid[best + 1]
+    ratio = (math.sqrt(5.0) - 1.0) / 2.0
+    a = right - ratio * (right - left)
+    b = left + ratio * (right - left)
+    for _ in range(80):
+        if awgn_neg_log_likelihood(points, a, x, y) < awgn_neg_log_likelihood(points, b, x, y):
+            right, b = b, a
+            a = right - ratio * (right - left)
+        else:
+            left, a = a, b
+            b = left + ratio * (right - left)
+    return (left + right) / 2.0
+
+
 def fit_beta(points, x, y, beta_min, beta_max):
     if (not math.isfinite(beta_min) or not math.isfinite(beta_max) or
         not 0.0 < beta_min < beta_max):
@@ -242,15 +287,23 @@ def calibrate(model_path, reference_path, beta_min=0.01, beta_max=1000.0,
               max_awgn_mae=0.05, max_validation_mae=0.10):
     metadata, x, y = load_model(model_path)
     reference = load_reference(reference_path, metadata)
-    awgn = metrics(reference["awgn"], lambda point: model_per(point["snr_db"], x, y))
+    awgn_train = [p for p in reference["awgn"] if p["split"] == "train"]
+    awgn_validation = [p for p in reference["awgn"] if p["split"] == "validation"]
+    offset_db = fit_awgn_offset(awgn_train, x, y)
+    awgn_train_metrics = metrics(awgn_train,
+        lambda point: model_per(point["snr_db"] + offset_db, x, y))
+    awgn_validation_metrics = metrics(awgn_validation,
+        lambda point: model_per(point["snr_db"] + offset_db, x, y))
+    shifted_x = [value - offset_db for value in x]
     train = [p for p in reference["selective"] if p["split"] == "train"]
     validation = [p for p in reference["selective"] if p["split"] == "validation"]
-    beta = fit_beta(train, x, y, beta_min, beta_max)
-    train_metrics = metrics(train, lambda point: predict(point, beta, x, y))
-    validation_metrics = metrics(validation, lambda point: predict(point, beta, x, y))
+    beta = fit_beta(train, shifted_x, y, beta_min, beta_max)
+    train_metrics = metrics(train, lambda point: predict(point, beta, shifted_x, y))
+    validation_metrics = metrics(validation,
+        lambda point: predict(point, beta, shifted_x, y))
     reasons = []
-    if awgn["mae"] > max_awgn_mae:
-        reasons.append("independent AWGN reference disagrees with ns-3 error model")
+    if awgn_validation_metrics["mae"] > max_awgn_mae:
+        reasons.append("held-out AWGN PER error exceeds threshold")
     if validation_metrics["mae"] > max_validation_mae:
         reasons.append("held-out frequency selective PER error exceeds threshold")
     if reference["source_kind"] == "synthetic":
@@ -267,7 +320,9 @@ def calibrate(model_path, reference_path, beta_min=0.01, beta_max=1000.0,
         "reference_sha256": hashlib.sha256(reference_path.read_bytes()).hexdigest(),
         "candidate_beta_linear": beta,
         "candidate_beta_db": 10.0 * math.log10(beta),
-        "awgn": awgn,
+        "candidate_awgn_snr_offset_db": offset_db,
+        "awgn_train": awgn_train_metrics,
+        "awgn_validation": awgn_validation_metrics,
         "train": train_metrics,
         "validation": validation_metrics,
         "thresholds": {"max_awgn_mae": max_awgn_mae,
@@ -276,6 +331,7 @@ def calibrate(model_path, reference_path, beta_min=0.01, beta_max=1000.0,
     if accepted:
         result["beta_linear"] = beta
         result["beta_db"] = 10.0 * math.log10(beta)
+        result["awgn_snr_offset_db"] = offset_db
     return result
 
 

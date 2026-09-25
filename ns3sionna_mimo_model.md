@@ -1,7 +1,7 @@
 # ns3sionna: MIMO-Abstraktionsmodell für IEEE 802.11ax/be
 
 Stand: 25. September 2026, Phase 4 einschließlich Unterphase 4.8 implementiert;
-Unterphase 5.1 als Kalibrierworkflow implementiert, Referenzmessdaten ausstehend
+Unterphase 5.1 für HE MCS 0/BCC/32 Byte/1x1 anhand von Link-Level-Daten validiert
 
 Arbeitszweig: feature/su-mimo-minimal
 
@@ -716,22 +716,26 @@ Rangverlustverhalten.
   Paketfehlern, Paketanzahl und den zugehörigen linearen Post-Processing-SINRs
   aller übertragenen Subcarrier/Streams einlesen. Datensatzquelle, Version
   und PHY-Konfiguration müssen explizit vorhanden sein.
-- Das MCS-spezifische lineare EESM-Beta auf Trainingskanälen anhand einer
-  Binomial-Likelihood fitten und auf getrennten Kanalrealisationen prüfen.
-  Zusätzlich die gemessene AWGN-Kurve gegen die ns-3-Basis prüfen: ein Beta
-  kann eine falsche AWGN-Kurve nicht korrigieren.
-- Nur bei erfüllten Fehlergrenzen und einer echten Link-Level-Quelle ein
-  verwendbares `beta_linear` ausgeben. Synthetische Selbsttests und
-  abgelehnte Fits geben lediglich `candidate_beta_linear` aus. Die
-  Laufzeitkonfiguration bleibt weiterhin explizit; es gibt keine
-  unbelegten Default-Betas.
+- Zuerst einen expliziten AWGN-SNR-Korrekturwert auf AWGN-Trainingspunkten
+  anhand der Binomial-Likelihood bestimmen und an zurückgehaltenen
+  AWGN-Punkten prüfen. Danach das lineare EESM-Beta auf
+  frequenzselektiven Trainingskanälen fitten und auf einer anderen
+  Kanalrealisation prüfen. Ein Beta allein kann eine abweichende
+  AWGN-Basiskurve nicht korrigieren.
+- Die AWGN-Korrektur nur bei exakt passender PHY-Konfiguration auf die
+  `ErrorRateModel`-Eingabe anwenden; EESM und die physikalische SINR bleiben
+  unverändert. Synthetische Selbsttests und abgelehnte Fits geben nur
+  Diagnosekandidaten aus. Es gibt weiterhin keine Default-Koeffizienten.
 
-Der implementierte Workflow besteht aus `examples/ns3_wifi_mimo_awgn_curve.cc`
-und `tools/calibrate_eesm.py`. Er ist einsatzbereit, sobald unabhängige
-frequenzselektive Link-Level-Messungen vorliegen. Im Projektverzeichnis
-liegen derzeit nur modellbasierte Demonstrationskurven, keine solche
-Messreihe. Deshalb ist noch kein wissenschaftlich kalibriertes Beta
-freigegeben; die empirische Abnahme dieser Unterphase bleibt offen.
+`tools/generate_he_link_level_reference.m` erzeugt nun eine unabhängige
+Bit-Level-Referenz mit MATLAB WLAN Toolbox R2026a, idealem Timing und
+perfekter RX-CSI, HE-SU-BCC-Decodierung sowie gemessenen Post-OFDM-SINRs.
+Die ersten 20 Messpunkte mit je 1000 Paketen sind in `data/` versioniert.
+Der Workflow hat für HE MCS 0, BCC, 32 Byte, 1x1, 20 MHz und 800 ns GI
+eine Konfiguration mit zurückgehaltenen AWGN- und Zweitap-Kanälen
+validiert. Die Koeffizienten sind nur für diese genaue PHY-Konfiguration
+und die dokumentierten Kanalannahmen belegt; weitere MCS, Paketlängen,
+Codearten, Antennenmaße und TGax-Kanalmodelle bleiben zu kalibrieren.
 
 #### Weitere Phase-5-Arbeitspakete
 
@@ -1086,9 +1090,10 @@ Es werden bewusst keine Default-Betas ausgeliefert. Jeder HE MCS von 0 bis 11
 muss vor der Nutzung explizit konfiguriert werden. Damit enthält der Code keine
 unbelegten Kalibrierkonstanten. Die in analytischen Tests verwendeten positiven
 Werte sind ausschließlich Formel-Sentinels und ausdrücklich keine
-802.11ax-Kalibrierung. Belastbare \(\beta_m\) müssen später aus dokumentierten
-Link-Level-Kurven gefittet und zusammen mit Datensatz, PHY-Konfiguration,
-Codeart und Paketlänge versioniert werden. Die bisherige MI-Kompression je
+802.11ax-Kalibrierung. Unterphase 5.1 versioniert erstmals einen
+Link-Level-Fit für HE MCS 0/BCC/32 Byte/1x1 einschließlich einer getrennten
+AWGN-SNR-Korrektur. Andere MCS und PHY-Konfigurationen benötigen eigene
+Referenzen. Die bisherige MI-Kompression je
 Stream bleibt als modellunabhängige Diagnosemetrik erhalten und wird nicht als
 kalibrierte PER-Abbildung ausgegeben.
 
@@ -1096,17 +1101,20 @@ kalibrierte PER-Abbildung ausgegeben.
 
 HeSuMimoLinkAbstraction übernimmt WifiTxVector einschließlich HE-MCS, NSS und
 Codeart. NSS muss der Zahl der übertragenen Streams entsprechen. Nach EESM wird
-die vorhandene Schnittstelle unverändert verwendet:
+die vorhandene Schnittstelle verwendet:
 
 \[
+  \gamma_{\mathrm{model}}=
+  \gamma_{\mathrm{EESM},m}10^{\delta_c/10},\qquad
   P_\mathrm{succ} =
   \mathrm{ErrorRateModel::GetChunkSuccessRate}
-  (m,\mathrm{TxVector},\gamma_{\mathrm{EESM},m},8L,N_\mathrm{rx}),
+  (m,\mathrm{TxVector},\gamma_{\mathrm{model}},8L,N_\mathrm{rx}),
   \qquad
   PER = 1-P_\mathrm{succ},
 \]
 
-wobei \(L\) die Paketlänge in Byte ist. ErrorRateModel ist als ns-3-Attribut
+wobei \(L\) die Paketlänge in Byte ist. Ohne eine exakt passende
+Phase-5.1-Kalibrierung gilt \(\delta_c=0\). ErrorRateModel ist als ns-3-Attribut
 und über SetErrorRateModel konfigurierbar. Standard ist
 TableBasedErrorRateModel, also das ns-3.40-Defaultmodell für 802.11n/ac/ax.
 
@@ -1117,8 +1125,9 @@ Ergebnisse validiert und verwenden die Paketlängenextrapolation aus
 IEEE P802.11 TGax 11-14/0803r1. BCC besitzt Referenztabellen für 32 und
 1458 Byte mit einer 400-Byte-Schwelle und MCS 0 bis 9; MCS 10/11 fällt auf
 YansErrorRateModel zurück. LDPC besitzt eine 1458-Byte-Referenz für MCS 0 bis
-11. Die neue Abstraktion kopiert oder verändert keine dieser Kurven und fügt
-keinen SNR-Offset hinzu. Da sie Erfolgswahrscheinlichkeiten und keine
+11. Die Abstraktion kopiert oder verändert keine dieser Kurven. Die
+Phase-5.1-Korrektur verschiebt ausschließlich die ErrorRateModel-Eingabe
+für eine exakt passende PHY-Konfiguration. Da sie Erfolgswahrscheinlichkeiten und keine
 Zufallsentscheidung ausgibt, ist die Berechnung bei identischen Eingaben
 deterministisch.
 
@@ -2398,65 +2407,93 @@ frequenzselektiven Punkt die tatsächlich gemessenen Paketfehler sowie die
 zugehörige flache Liste linearer Post-Processing-SINRs in derselben
 Subcarrier-/Stream-Reihenfolge wie `CalculateEffectiveSinr`.
 
-Für einen Referenzpunkt \(i\) mit \(n_i\) Paketversuchen und \(e_i\)
-Paketfehlern lautet die Vorhersage
+Die unabhängig gemessene AWGN-Kurve ist beim ersten 32-Byte-BCC-Lauf
+gegenüber dem vorhandenen ns-3-`TableBasedErrorRateModel` verschoben.
+Deshalb besitzt eine validierte PHY-Konfiguration \(c\) neben dem
+MCS-spezifischen EESM-Beta \(\beta_m\) einen expliziten AWGN-SNR-Offset
+\(\delta_c\) in dB. Für einen frequenzselektiven Referenzpunkt \(i\)
+mit \(n_i\) Paketversuchen und \(e_i\) Paketfehlern lautet die Vorhersage
 
 \[
-  \widehat p_i(\beta)
+  \widehat p_i(\beta_m,\delta_c)
   = F_{\mathrm{AWGN}}
-    \left(10\log_{10}\gamma_{\mathrm{EESM},i}(\beta)\right),
+    \left(10\log_{10}\gamma_{\mathrm{EESM},i}(\beta_m)+\delta_c\right).
 \]
 
 wobei \(F_{\mathrm{AWGN}}\) die linear in dB-SNR interpolierte, unveränderte
-ns-3-AWGN-PER-Kurve ist. Der Fit minimiert auf den Trainingspunkten die
-binomiale negative Log-Likelihood
+ns-3-AWGN-PER-Kurve ist. Zuerst wird \(\delta_c\) ausschließlich auf den
+AWGN-Trainingspunkten bestimmt. Danach wird \(\beta_m\) mit festem
+\(\delta_c\) auf den selektiven Trainingskanälen bestimmt. Für beide Schritte
+wird die binomiale negative Log-Likelihood minimiert:
 
 \[
-  L(\beta)=-\sum_{i\in\mathrm{Train}}
-  \left[e_i\ln\widehat p_i(\beta)
-  +(n_i-e_i)\ln(1-\widehat p_i(\beta))\right],\qquad \beta>0.
+  L(\theta)=-\sum_{i\in\mathrm{Train}}
+  \left[e_i\ln\widehat p_i(\theta)
+  +(n_i-e_i)\ln(1-\widehat p_i(\theta))\right],
+  \quad \theta\in\{\delta_c,\beta_m\},\quad \beta_m>0.
 \]
 
-Die Implementierung sucht zunächst 201 logarithmisch verteilte Betas in
-einem expliziten Intervall und verfeinert das beste innere Intervall per
-Goldener-Schnitt-Suche. EESM verwendet wie der C++-Kern den kleinsten SINR
+Die Implementierung sucht zunächst 601 äquidistante Offsets im Bereich
+-3 bis +3 dB und danach 201 logarithmisch verteilte Betas im expliziten
+positiven Intervall. Jedes beste innere Intervall wird per
+Goldener-Schnitt-Suche verfeinert. EESM verwendet wie der C++-Kern den kleinsten SINR
 als Exponentialreferenz. SNR-Werte außerhalb der exportierten AWGN-Kurve
 werden nicht extrapoliert; ein Randoptimum wird zurückgewiesen. AWGN- und
 Frequenzselektiv-Referenzen müssen für dieselben PHY-Parameter vorliegen.
-Mindestens zwei Trainingskanäle und ein separater Validierungskanal sind
-erforderlich; dieselbe `case_id` darf nicht in beiden Mengen liegen.
+Mindestens zwei AWGN-Trainingspunkte und ein AWGN-Validierungspunkt sowie
+zwei selektive Trainingskanäle und ein separater Validierungskanal sind
+erforderlich. Dieselbe `case_id` darf nicht in beiden Kanalgruppen liegen.
 
 Das JSON der Link-Level-Referenz besitzt `source`, `source_version`,
 `source_kind` (`link_level` oder `synthetic`), `phy`, `awgn` und `selective`.
 `phy` enthält die sieben CSV-Konfigurationsfelder. Jeder AWGN-Punkt enthält
-`snr_db`, `errors` und `trials`. Jeder selektive Punkt enthält `case_id`,
+`snr_db`, `split`, `errors` und `trials`. Jeder selektive Punkt enthält `case_id`,
 `split` (`train`/`validation`), `sinr_linear`, `errors` und `trials`.
 `sinr_linear` enthält mindestens zwei nicht gleiche, endliche, nichtnegative
 Werte; alle selektiven Punkte besitzen dieselbe Länge. Die Fehlerzahlen
 stammen aus tatsächlichen Paketversuchen und sind keine gerundeten
 Modell-PER-Werte. Je Punkt werden mindestens 1000 Paketversuche verlangt;
-AWGN-, Trainings- und Validierungsmenge benötigen jeweils wenigstens einen
+AWGN-Trainings-, AWGN-Validierungs-, selektive Trainings- und
+selektive Validierungsmenge benötigen jeweils wenigstens einen
 Punkt mit \(0<e_i<n_i\). Der Hash beider Eingabedateien wird im Ergebnis
 gesichert.
 
-Beispiel für einen dokumentierten MCS-3-BCC-Datensatz mit 1458 Byte:
+Der erste reproduzierbare MCS-0-BCC-Lauf mit 32 Byte wird vom ns-3-Verzeichnis
+aus erzeugt und gefittet:
 
-    ./ns3 run 'ns3_wifi_mimo_awgn_curve --mcs=3 --packetSizeBytes=1458 --ldpc=0 --snrStartDb=-20 --snrStopDb=50 --snrStepDb=0.25' > /tmp/mcs3_awgn.csv
+    matlab -batch "addpath('contrib/sionna/tools'); generate_he_link_level_reference('contrib/sionna/data/he_mcs0_bcc_32_matlab_r2026a.json',1000)"
+    ./ns3 run 'ns3_wifi_mimo_awgn_curve --mcs=0 --packetSizeBytes=32 --ldpc=0 --snrStartDb=-10 --snrStopDb=15 --snrStepDb=0.25' > contrib/sionna/data/he_mcs0_bcc_32_ns3_awgn.csv
     python contrib/sionna/tools/calibrate_eesm.py \
-      --model-awgn /tmp/mcs3_awgn.csv \
-      --reference /path/to/independent_link_level_measurements.json \
-      --output /tmp/mcs3_calibration.json
+      --model-awgn contrib/sionna/data/he_mcs0_bcc_32_ns3_awgn.csv \
+      --reference contrib/sionna/data/he_mcs0_bcc_32_matlab_r2026a.json \
+      --output contrib/sionna/data/he_mcs0_bcc_32_calibration.json
 
 `status=validated` erfordert standardmäßig einen mittleren absoluten
-AWGN-PER-Fehler von höchstens 0,05 und einen mittleren absoluten PER-Fehler
-von höchstens 0,10 auf den zurückgehaltenen selektiven Punkten. Nur dann
-trägt das Ergebnis `beta_linear` und `beta_db`. Diese Werte können explizit
-über `SetEesmBeta`, die `SionnaMimoConfiguration.eesmBetaLinear`-Map oder
-`--eesmBetaLinear` in den Phasenbeispielen gesetzt werden. Bei synthetischer
-Quelle oder überschrittenem Grenzwert lautet der Status `rejected`; das
-Ergebnis behält nur `candidate_beta_linear` zur Diagnose. Ein akzeptierter
-Fit für einen MCS, Code und eine Paketlänge wird nicht automatisch auf
-andere Konfigurationen übertragen.
+AWGN-PER-Fehler von höchstens 0,05 auf den zurückgehaltenen AWGN-Punkten
+und einen mittleren absoluten PER-Fehler von höchstens 0,10 auf den
+zurückgehaltenen selektiven Punkten. Nur dann trägt das Ergebnis
+`beta_linear`, `beta_db` und `awgn_snr_offset_db`. Die Laufzeit wendet
+\(\gamma_{\mathrm{ErrorRateModel}}=
+\gamma_{\mathrm{EESM}}10^{\delta_c/10}\) an und erhält die ausgegebene
+physikalische EESM-SINR unverändert. `HeAwgnCalibrationKey` bindet den
+Offset an MCS, BCC/LDPC, Paketlänge, NSS, RX-Antennenzahl, Kanalbreite und
+Guard Interval; unpassende HE-Konfigurationen und alle Legacyrahmen
+behalten den unveränderten ErrorRateModel-Pfad. `SionnaMimoHelper` gibt
+Betas und exakte Offsetzuordnungen an den Spectrumadapter weiter; die
+direkten SU-/DL-MU-/UL-MU-Abstraktionen unterstützen denselben Vertrag.
+Für den versionierten 32-Byte-BCC-Fall lautet die explizite Helperkonfiguration:
+
+    SionnaMimoConfiguration config;
+    config.eesmBetaLinear.emplace(0, 1.0383687667246768);
+    config.awgnSnrOffsetsDb.emplace(
+        HeAwgnCalibrationKey{0, false, 32, 1, 1, 20, 800},
+        -0.49589212058827303);
+    SionnaMimoHelper mimo(config);
+
+Bei synthetischer Quelle oder überschrittenem Grenzwert lautet der Status
+`rejected`; nur `candidate_beta_linear` und
+`candidate_awgn_snr_offset_db` bleiben zur Diagnose sichtbar. Für andere
+PHY-Konfigurationen sind neue Link-Level-Referenzen erforderlich.
 
 ## 6. High-Level-API-Vertrag bis Unterphase 4.8
 
@@ -3469,16 +3506,37 @@ Am 25. September 2026 wurden die folgenden lokalen CPU-Prüfungen ausgeführt:
   1458 Byte, NSS 1, eine RX-Antenne, 20 MHz und 800 ns GI genau 281
   AWGN-Punkte von -20 bis 50 dB im 0,25-dB-Raster. Der Kalibrierparser
   las die Metadaten und die monotone PER-Kurve erfolgreich ein.
-- `python -m unittest -v test_calibrate_eesm` bestand mit sechs Fällen:
-  Recovery eines bekannten synthetischen Betas, Verbot einer Freigabe
-  synthetischer Koeffizienten, Ablehnung einer nicht passenden AWGN-Kurve,
-  schlechter Validierungs-PER, PHY-Verwechslung, Trainings-/Validierungsleck
-  und ungültiger Paketfehlerzahlen.
+- `tools/generate_he_link_level_reference.m` führte mit MATLAB WLAN Toolbox
+  R2026a für HE MCS 0, BCC, 32 Byte, 1x1, 20 MHz und 800 ns GI 20 unabhängige
+  Punkte mit jeweils 1000 vollständigen codierten HE-Paketen aus. Fünf
+  AWGN-Punkte, zehn Trainingspunkte auf zwei festen Zweitap-Kanälen und
+  fünf Validierungspunkte auf einem dritten Kanal liegen mit ihren
+  234 linearen Post-OFDM-SINRs je Punkt in `data/`.
+- Der unkalibrierte ns-3-AWGN-Pfad verfehlte die MATLAB-AWGN-Referenz mit
+  einem mittleren absoluten PER-Fehler von 0,103956. Ein gemeinsam aus
+  diesen Daten geschätztes Beta ohne AWGN-Korrektur verfehlte den
+  Validierungskanal mit 0,102218 und wurde abgelehnt.
+- Getrennt gefittete AWGN- und Selektivparameter ergeben für die genaue
+  genannte PHY-Konfiguration \(\delta_c=-0{,}4958921206\,\mathrm{dB}\)
+  und \(\beta_0=1{,}0383687667\) in linearen SINR-Einheiten. Der
+  zurückgehaltene AWGN-PER-Fehler beträgt 0,013024 und der Fehler auf dem
+  zurückgehaltenen Kanal 0,054886. Beide liegen unter den vordefinierten
+  Grenzen 0,05 und 0,10; der Status lautet `validated`.
+- `python -m unittest -v test_calibrate_eesm` bestand mit acht Fällen,
+  darunter Recovery von Offset und Beta, getrennte AWGN-/Kanalauswahl,
+  Kontext- und Zählervalidierung sowie Ablehnung synthetischer Freigaben.
+- `./ns3 build sionna-test` und der direkte native Test-Runner bestanden:
+  `sionna`, `ul-mu-mimo`, `he-ul-mu-mimo-phy-adapter`,
+  `dl-mu-mimo-runtime`, `dl-mu-mimo-ru` und
+  `he-dl-mu-spectrum-ru`. Der neue C++-Test prüft die exakte
+  PHY-Kontextbindung und eine veränderte SU-/DL-MU-PER; bestehende
+  SISO-Paritäts- und MU-Regressionen bleiben erfolgreich.
 
-Eine unabhängige frequenzselektive Link-Level-Messreihe liegt lokal nicht
-vor. Ein numerischer Betawert wurde deshalb bewusst weder freigegeben noch
-in die Laufzeit-Defaults eingetragen. Die empirische Kalibrierung und damit
-die abschließende Abnahme von Unterphase 5.1 benötigen diese Messreihe.
+Die validierten Werte sind keine allgemeinen HE-Defaults. Ihre Quelle nutzt
+ideales Timing, perfekte RX-CSI und drei kontrollierte Zweitap-Kanäle;
+Übertragung auf andere MCS, Paketlängen, Codearten, MIMO-Dimensionen oder
+TGax-Kanalmodelle wurde nicht belegt. Deshalb bleiben Beta und Offset ohne
+explizite, passende Benutzerkonfiguration ausgeschaltet.
 
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 

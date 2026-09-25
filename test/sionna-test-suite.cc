@@ -1906,6 +1906,64 @@ class HeEesmFlatChannelTest : public TestCase
     }
 };
 
+class HeAwgnCalibrationContextTest : public TestCase
+{
+  public:
+    HeAwgnCalibrationContextTest()
+        : TestCase("HE AWGN calibration applies only to its measured PHY context")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        const HeAwgnCalibrationKey key{0, false, 32, 1, 1, 20, 800};
+        auto abstraction = CreateObject<HeSuMimoLinkAbstraction>();
+        abstraction->SetEesmBeta(0, 1.0);
+        abstraction->SetAwgnSnrOffsetDb(key, -0.5);
+        const auto txVector = MakeHeTxVector(HePhy::GetHeMcs0(), 1);
+        const double snr = WifiLinkBudget::DbToLinear(-1.0);
+        const double adjusted = snr * WifiLinkBudget::DbToLinear(-0.5);
+        NS_TEST_ASSERT_MSG_EQ_TOL(
+            abstraction->GetErrorModelSinrLinear(0, txVector, 32, 1, SU_STA_ID, snr),
+            adjusted,
+            1e-12,
+            "Matching HE PHY context did not apply its AWGN correction");
+        NS_TEST_ASSERT_MSG_EQ_TOL(
+            abstraction->GetErrorModelSinrLinear(0, txVector, 33, 1, SU_STA_ID, snr),
+            snr,
+            1e-12,
+            "A different packet length inherited the AWGN correction");
+        NS_TEST_ASSERT_MSG_EQ_TOL(
+            abstraction->GetErrorModelSinrLinear(0, txVector, 32, 2, SU_STA_ID, snr),
+            snr,
+            1e-12,
+            "A different receiver dimension inherited the AWGN correction");
+
+        MimoChannelMatrix channel(1, 1, 1);
+        channel.Set(0, 0, 0, {1.0, 0.0});
+        const auto linkBudget = MakeReferenceSnrBudget(snr);
+        const auto result = abstraction->Calculate(channel, linkBudget, txVector, 32);
+        const double directSuccess =
+            abstraction->GetErrorRateModel()->GetChunkSuccessRate(HePhy::GetHeMcs0(),
+                                                                  txVector,
+                                                                  adjusted,
+                                                                  32 * 8,
+                                                                  1);
+        NS_TEST_ASSERT_MSG_EQ_TOL(result.GetPacketSuccessRate(),
+                                  directSuccess,
+                                  1e-12,
+                                  "SU PER did not use the calibrated SNR");
+
+        SionnaMimoHelper helper;
+        helper.SetAwgnSnrOffsetDb(key, -0.5);
+        NS_TEST_ASSERT_MSG_EQ_TOL(helper.GetConfiguration().awgnSnrOffsetsDb.at(key),
+                                  -0.5,
+                                  1e-12,
+                                  "High-level API lost the exact calibration context");
+    }
+};
+
 class HeEesmFrequencySelectiveTest : public TestCase
 {
   public:
@@ -2733,6 +2791,32 @@ class HeDlMuMimoPerUserContractTest : public TestCase
                                       1e-12,
                                       "Per-user PER did not use that user's packet size");
         }
+
+        abstraction->SetAwgnSnrOffsetDb({0, false, 400, 1, 1, 20, 800}, -10.0);
+        const auto calibrated = abstraction->Calculate(
+            snapshot,
+            precoding,
+            {{9, budget9, tx9, 1000}, {3, budget3, tx3, 400}});
+        const auto& calibrated3 = calibrated.GetUserById(3);
+        const double correctedSuccess =
+            abstraction->GetErrorRateModel()->GetChunkSuccessRate(
+                HePhy::GetHeMcs0(),
+                tx3,
+                calibrated3.GetEffectiveSinrLinear() * WifiLinkBudget::DbToLinear(-10.0),
+                400 * 8,
+                1);
+        NS_TEST_ASSERT_MSG_EQ_TOL(calibrated3.GetPacketSuccessRate(),
+                                  correctedSuccess,
+                                  1e-12,
+                                  "DL MU did not apply the addressed user's AWGN calibration");
+        NS_TEST_ASSERT_MSG_EQ((calibrated3.GetPacketSuccessRate() !=
+                               result.GetUserById(3).GetPacketSuccessRate()),
+                              true,
+                              "DL MU calibration did not change the addressed user's PER");
+        NS_TEST_ASSERT_MSG_EQ_TOL(calibrated.GetUserById(9).GetPacketSuccessRate(),
+                                  result.GetUserById(9).GetPacketSuccessRate(),
+                                  1e-12,
+                                  "DL MU AWGN calibration leaked to a different MCS and length");
     }
 };
 
@@ -4223,6 +4307,7 @@ class SionnaTestSuite : public TestSuite
         AddTestCase(new WifiLinkBudgetConversionTest, TestCase::QUICK);
         AddTestCase(new WifiLinkBudgetCalculationTest, TestCase::QUICK);
         AddTestCase(new HeEesmFlatChannelTest, TestCase::QUICK);
+        AddTestCase(new HeAwgnCalibrationContextTest, TestCase::QUICK);
         AddTestCase(new HeEesmFrequencySelectiveTest, TestCase::QUICK);
         AddTestCase(new HeSisoErrorModelParityTest, TestCase::QUICK);
         AddTestCase(new HePerMonotonicityTest, TestCase::QUICK);

@@ -8,6 +8,7 @@
 #define SIONNA_MIMO_HELPER_H
 
 #include "ns3/mimo-csi-feedback.h"
+#include "ns3/he-su-mimo-link-abstraction.h"
 #include "ns3/dl-mu-mimo-runtime.h"
 #include "ns3/mimo-precoding-matrix.h"
 #include "ns3/ptr.h"
@@ -167,6 +168,8 @@ struct SionnaMimoConfiguration
     double receiverNoiseFigureDb{7.0};
     SionnaMimoEffectiveSinrModel effectiveSinrModel{SionnaMimoEffectiveSinrModel::EESM};
     std::map<uint8_t, double> eesmBetaLinear;
+    /** Exact PHY contexts with measured AWGN SNR corrections; empty by default. */
+    std::map<HeAwgnCalibrationKey, double> awgnSnrOffsetsDb;
     std::map<uint32_t, SionnaMimoOrientation> nodeOrientations;
     std::optional<MimoPrecodingMatrix> precodingMatrix;
     std::optional<SionnaMimoBeamformingConfiguration> beamforming;
@@ -310,6 +313,9 @@ class SionnaMimoHelper
 
     /** Validate and store an explicit linear EESM beta for one HE MCS (0--11). */
     void SetEesmBeta(uint8_t mcs, double betaLinear);
+
+    /** Validate and store a measured correction for one exact HE PHY context. */
+    void SetAwgnSnrOffsetDb(const HeAwgnCalibrationKey& key, double offsetDb);
 
     /** Return whether an explicit EESM beta exists for an HE MCS. */
     bool HasEesmBeta(uint8_t mcs) const;

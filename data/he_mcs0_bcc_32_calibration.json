@@ -1,0 +1,56 @@
+{
+  "awgn_model_sha256": "88874ab037c840a022d3801681d1b875839e09c118487eaf898aff269b4a8656",
+  "awgn_snr_offset_db": -0.49589212058827303,
+  "awgn_train": {
+    "mae": 0.003021811437603847,
+    "max_abs_error": 0.00528299105461888,
+    "points": 3,
+    "rmse": 0.0034764454147685558,
+    "trials": 3000
+  },
+  "awgn_validation": {
+    "mae": 0.013024256224754234,
+    "max_abs_error": 0.013394552571481713,
+    "points": 2,
+    "rmse": 0.013029519161981732,
+    "trials": 2000
+  },
+  "beta_db": 0.16351616433252655,
+  "beta_linear": 1.0383687667246768,
+  "candidate_awgn_snr_offset_db": -0.49589212058827303,
+  "candidate_beta_db": 0.16351616433252655,
+  "candidate_beta_linear": 1.0383687667246768,
+  "phy": {
+    "channel_width_mhz": 20,
+    "coding": "BCC",
+    "guard_interval_ns": 800,
+    "mcs": 0,
+    "nss": 1,
+    "num_rx_antennas": 1,
+    "packet_size_bytes": 32
+  },
+  "reasons": [],
+  "reference_sha256": "055f3fea7a0723c3f37b73edcd7ab5a4eeedefb4175c5dbe72cf8fd4119c5044",
+  "source": "Local MATLAB WLAN Toolbox HE SU bit-level simulation; tools/generate_he_link_level_reference.m; based on https://www.mathworks.com/help/wlan/ug/802-11ax-packet-error-rate-simulation-for-single-user-format.html",
+  "source_kind": "link_level",
+  "source_version": "2026a",
+  "status": "validated",
+  "thresholds": {
+    "max_awgn_mae": 0.05,
+    "max_validation_mae": 0.1
+  },
+  "train": {
+    "mae": 0.03160890073475657,
+    "max_abs_error": 0.06821979769932252,
+    "points": 10,
+    "rmse": 0.03872136208190967,
+    "trials": 10000
+  },
+  "validation": {
+    "mae": 0.05488602677518033,
+    "max_abs_error": 0.11165741308916852,
+    "points": 5,
+    "rmse": 0.06573085472402376,
+    "trials": 5000
+  }
+}

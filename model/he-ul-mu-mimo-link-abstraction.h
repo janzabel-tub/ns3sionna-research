@@ -89,6 +89,7 @@ class HeUlMuMimoLinkAbstraction : public Object
     Ptr<ErrorRateModel> GetErrorRateModel() const;
     void SetEesmBeta(uint8_t mcs, double betaLinear);
     void SetEesmBetaDb(uint8_t mcs, double betaDb);
+    void SetAwgnSnrOffsetDb(const HeAwgnCalibrationKey& key, double offsetDb);
     bool HasEesmBeta(uint8_t mcs) const;
     double GetEesmBeta(uint8_t mcs) const;
 

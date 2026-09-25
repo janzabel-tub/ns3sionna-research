@@ -298,8 +298,38 @@ SionnaSpectrumPropagationLossModel::ConfigureEesmBetas(
     {
         linkAbstraction->SetEesmBeta(mcs, betaLinear);
     }
+    for (const auto& [key, offsetDb] : m_awgnSnrOffsetsDb)
+    {
+        linkAbstraction->SetAwgnSnrOffsetDb(key, offsetDb);
+    }
     m_linkAbstraction = linkAbstraction;
     m_eesmBetas = betas;
+}
+
+void
+SionnaSpectrumPropagationLossModel::SetAwgnSnrOffsetDb(
+    const HeAwgnCalibrationKey& key,
+    double offsetDb)
+{
+    m_linkAbstraction->SetAwgnSnrOffsetDb(key, offsetDb);
+    m_awgnSnrOffsetsDb[key] = offsetDb;
+}
+
+void
+SionnaSpectrumPropagationLossModel::ConfigureAwgnSnrOffsetsDb(
+    const std::map<HeAwgnCalibrationKey, double>& offsetsDb)
+{
+    auto linkAbstraction = CreateObject<HeSuMimoLinkAbstraction>();
+    for (const auto& [mcs, betaLinear] : m_eesmBetas)
+    {
+        linkAbstraction->SetEesmBeta(mcs, betaLinear);
+    }
+    for (const auto& [key, offsetDb] : offsetsDb)
+    {
+        linkAbstraction->SetAwgnSnrOffsetDb(key, offsetDb);
+    }
+    m_linkAbstraction = linkAbstraction;
+    m_awgnSnrOffsetsDb = offsetsDb;
 }
 
 void
@@ -614,6 +644,10 @@ SionnaSpectrumPropagationLossModel::CalculateHeDlMuMimoRx(
     for (const auto& [mcs, beta] : m_eesmBetas)
     {
         abstraction->SetEesmBeta(mcs, beta);
+    }
+    for (const auto& [key, offsetDb] : m_awgnSnrOffsetsDb)
+    {
+        abstraction->SetAwgnSnrOffsetDb(key, offsetDb);
     }
     abstraction->SetErrorRateModel(errorRateModel);
 

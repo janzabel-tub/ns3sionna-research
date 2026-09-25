@@ -128,6 +128,13 @@ class SionnaSpectrumPropagationLossModel : public SpectrumPropagationLossModel
     /** Atomically replace all configured linear EESM betas. */
     void ConfigureEesmBetas(const std::map<uint8_t, double>& betas);
 
+    /** Configure a measured AWGN correction for one exact HE PHY context. */
+    void SetAwgnSnrOffsetDb(const HeAwgnCalibrationKey& key, double offsetDb);
+
+    /** Atomically replace all exact HE AWGN corrections. */
+    void ConfigureAwgnSnrOffsetsDb(
+        const std::map<HeAwgnCalibrationKey, double>& offsetsDb);
+
     /** Configure a validated user-provided fixed precoding tensor. */
     void SetPrecodingMatrix(const MimoPrecodingMatrix& precoding);
 
@@ -224,6 +231,7 @@ class SionnaSpectrumPropagationLossModel : public SpectrumPropagationLossModel
     std::optional<MultiUserChannelSnapshot> m_dlMuSnapshot;
     std::optional<DlMuMimoPrecodingMatrix> m_dlMuPrecoding;
     std::map<uint8_t, double> m_eesmBetas;
+    std::map<HeAwgnCalibrationKey, double> m_awgnSnrOffsetsDb;
     bool m_fixedChannelEnabled{false};
     MimoChannelMatrix m_fixedChannel;
     double m_fixedPathLossDb{0.0};
