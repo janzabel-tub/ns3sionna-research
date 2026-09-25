@@ -1,6 +1,7 @@
 # ns3sionna: MIMO-Abstraktionsmodell für IEEE 802.11ax/be
 
-Stand: 14. September 2026, Phase 4 einschließlich Unterphase 4.8 implementiert
+Stand: 25. September 2026, Phase 4 einschließlich Unterphase 4.8 implementiert;
+Unterphase 5.1 als Kalibrierworkflow implementiert, Referenzmessdaten ausstehend
 
 Arbeitszweig: feature/su-mimo-minimal
 
@@ -706,7 +707,34 @@ Rangverlustverhalten.
 
 ### Phase 5: Kalibrierung, Skalierung und Reproduzierbarkeit
 
-- PER-Kurven gegen Link-Level-Referenzen kalibrieren.
+#### Unterphase 5.1: HE-EESM-/PER-Kalibrierung gegen Link-Level-Referenzen
+
+- Die AWGN-Abbildung des tatsächlich eingesetzten ns-3-
+  `TableBasedErrorRateModel` für genau einen HE-MCS, Codeart, Paketlänge,
+  NSS, RX-Antennenzahl, Kanalbreite und Guard Interval als CSV exportieren.
+- Unabhängige Link-Level-Messungen für AWGN und frequenzselektive Kanäle mit
+  Paketfehlern, Paketanzahl und den zugehörigen linearen Post-Processing-SINRs
+  aller übertragenen Subcarrier/Streams einlesen. Datensatzquelle, Version
+  und PHY-Konfiguration müssen explizit vorhanden sein.
+- Das MCS-spezifische lineare EESM-Beta auf Trainingskanälen anhand einer
+  Binomial-Likelihood fitten und auf getrennten Kanalrealisationen prüfen.
+  Zusätzlich die gemessene AWGN-Kurve gegen die ns-3-Basis prüfen: ein Beta
+  kann eine falsche AWGN-Kurve nicht korrigieren.
+- Nur bei erfüllten Fehlergrenzen und einer echten Link-Level-Quelle ein
+  verwendbares `beta_linear` ausgeben. Synthetische Selbsttests und
+  abgelehnte Fits geben lediglich `candidate_beta_linear` aus. Die
+  Laufzeitkonfiguration bleibt weiterhin explizit; es gibt keine
+  unbelegten Default-Betas.
+
+Der implementierte Workflow besteht aus `examples/ns3_wifi_mimo_awgn_curve.cc`
+und `tools/calibrate_eesm.py`. Er ist einsatzbereit, sobald unabhängige
+frequenzselektive Link-Level-Messungen vorliegen. Im Projektverzeichnis
+liegen derzeit nur modellbasierte Demonstrationskurven, keine solche
+Messreihe. Deshalb ist noch kein wissenschaftlich kalibriertes Beta
+freigegeben; die empirische Abnahme dieser Unterphase bleibt offen.
+
+#### Weitere Phase-5-Arbeitspakete
+
 - Sensitivität gegenüber Antennenabstand, Orientierung, CSI-Alter und
   Raytracing-Samples untersuchen.
 - Cache- und IPC-Speicherbedarf für große $N_\mathrm{sc}$, $N_\mathrm{tx}$ und $N_\mathrm{rx}$ messen.
@@ -2358,6 +2386,78 @@ nur den zusätzlichen AWGN-Diversityfaktor des ns-3-ErrorRateModel. Die
 matrixwertige gewünschte Leistung, Inter-User-Interferenz, Rauschverstärkung,
 SINR und PER bleiben zusätzlich vollständig im Gruppenergebnis erhalten.
 
+### 5.19 Kalibrierworkflow der Unterphase 5.1
+
+Das neue CPU-Beispiel `ns3_wifi_mimo_awgn_curve` ruft für jede SNR-Stützstelle
+dieselbe `TableBasedErrorRateModel::GetChunkSuccessRate`-Schnittstelle wie
+`HeSuMimoLinkAbstraction` auf und exportiert `PER=1-P_succ` als CSV. Jede Zeile
+trägt HE-MCS, BCC/LDPC, Paketlänge, NSS, RX-Antennenzahl, Bandbreite und
+Guard Interval. Ein Fit gilt immer nur für genau diese Konfiguration. Die
+Messreferenz enthält zusätzlich AWGN-Paketfehler und für jeden
+frequenzselektiven Punkt die tatsächlich gemessenen Paketfehler sowie die
+zugehörige flache Liste linearer Post-Processing-SINRs in derselben
+Subcarrier-/Stream-Reihenfolge wie `CalculateEffectiveSinr`.
+
+Für einen Referenzpunkt \(i\) mit \(n_i\) Paketversuchen und \(e_i\)
+Paketfehlern lautet die Vorhersage
+
+\[
+  \widehat p_i(\beta)
+  = F_{\mathrm{AWGN}}
+    \left(10\log_{10}\gamma_{\mathrm{EESM},i}(\beta)\right),
+\]
+
+wobei \(F_{\mathrm{AWGN}}\) die linear in dB-SNR interpolierte, unveränderte
+ns-3-AWGN-PER-Kurve ist. Der Fit minimiert auf den Trainingspunkten die
+binomiale negative Log-Likelihood
+
+\[
+  L(\beta)=-\sum_{i\in\mathrm{Train}}
+  \left[e_i\ln\widehat p_i(\beta)
+  +(n_i-e_i)\ln(1-\widehat p_i(\beta))\right],\qquad \beta>0.
+\]
+
+Die Implementierung sucht zunächst 201 logarithmisch verteilte Betas in
+einem expliziten Intervall und verfeinert das beste innere Intervall per
+Goldener-Schnitt-Suche. EESM verwendet wie der C++-Kern den kleinsten SINR
+als Exponentialreferenz. SNR-Werte außerhalb der exportierten AWGN-Kurve
+werden nicht extrapoliert; ein Randoptimum wird zurückgewiesen. AWGN- und
+Frequenzselektiv-Referenzen müssen für dieselben PHY-Parameter vorliegen.
+Mindestens zwei Trainingskanäle und ein separater Validierungskanal sind
+erforderlich; dieselbe `case_id` darf nicht in beiden Mengen liegen.
+
+Das JSON der Link-Level-Referenz besitzt `source`, `source_version`,
+`source_kind` (`link_level` oder `synthetic`), `phy`, `awgn` und `selective`.
+`phy` enthält die sieben CSV-Konfigurationsfelder. Jeder AWGN-Punkt enthält
+`snr_db`, `errors` und `trials`. Jeder selektive Punkt enthält `case_id`,
+`split` (`train`/`validation`), `sinr_linear`, `errors` und `trials`.
+`sinr_linear` enthält mindestens zwei nicht gleiche, endliche, nichtnegative
+Werte; alle selektiven Punkte besitzen dieselbe Länge. Die Fehlerzahlen
+stammen aus tatsächlichen Paketversuchen und sind keine gerundeten
+Modell-PER-Werte. Je Punkt werden mindestens 1000 Paketversuche verlangt;
+AWGN-, Trainings- und Validierungsmenge benötigen jeweils wenigstens einen
+Punkt mit \(0<e_i<n_i\). Der Hash beider Eingabedateien wird im Ergebnis
+gesichert.
+
+Beispiel für einen dokumentierten MCS-3-BCC-Datensatz mit 1458 Byte:
+
+    ./ns3 run 'ns3_wifi_mimo_awgn_curve --mcs=3 --packetSizeBytes=1458 --ldpc=0 --snrStartDb=-20 --snrStopDb=50 --snrStepDb=0.25' > /tmp/mcs3_awgn.csv
+    python contrib/sionna/tools/calibrate_eesm.py \
+      --model-awgn /tmp/mcs3_awgn.csv \
+      --reference /path/to/independent_link_level_measurements.json \
+      --output /tmp/mcs3_calibration.json
+
+`status=validated` erfordert standardmäßig einen mittleren absoluten
+AWGN-PER-Fehler von höchstens 0,05 und einen mittleren absoluten PER-Fehler
+von höchstens 0,10 auf den zurückgehaltenen selektiven Punkten. Nur dann
+trägt das Ergebnis `beta_linear` und `beta_db`. Diese Werte können explizit
+über `SetEesmBeta`, die `SionnaMimoConfiguration.eesmBetaLinear`-Map oder
+`--eesmBetaLinear` in den Phasenbeispielen gesetzt werden. Bei synthetischer
+Quelle oder überschrittenem Grenzwert lautet der Status `rejected`; das
+Ergebnis behält nur `candidate_beta_linear` zur Diagnose. Ein akzeptierter
+Fit für einen MCS, Code und eine Paketlänge wird nicht automatisch auf
+andere Konfigurationen übertragen.
+
 ## 6. High-Level-API-Vertrag bis Unterphase 4.8
 
 ### 6.1 Typen, Besitz und Defaults
@@ -3358,6 +3458,27 @@ Damit ist das Abnahmekriterium der Unterphase 4.8 erfüllt. Der Adapter bindet
 die reale Trigger-/HE-TB-Metadatenebene an den unveränderten Uplinkkern; die
 weiterhin idealisierte Synchronisation bleibt in API, Beispielausgabe und
 Modellgrenzen ausdrücklich sichtbar.
+
+### 7.13 Validierung des Kalibrierworkflows der Unterphase 5.1
+
+Am 25. September 2026 wurden die folgenden lokalen CPU-Prüfungen ausgeführt:
+
+- `./ns3 configure --enable-examples --enable-tests` und
+  `./ns3 build ns3_wifi_mimo_awgn_curve` waren erfolgreich.
+- Ein direkter Lauf des neuen Beispiels exportierte für MCS 3, BCC,
+  1458 Byte, NSS 1, eine RX-Antenne, 20 MHz und 800 ns GI genau 281
+  AWGN-Punkte von -20 bis 50 dB im 0,25-dB-Raster. Der Kalibrierparser
+  las die Metadaten und die monotone PER-Kurve erfolgreich ein.
+- `python -m unittest -v test_calibrate_eesm` bestand mit sechs Fällen:
+  Recovery eines bekannten synthetischen Betas, Verbot einer Freigabe
+  synthetischer Koeffizienten, Ablehnung einer nicht passenden AWGN-Kurve,
+  schlechter Validierungs-PER, PHY-Verwechslung, Trainings-/Validierungsleck
+  und ungültiger Paketfehlerzahlen.
+
+Eine unabhängige frequenzselektive Link-Level-Messreihe liegt lokal nicht
+vor. Ein numerischer Betawert wurde deshalb bewusst weder freigegeben noch
+in die Laufzeit-Defaults eingetragen. Die empirische Kalibrierung und damit
+die abschließende Abnahme von Unterphase 5.1 benötigen diese Messreihe.
 
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 

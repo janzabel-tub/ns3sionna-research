@@ -12,6 +12,12 @@ build_lib_example(
 )
 
 build_lib_example(
+    NAME ns3_wifi_mimo_awgn_curve
+    SOURCE_FILES ns3_wifi_mimo_awgn_curve.cc
+    LIBRARIES_TO_LINK ${libsionna} ${libwifi}
+)
+
+build_lib_example(
     NAME ns3_wifi_sumimo_precoding
     SOURCE_FILES ns3_wifi_sumimo_precoding.cc
     LIBRARIES_TO_LINK ${libsionna} ${libwifi} ${libinternet} ${libapplications}
