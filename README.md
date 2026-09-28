@@ -137,7 +137,9 @@ conda run --no-capture-output -n sionna-venv python -m unittest -v test_benchmar
 Use an empty output directory. The runner calls the existing server environment
 directly, so no ZMQ server process is needed. It checks two fresh ray traces per
 case and exports helper configurations, replayable channels, per-tone and
-summary CSV metrics, runtime, and three PNG comparisons. The tests also replay
+summary CSV metrics, runtime, and three PNG comparisons. Generated plots stay
+local and must not be committed; `.gitignore` covers `plots/` and plot files
+under `data/`. The tests also replay
 the checked-in [CPU reference export](./data/phase5_2_spacing_orientation/manifest.json);
 set `SUMIMO_BENCHMARK_RESULTS` to validate a different complete export.
 Only channel/MMSE/MI metrics are reported: the documented PER calibration covers

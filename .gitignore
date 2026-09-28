@@ -1,0 +1,5 @@
+# Generated plots are local information, not versioned benchmark artifacts.
+/plots/
+/data/**/*.png
+/data/**/*.svg
+/data/**/*.pdf

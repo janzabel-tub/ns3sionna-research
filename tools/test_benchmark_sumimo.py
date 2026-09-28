@@ -189,8 +189,7 @@ class TestExportedBenchmark(unittest.TestCase):
         for row in self.summary:
             for key in ("init_seconds", "cfr_seconds", "analysis_seconds", "native_process_seconds"):
                 self.assertGreater(float(row[key]), 0)
-        for name in ("channel_comparison.png", "sinr_comparison.png", "runtime_comparison.png"):
-            self.assertTrue((self.output / name).read_bytes().startswith(b"\x89PNG\r\n\x1a\n"))
+        # Generated plots are local artifacts and are not required in reference exports.
 
     def test_observed_geometry_orientation_and_response_repeatability(self):
         for record in self.manifest["configurations"]:

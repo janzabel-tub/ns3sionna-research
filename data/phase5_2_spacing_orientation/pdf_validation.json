@@ -16,6 +16,7 @@
     "5,606",
     "192,187"
   ],
-  "source_sha256": "45a72158bb31bf4511034ebb3af1a6847dc86328af47cc1c4b878c84a7e0641f",
-  "pdf_sha256": "06d39685c573e72799db324d7886bbb3e41d900af180ee7290cf1c552491ac8b"
+  "source_sha256": "f5e7d7d4b583c3b375108a68f7cdd7997fa094f462bebec252a0488e66561f54",
+  "pdf_sha256": "a0c152b608403fb5da038cb1a703ba5da676c2dfd6d7984230524503cf344e05",
+  "revision": "Generated plot tracking cleanup"
 }

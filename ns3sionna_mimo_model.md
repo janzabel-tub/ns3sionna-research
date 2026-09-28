@@ -771,8 +771,11 @@ Konfigurationen, Kanälen und nativem Programm. Pro Fall sind
 `configuration.pb` als rohe `SimInitMessage` und zwei `channel_XX.pb` als rohe
 `ChannelStateResponse` gespeichert. `tones.csv` enthält alle 6144 Tonzeilen;
 `summary.csv` enthält 24 Läufe mit beiden Stream-SINRs, minimalem Rang,
-Singularwertdiagnosen, Linkbudget und getrennten Laufzeiten. Drei PNG-Plots
-vergleichen Kanal, SINR und Laufzeit über den Antennenabstand.
+Singularwertdiagnosen, Linkbudget und getrennten Laufzeiten. Drei lokal erzeugte
+PNG-Plots vergleichen Kanal, SINR und Laufzeit über den Antennenabstand.
+Generierte Plots werden nicht versioniert; `.gitignore` schließt `plots/`
+sowie PNG-/SVG-/PDF-Dateien unter `data/` aus. Die Referenzvalidierung benötigt
+keine Plotdateien.
 
 Abnahmekriterium: wiederholte CPU-Kanalantworten sind byteidentisch; Geometrie
 und Grad-/Radiantumrechnung erreichen die tatsächlichen PlanarArrays und
@@ -3740,11 +3743,10 @@ folgt keine allgemeine optimale Arraygeometrie.
 der CFR-/Raytracing-Zeit 0,716 s und der nativen Analyse 0,687 ms. Die
 CFR-Zeiten liegen zwischen 0,677 und 1,375 s; der Median inklusive nativem
 Prozessstart und CSV-Ausgabe ist 32,211 ms. Import, IPC und MAC-Verkehr sind
-gemäß Abschnitt 5.20 abgegrenzt. Die drei geprüften Vergleichsplots sind:
-
-- [Kanalvergleich](data/phase5_2_spacing_orientation/channel_comparison.png)
-- [SINR-/MI-Vergleich](data/phase5_2_spacing_orientation/sinr_comparison.png)
-- [Laufzeitvergleich](data/phase5_2_spacing_orientation/runtime_comparison.png)
+gemäß Abschnitt 5.20 abgegrenzt. Der Benchmark erzeugt im lokalen
+Ausgabeverzeichnis die drei geprüften Vergleichsplots `channel_comparison.png`,
+`sinr_comparison.png` und `runtime_comparison.png`. Diese Dateien bleiben
+unversionierte Zusatzinformationen.
 
 Die abschließende automatisierte Validierung war erfolgreich:
 
