@@ -110,3 +110,8 @@ build_lib_example(
                           ${libmobility} ${libpropagation} ${libspectrum}
 )
 
+build_lib_example(
+    NAME ns3_wifi_sumimo_benchmark
+    SOURCE_FILES ns3_wifi_sumimo_benchmark.cc
+    LIBRARIES_TO_LINK ${libsionna} ${libwifi} ${libspectrum}
+)

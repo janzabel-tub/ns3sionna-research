@@ -122,6 +122,28 @@ Examples
 
 All examples can be found [here](./examples/).
 
+The Phase 5.2.1 CPU benchmark sweeps a fixed 2×2 open-loop SU-MIMO link over
+antenna spacing and independent TX/RX azimuths. From the ns-3 directory:
+
+```shell
+./ns3 configure --enable-examples --enable-tests
+./ns3 build ns3_wifi_sumimo_benchmark sionna-test
+conda run --no-capture-output -n sionna-venv python contrib/sionna/tools/benchmark_sumimo.py \
+  --output=/tmp/sumimo-spacing-orientation
+cd contrib/sionna/tools
+conda run --no-capture-output -n sionna-venv python -m unittest -v test_benchmark_sumimo
+```
+
+Use an empty output directory. The runner calls the existing server environment
+directly, so no ZMQ server process is needed. It checks two fresh ray traces per
+case and exports helper configurations, replayable channels, per-tone and
+summary CSV metrics, runtime, and three PNG comparisons. The tests also replay
+the checked-in [CPU reference export](./data/phase5_2_spacing_orientation/manifest.json);
+set `SUMIMO_BENCHMARK_RESULTS` to validate a different complete export.
+Only channel/MMSE/MI metrics are reported: the documented PER calibration covers
+HE MCS 0/BCC/32 bytes/1×1. See [the model document](./ns3sionna_mimo_model.md)
+for fixed controls, formulas, results, and scope.
+
 Usage in HPC cluster
 ============
 

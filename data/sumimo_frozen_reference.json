@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "source": "Hand-derived normalized 2x2 matrices, independent of ray tracing and the native MMSE implementation",
+  "wideband_loss_db": 60.0,
+  "matrices": [
+    {"name": "orthogonal", "scale": 1.4142135623730951, "coefficients": [[[1, 0], [0, 0]], [[0, 0], [1, 0]]]},
+    {"name": "rank_one", "scale": 1.0, "coefficients": [[[1, 0], [1, 0]], [[1, 0], [1, 0]]]},
+    {"name": "phase_rotated", "scale": 2.0, "coefficients": [[[0, 1], [0, 0]], [[0, 0], [1, 0]]]},
+    {"name": "zero_tone", "scale": 1.0, "coefficients": [[[0, 0], [0, 0]], [[0, 0], [0, 0]]]},
+    {"name": "complex_asymmetric", "scale": 0.8944271909999159, "coefficients": [[[1, 1], [1, 0]], [[0, 0], [1, -1]]]}
+  ],
+  "expected_rank": [2, 1, 2, 0, 2],
+  "expected_singular_values": [[1.4142135623730951, 1.4142135623730951], [2.0, 0.0], [2.0, 2.0], [0.0, 0.0], [1.7888543819998317, 0.8944271909999159]],
+  "sinr_formulas": ["rho, rho", "rho/(1+rho), rho/(1+rho)", "2*rho, 2*rho", "0, 0", "1.6*a-1.28*a*a/(1+2.4*a), 2.4*a-1.28*a*a/(1+1.6*a); a=rho/2"]
+}

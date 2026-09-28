@@ -1,0 +1,21 @@
+{
+  "status": "passed",
+  "render_calls": 1,
+  "pages": 66,
+  "expected_pages": 66,
+  "text_markers": [
+    "5.2.1",
+    "5.20",
+    "7.14",
+    "0,030958",
+    "0,515959",
+    "21,641",
+    "byteidentische",
+    "tools/benchmark_sumimo.py",
+    "test_benchmark_sumimo",
+    "5,606",
+    "192,187"
+  ],
+  "source_sha256": "45a72158bb31bf4511034ebb3af1a6847dc86328af47cc1c4b878c84a7e0641f",
+  "pdf_sha256": "06d39685c573e72799db324d7886bbb3e41d900af180ee7290cf1c552491ac8b"
+}

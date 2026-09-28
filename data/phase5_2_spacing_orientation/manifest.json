@@ -1,0 +1,2181 @@
+{
+  "schema_version": 1,
+  "subphase": "5.2.1",
+  "controls": {
+    "scene": "simple_room/simple_room.xml",
+    "seed_ns3": 42,
+    "run_ns3": 1,
+    "seed_sionna": 42,
+    "frequency_mhz": 5180,
+    "bandwidth_hz": 20000000.0,
+    "fft_size": 256,
+    "subcarrier_spacing_hz": 78125,
+    "tx_power_dbm_total": 20.0,
+    "temperature_k": 290.0,
+    "noise_figure_db": 7.0,
+    "nss": 2,
+    "precoding": "open_loop",
+    "normalization": "unit_average_pair_power",
+    "rank_relative_tolerance": 1e-12,
+    "effective_sinr": "MI: exp(mean(log1p(SINR)))-1",
+    "tone_selection": "all_256_fft_bins_including_dc_and_guards",
+    "tx_position_m": [
+      3.0,
+      2.0,
+      2.0
+    ],
+    "rx_position_m": [
+      4.0,
+      3.0,
+      1.0
+    ],
+    "tx_pattern": "tr38901",
+    "rx_pattern": "dipole",
+    "polarization": "V",
+    "array_rows": 1,
+    "array_columns": 2,
+    "vertical_spacing_lambda": 0.5,
+    "fixed_coherence_time_ms": 5,
+    "csi_time_ns": 0,
+    "server_mode": "P2P",
+    "samples_per_src": 100000,
+    "max_depth": 3,
+    "synthetic_array": false,
+    "los": true,
+    "specular_reflection": true,
+    "diffuse_reflection": false,
+    "refraction": true,
+    "diffraction": false,
+    "edge_diffraction": false,
+    "diffraction_lit_region": false,
+    "drjit_threads": 1,
+    "repeatability_rtol": 1e-06,
+    "repeatability_atol": 1e-07
+  },
+  "sweep": {
+    "spacing_lambda": [
+      0.25,
+      0.5,
+      1.0
+    ],
+    "tx_azimuth_deg": [
+      0.0,
+      90.0
+    ],
+    "rx_azimuth_deg": [
+      0.0,
+      90.0
+    ],
+    "repetitions": 2
+  },
+  "provenance": {
+    "platform": "Linux-7.0.0-34-generic-x86_64-with-glibc2.39",
+    "python": "3.12.12",
+    "backend": "llvm_ad_mono_polarized",
+    "versions": {
+      "sionna": "2.0.1",
+      "sionna-rt": "2.0.1",
+      "mitsuba": "3.8.0",
+      "drjit": "1.3.1",
+      "numpy": "2.5.2",
+      "torch": "2.9.1+cpu"
+    },
+    "native_executable_sha256": "ccad754dbe7c4f9fb4bf93ad4fcb25665fcde62d16932fbd5f5b1f49860df568",
+    "source_sha256": {
+      "examples/ns3_wifi_sumimo_benchmark.cc": "1f8e1b5194facc0cab7d9868138e9738347941667bbccbfd679b2015c7123648",
+      "tools/benchmark_sumimo.py": "238b8782779f8f3b7adeb23bcff25ed598e2b85f58289ef0a23c3cc6b2091381",
+      "model/ns3sionna/ns3sionna_server.py": "c888fe978d13181042ba80a6014bcdcb6a8b4aa01c8ecfae5b072a4c9223bc54",
+      "model/ns3sionna/mimo_data_contract.py": "c58f8566059cc94378c2fcba8b0da286415550595b22ffcb58c093d5b0b4a9ff",
+      "model/message.proto": "1e6eaf630e1556216a2de7b0fd8352fa86615c419adf9371340214170f4556c5",
+      "model/su-mimo-link-model.cc": "2b95a9a1080043fbf9852c1558cec10c01db1595cf42635b6f6b5d00bb850b16",
+      "model/mimo-channel-matrix.cc": "75b4c292dc7bf2a6fcdfb91b060b6f570a16c3f0397245cae08e7af2bd9454a4",
+      "model/wifi-link-budget.cc": "0f9b859056323465410ee146f5121c3352970b00313b649af7e422e20ec71a28",
+      "model/sionna-propagation-cache.cc": "577499957d21ed8ca96b8f1a5a3d7b33d6d67684e7452c6a1dae92d48acdb697",
+      "helper/sionna-mimo-helper.cc": "e45409d0ddfce4a618380dc813f4da9bfca346c3344fc99b8760d54d94fcb360",
+      "helper/sionna-helper.cc": "8e263c2f9308774c074acfceeede78a76a0471a0066daf04dbd2e65fc335020b",
+      "model/ns3sionna/models/simple_room/meshes/ceiling.mtl": "c74a67bed5e1f8321d6c872173eaff437aa962816316512941a337752b392ec3",
+      "model/ns3sionna/models/simple_room/meshes/ceiling.obj": "6175a37f55f992d3bd4339278f9d7a8139177af5a9c23e827bba9fe33ec06590",
+      "model/ns3sionna/models/simple_room/meshes/floor.mtl": "c74a67bed5e1f8321d6c872173eaff437aa962816316512941a337752b392ec3",
+      "model/ns3sionna/models/simple_room/meshes/floor.obj": "4a7be625a5cbfa37cecac9416638366b98e8ee94a1b74d75b6c7ee55e2a8750c",
+      "model/ns3sionna/models/simple_room/meshes/walls.mtl": "c74a67bed5e1f8321d6c872173eaff437aa962816316512941a337752b392ec3",
+      "model/ns3sionna/models/simple_room/meshes/walls.obj": "ab29a390ea7ec57d1e4ac11fa571986e0ae70d3688e0d9145deedee4b453bc73",
+      "model/ns3sionna/models/simple_room/simple_room.xml": "9b06235c4646065c772df8708d24e89675d5706efac24414e1dccce2a29039ff",
+      "model/ns3sionna/models/simple_room/simple_room_open.xml": "896fb17616daba166f7682305e52ab832267678d482fe6d0d7bf563ec04e479e"
+    }
+  },
+  "validation": {
+    "repeatability": "passed",
+    "geometry_orientation": "passed",
+    "channel_responses_byte_identical": true,
+    "cases": 12,
+    "fresh_traces": 24
+  },
+  "sweep_seconds": 21.641365715000575,
+  "configurations": [
+    {
+      "case_id": "case_00",
+      "configuration": {
+        "scene_fname": "simple_room/simple_room.xml",
+        "seed": 42,
+        "frequency": 5180,
+        "channel_bw": 20,
+        "fft_size": 256,
+        "subcarrier_spacing": 78125,
+        "mode": 1,
+        "sub_mode": -1,
+        "fixed_coherence_time_ms": 5,
+        "time_evo_model": "position",
+        "nodes": [
+          {
+            "constant_position_model": {
+              "position": {
+                "x": 3.0,
+                "y": 2.0,
+                "z": 2.0
+              }
+            },
+            "orientation": {
+              "azimuth": 0.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            },
+            "id": 0
+          },
+          {
+            "id": 1,
+            "constant_position_model": {
+              "position": {
+                "x": 4.0,
+                "y": 3.0,
+                "z": 1.0
+              }
+            },
+            "orientation": {
+              "azimuth": 0.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            }
+          }
+        ],
+        "tx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.25,
+          "pattern": "tr38901",
+          "polarization": "V"
+        },
+        "rx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.25,
+          "pattern": "dipole",
+          "polarization": "V"
+        }
+      },
+      "configuration_sha256": "ee9548463d975042cddead8f614653291f7beaa7fb189e936ae113884fae62ad",
+      "repetitions": [
+        {
+          "channel_sha256": "2508de0bf2b03c7bfa89d84790b62d0093c478532765c8f068afbc79893895db",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "channel_sha256": "2508de0bf2b03c7bfa89d84790b62d0093c478532765c8f068afbc79893895db",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "case_01",
+      "configuration": {
+        "scene_fname": "simple_room/simple_room.xml",
+        "seed": 42,
+        "frequency": 5180,
+        "channel_bw": 20,
+        "fft_size": 256,
+        "subcarrier_spacing": 78125,
+        "mode": 1,
+        "sub_mode": -1,
+        "fixed_coherence_time_ms": 5,
+        "time_evo_model": "position",
+        "nodes": [
+          {
+            "constant_position_model": {
+              "position": {
+                "x": 3.0,
+                "y": 2.0,
+                "z": 2.0
+              }
+            },
+            "orientation": {
+              "azimuth": 0.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            },
+            "id": 0
+          },
+          {
+            "id": 1,
+            "constant_position_model": {
+              "position": {
+                "x": 4.0,
+                "y": 3.0,
+                "z": 1.0
+              }
+            },
+            "orientation": {
+              "azimuth": 90.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            }
+          }
+        ],
+        "tx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.25,
+          "pattern": "tr38901",
+          "polarization": "V"
+        },
+        "rx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.25,
+          "pattern": "dipole",
+          "polarization": "V"
+        }
+      },
+      "configuration_sha256": "9148b55091f1d36d96d6d18821800ac8601b66d4bfcd87c185ccb6a905210d6d",
+      "repetitions": [
+        {
+          "channel_sha256": "eda0699ba16ed9590de352766ab7a4942676e4cc83ae218cee0269c8fc1da5d6",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "channel_sha256": "eda0699ba16ed9590de352766ab7a4942676e4cc83ae218cee0269c8fc1da5d6",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "case_02",
+      "configuration": {
+        "scene_fname": "simple_room/simple_room.xml",
+        "seed": 42,
+        "frequency": 5180,
+        "channel_bw": 20,
+        "fft_size": 256,
+        "subcarrier_spacing": 78125,
+        "mode": 1,
+        "sub_mode": -1,
+        "fixed_coherence_time_ms": 5,
+        "time_evo_model": "position",
+        "nodes": [
+          {
+            "constant_position_model": {
+              "position": {
+                "x": 3.0,
+                "y": 2.0,
+                "z": 2.0
+              }
+            },
+            "orientation": {
+              "azimuth": 90.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            },
+            "id": 0
+          },
+          {
+            "id": 1,
+            "constant_position_model": {
+              "position": {
+                "x": 4.0,
+                "y": 3.0,
+                "z": 1.0
+              }
+            },
+            "orientation": {
+              "azimuth": 0.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            }
+          }
+        ],
+        "tx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.25,
+          "pattern": "tr38901",
+          "polarization": "V"
+        },
+        "rx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.25,
+          "pattern": "dipole",
+          "polarization": "V"
+        }
+      },
+      "configuration_sha256": "98abf8806e097430d2fe5c1adcca0a3ff628c4e6858d85b3887cd2f5d1d0aba4",
+      "repetitions": [
+        {
+          "channel_sha256": "78b888f934f16beebc62323406419f8a7230e19e8cb0d92bb3ec6d0f2f62fe98",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "channel_sha256": "78b888f934f16beebc62323406419f8a7230e19e8cb0d92bb3ec6d0f2f62fe98",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "case_03",
+      "configuration": {
+        "scene_fname": "simple_room/simple_room.xml",
+        "seed": 42,
+        "frequency": 5180,
+        "channel_bw": 20,
+        "fft_size": 256,
+        "subcarrier_spacing": 78125,
+        "mode": 1,
+        "sub_mode": -1,
+        "fixed_coherence_time_ms": 5,
+        "time_evo_model": "position",
+        "nodes": [
+          {
+            "constant_position_model": {
+              "position": {
+                "x": 3.0,
+                "y": 2.0,
+                "z": 2.0
+              }
+            },
+            "orientation": {
+              "azimuth": 90.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            },
+            "id": 0
+          },
+          {
+            "id": 1,
+            "constant_position_model": {
+              "position": {
+                "x": 4.0,
+                "y": 3.0,
+                "z": 1.0
+              }
+            },
+            "orientation": {
+              "azimuth": 90.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            }
+          }
+        ],
+        "tx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.25,
+          "pattern": "tr38901",
+          "polarization": "V"
+        },
+        "rx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.25,
+          "pattern": "dipole",
+          "polarization": "V"
+        }
+      },
+      "configuration_sha256": "8ca3c3760a10bb48e0e6c4af88e3b1a9dd88c71cc0ba5daf9f3fc41e89a6b47d",
+      "repetitions": [
+        {
+          "channel_sha256": "5e85f4f079d00e3b7cd5752a85b3d4f309162825a581b075cf51060256485f67",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "channel_sha256": "5e85f4f079d00e3b7cd5752a85b3d4f309162825a581b075cf51060256485f67",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "case_04",
+      "configuration": {
+        "scene_fname": "simple_room/simple_room.xml",
+        "seed": 42,
+        "frequency": 5180,
+        "channel_bw": 20,
+        "fft_size": 256,
+        "subcarrier_spacing": 78125,
+        "mode": 1,
+        "sub_mode": -1,
+        "fixed_coherence_time_ms": 5,
+        "time_evo_model": "position",
+        "nodes": [
+          {
+            "constant_position_model": {
+              "position": {
+                "x": 3.0,
+                "y": 2.0,
+                "z": 2.0
+              }
+            },
+            "orientation": {
+              "azimuth": 0.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            },
+            "id": 0
+          },
+          {
+            "id": 1,
+            "constant_position_model": {
+              "position": {
+                "x": 4.0,
+                "y": 3.0,
+                "z": 1.0
+              }
+            },
+            "orientation": {
+              "azimuth": 0.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            }
+          }
+        ],
+        "tx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.5,
+          "pattern": "tr38901",
+          "polarization": "V"
+        },
+        "rx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.5,
+          "pattern": "dipole",
+          "polarization": "V"
+        }
+      },
+      "configuration_sha256": "2b5f2791a0d8412ba70d7f186e6658f0ac44eac58c9a3545f13394ce9fa69d69",
+      "repetitions": [
+        {
+          "channel_sha256": "d69b1bd8a7686a68f12cff0f82c5fbcb1dfab2a13915bcd428b22e98bd6963e2",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "channel_sha256": "d69b1bd8a7686a68f12cff0f82c5fbcb1dfab2a13915bcd428b22e98bd6963e2",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "case_05",
+      "configuration": {
+        "scene_fname": "simple_room/simple_room.xml",
+        "seed": 42,
+        "frequency": 5180,
+        "channel_bw": 20,
+        "fft_size": 256,
+        "subcarrier_spacing": 78125,
+        "mode": 1,
+        "sub_mode": -1,
+        "fixed_coherence_time_ms": 5,
+        "time_evo_model": "position",
+        "nodes": [
+          {
+            "constant_position_model": {
+              "position": {
+                "x": 3.0,
+                "y": 2.0,
+                "z": 2.0
+              }
+            },
+            "orientation": {
+              "azimuth": 0.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            },
+            "id": 0
+          },
+          {
+            "id": 1,
+            "constant_position_model": {
+              "position": {
+                "x": 4.0,
+                "y": 3.0,
+                "z": 1.0
+              }
+            },
+            "orientation": {
+              "azimuth": 90.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            }
+          }
+        ],
+        "tx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.5,
+          "pattern": "tr38901",
+          "polarization": "V"
+        },
+        "rx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.5,
+          "pattern": "dipole",
+          "polarization": "V"
+        }
+      },
+      "configuration_sha256": "2c32b9d26c5e744690113cbdcbb59f22b314536c1522c3b5644fffca2483bba9",
+      "repetitions": [
+        {
+          "channel_sha256": "f43172e6304e624a56e9c2ebe5b7733b941356646b3769bb53552f02bfb7bdaf",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "channel_sha256": "f43172e6304e624a56e9c2ebe5b7733b941356646b3769bb53552f02bfb7bdaf",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "case_06",
+      "configuration": {
+        "scene_fname": "simple_room/simple_room.xml",
+        "seed": 42,
+        "frequency": 5180,
+        "channel_bw": 20,
+        "fft_size": 256,
+        "subcarrier_spacing": 78125,
+        "mode": 1,
+        "sub_mode": -1,
+        "fixed_coherence_time_ms": 5,
+        "time_evo_model": "position",
+        "nodes": [
+          {
+            "constant_position_model": {
+              "position": {
+                "x": 3.0,
+                "y": 2.0,
+                "z": 2.0
+              }
+            },
+            "orientation": {
+              "azimuth": 90.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            },
+            "id": 0
+          },
+          {
+            "id": 1,
+            "constant_position_model": {
+              "position": {
+                "x": 4.0,
+                "y": 3.0,
+                "z": 1.0
+              }
+            },
+            "orientation": {
+              "azimuth": 0.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            }
+          }
+        ],
+        "tx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.5,
+          "pattern": "tr38901",
+          "polarization": "V"
+        },
+        "rx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.5,
+          "pattern": "dipole",
+          "polarization": "V"
+        }
+      },
+      "configuration_sha256": "493d2c1c7a13f0016cce1544021157b917573fe13b3988c9be04398497307843",
+      "repetitions": [
+        {
+          "channel_sha256": "502d1b67fb2ef0535e8f65996fd3cd7d87481af85caafcb73647e780b311bd74",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "channel_sha256": "502d1b67fb2ef0535e8f65996fd3cd7d87481af85caafcb73647e780b311bd74",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "case_07",
+      "configuration": {
+        "scene_fname": "simple_room/simple_room.xml",
+        "seed": 42,
+        "frequency": 5180,
+        "channel_bw": 20,
+        "fft_size": 256,
+        "subcarrier_spacing": 78125,
+        "mode": 1,
+        "sub_mode": -1,
+        "fixed_coherence_time_ms": 5,
+        "time_evo_model": "position",
+        "nodes": [
+          {
+            "constant_position_model": {
+              "position": {
+                "x": 3.0,
+                "y": 2.0,
+                "z": 2.0
+              }
+            },
+            "orientation": {
+              "azimuth": 90.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            },
+            "id": 0
+          },
+          {
+            "id": 1,
+            "constant_position_model": {
+              "position": {
+                "x": 4.0,
+                "y": 3.0,
+                "z": 1.0
+              }
+            },
+            "orientation": {
+              "azimuth": 90.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            }
+          }
+        ],
+        "tx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.5,
+          "pattern": "tr38901",
+          "polarization": "V"
+        },
+        "rx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.5,
+          "pattern": "dipole",
+          "polarization": "V"
+        }
+      },
+      "configuration_sha256": "5bfb18d382dc25b35de324c9cb4c57e1efdd5d2c8a588318a22f3773c1c6b558",
+      "repetitions": [
+        {
+          "channel_sha256": "80ea18b770ec2041aa8dc2b0bfb4036192d987284edfed11455f017d70f2ac36",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "channel_sha256": "80ea18b770ec2041aa8dc2b0bfb4036192d987284edfed11455f017d70f2ac36",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "case_08",
+      "configuration": {
+        "scene_fname": "simple_room/simple_room.xml",
+        "seed": 42,
+        "frequency": 5180,
+        "channel_bw": 20,
+        "fft_size": 256,
+        "subcarrier_spacing": 78125,
+        "mode": 1,
+        "sub_mode": -1,
+        "fixed_coherence_time_ms": 5,
+        "time_evo_model": "position",
+        "nodes": [
+          {
+            "constant_position_model": {
+              "position": {
+                "x": 3.0,
+                "y": 2.0,
+                "z": 2.0
+              }
+            },
+            "orientation": {
+              "azimuth": 0.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            },
+            "id": 0
+          },
+          {
+            "id": 1,
+            "constant_position_model": {
+              "position": {
+                "x": 4.0,
+                "y": 3.0,
+                "z": 1.0
+              }
+            },
+            "orientation": {
+              "azimuth": 0.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            }
+          }
+        ],
+        "tx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 1.0,
+          "pattern": "tr38901",
+          "polarization": "V"
+        },
+        "rx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 1.0,
+          "pattern": "dipole",
+          "polarization": "V"
+        }
+      },
+      "configuration_sha256": "7050e7eb47b2975f99f87866a4a948e3f9d819dc07caaf93e3f0b97c9e77c756",
+      "repetitions": [
+        {
+          "channel_sha256": "4a97163986de06b3493647d984904a96926149d7139818835ca151b0a2a3c24f",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "channel_sha256": "4a97163986de06b3493647d984904a96926149d7139818835ca151b0a2a3c24f",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "case_09",
+      "configuration": {
+        "scene_fname": "simple_room/simple_room.xml",
+        "seed": 42,
+        "frequency": 5180,
+        "channel_bw": 20,
+        "fft_size": 256,
+        "subcarrier_spacing": 78125,
+        "mode": 1,
+        "sub_mode": -1,
+        "fixed_coherence_time_ms": 5,
+        "time_evo_model": "position",
+        "nodes": [
+          {
+            "constant_position_model": {
+              "position": {
+                "x": 3.0,
+                "y": 2.0,
+                "z": 2.0
+              }
+            },
+            "orientation": {
+              "azimuth": 0.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            },
+            "id": 0
+          },
+          {
+            "id": 1,
+            "constant_position_model": {
+              "position": {
+                "x": 4.0,
+                "y": 3.0,
+                "z": 1.0
+              }
+            },
+            "orientation": {
+              "azimuth": 90.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            }
+          }
+        ],
+        "tx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 1.0,
+          "pattern": "tr38901",
+          "polarization": "V"
+        },
+        "rx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 1.0,
+          "pattern": "dipole",
+          "polarization": "V"
+        }
+      },
+      "configuration_sha256": "0d647a7e4e346de0aedc659d969ae816458cc87dac47e9147b2e9b4a155136c3",
+      "repetitions": [
+        {
+          "channel_sha256": "c7c252e0733919e8cd1c17725ed93859f70354146b4458e1993bb4c88a19f3d0",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "channel_sha256": "c7c252e0733919e8cd1c17725ed93859f70354146b4458e1993bb4c88a19f3d0",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "case_10",
+      "configuration": {
+        "scene_fname": "simple_room/simple_room.xml",
+        "seed": 42,
+        "frequency": 5180,
+        "channel_bw": 20,
+        "fft_size": 256,
+        "subcarrier_spacing": 78125,
+        "mode": 1,
+        "sub_mode": -1,
+        "fixed_coherence_time_ms": 5,
+        "time_evo_model": "position",
+        "nodes": [
+          {
+            "constant_position_model": {
+              "position": {
+                "x": 3.0,
+                "y": 2.0,
+                "z": 2.0
+              }
+            },
+            "orientation": {
+              "azimuth": 90.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            },
+            "id": 0
+          },
+          {
+            "id": 1,
+            "constant_position_model": {
+              "position": {
+                "x": 4.0,
+                "y": 3.0,
+                "z": 1.0
+              }
+            },
+            "orientation": {
+              "azimuth": 0.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            }
+          }
+        ],
+        "tx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 1.0,
+          "pattern": "tr38901",
+          "polarization": "V"
+        },
+        "rx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 1.0,
+          "pattern": "dipole",
+          "polarization": "V"
+        }
+      },
+      "configuration_sha256": "3ca5270db0e507298db9b06e32c02feb5291351fcc2638912930d71c384942b7",
+      "repetitions": [
+        {
+          "channel_sha256": "7321a57e957a1cde7ea409c1b51fcc3155d21971302d83782a18dc3fe92bc4bd",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "channel_sha256": "7321a57e957a1cde7ea409c1b51fcc3155d21971302d83782a18dc3fe92bc4bd",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "case_11",
+      "configuration": {
+        "scene_fname": "simple_room/simple_room.xml",
+        "seed": 42,
+        "frequency": 5180,
+        "channel_bw": 20,
+        "fft_size": 256,
+        "subcarrier_spacing": 78125,
+        "mode": 1,
+        "sub_mode": -1,
+        "fixed_coherence_time_ms": 5,
+        "time_evo_model": "position",
+        "nodes": [
+          {
+            "constant_position_model": {
+              "position": {
+                "x": 3.0,
+                "y": 2.0,
+                "z": 2.0
+              }
+            },
+            "orientation": {
+              "azimuth": 90.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            },
+            "id": 0
+          },
+          {
+            "id": 1,
+            "constant_position_model": {
+              "position": {
+                "x": 4.0,
+                "y": 3.0,
+                "z": 1.0
+              }
+            },
+            "orientation": {
+              "azimuth": 90.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            }
+          }
+        ],
+        "tx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 1.0,
+          "pattern": "tr38901",
+          "polarization": "V"
+        },
+        "rx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 1.0,
+          "pattern": "dipole",
+          "polarization": "V"
+        }
+      },
+      "configuration_sha256": "092eb36e7b56c6312ca0eac2e0fd2539846d4e28ff5e470033c896ef24894b52",
+      "repetitions": [
+        {
+          "channel_sha256": "227191ba8291e30390d3266ceead0c4b38475aef19818bd5d5edf85804827181",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "channel_sha256": "227191ba8291e30390d3266ceead0c4b38475aef19818bd5d5edf85804827181",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "csv_serialization": "UTF-8, LF; numeric values preserved during final line-ending normalization"
+}

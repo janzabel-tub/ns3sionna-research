@@ -1,7 +1,8 @@
 # ns3sionna: MIMO-Abstraktionsmodell für IEEE 802.11ax/be
 
-Stand: 25. September 2026, Phase 4 einschließlich Unterphase 4.8 implementiert;
-Unterphase 5.1 für HE MCS 0/BCC/32 Byte/1x1 anhand von Link-Level-Daten validiert
+Stand: 28. September 2026, Phase 4 einschließlich Unterphase 4.8 implementiert;
+Unterphase 5.1 für HE MCS 0/BCC/32 Byte/1x1 anhand von Link-Level-Daten validiert;
+Unterphase 5.2.1 mit reproduzierbarem 2x2-Abstands-/Orientierungsbenchmark implementiert
 
 Arbeitszweig: feature/su-mimo-minimal
 
@@ -77,6 +78,10 @@ deterministischen CPU-Vergleich. Unterphase 4.7 ergänzt den gemeinsamen
 Uplink-ZF-/MMSE-Numerikkern und nutzerweise PER. Unterphase 4.8 bindet reale
 HE-Basic-Trigger- und HE-TB-PHY-Metadaten an diesen Kern und berücksichtigt
 nur exakt gleichzeitig am AP empfangene Nutzer innerhalb derselben RU.
+Unterphase 5.2.1 ergänzt einen festen 2x2-Kanalsensitivitätsbenchmark mit
+Abstands-/Orientierungssweep, wiederholbarem CPU-Raytracing und eingefrorenen
+Kanal-/SINR-Referenzen. Die Auswertung bleibt innerhalb des kalibrierungsfreien
+Kanal-/MMSE-/MI-Messvertrags.
 
 ## 2. Reproduzierbare Ausgangsbasis
 
@@ -737,10 +742,51 @@ validiert. Die Koeffizienten sind nur für diese genaue PHY-Konfiguration
 und die dokumentierten Kanalannahmen belegt; weitere MCS, Paketlängen,
 Codearten, Antennenmaße und TGax-Kanalmodelle bleiben zu kalibrieren.
 
+#### Unterphase 5.2.1: 2x2-SU-MIMO, Abstand und Orientierung (implementiert)
+
+Der erste Teil von Phase 5.2 untersucht einen gerichteten, statischen
+2x2-Open-Loop-Link bei fester Szene, Knotenposition, Leistung, Rauschen und
+Seeds. Die vollständige kleine Vergleichsmatrix enthält die gemeinsamen
+horizontalen TX-/RX-Abstände 0,25, 0,5 und 1 Wellenlänge sowie unabhängig
+TX- und RX-Azimut 0 oder 90 Grad: insgesamt zwölf Konfigurationen mit je zwei
+frischen Raytracing-Läufen. Elevation und Roll bleiben im Sweep null.
+Ein separater Integrationstest prüft zusätzlich unterschiedliche, nichtnullige
+Azimut-/Elevations-/Rollwinkel an beiden tatsächlichen Sionna-Radioobjekten.
+
+`examples/ns3_wifi_sumimo_benchmark.cc` exportiert über die vorhandene
+`SionnaMimoHelper::Apply`-/`PopulateMimoConfiguration`-Kette die echten
+Array-/Orientierungsfelder. Seine zweite Aktion liest eine eingefrorene
+Serverantwort und berechnet ausschließlich in ns-3 Linkbudget, Open-Loop-MMSE,
+MI-Kompression und SVD-Diagnosen. `tools/benchmark_sumimo.py` ruft den
+unveränderten `SionnaEnv` direkt auf, orchestriert die zwölf Fälle und erstellt
+CSV-/Protobuf-/JSON-Exporte sowie Vergleichsplots. Ein laufender ZMQ-Server,
+MAC-Verkehr und eine EESM-/PER-Konfiguration sind für diesen Messvertrag nicht
+erforderlich. Die bestehenden Framework-/Serverpfade wurden nicht geändert.
+
+Die versionierte CPU-Referenz liegt unter `data/phase5_2_spacing_orientation/`.
+`manifest.json` enthält sämtliche festen Kontrollen, die zwölf vollständigen
+IPC-Konfigurationen, tatsächlich beobachtete Arraykoordinaten und Orientierungen,
+Softwareversionen, Backend sowie SHA-256-Hashes von Quellcode, Szenendateien,
+Konfigurationen, Kanälen und nativem Programm. Pro Fall sind
+`configuration.pb` als rohe `SimInitMessage` und zwei `channel_XX.pb` als rohe
+`ChannelStateResponse` gespeichert. `tones.csv` enthält alle 6144 Tonzeilen;
+`summary.csv` enthält 24 Läufe mit beiden Stream-SINRs, minimalem Rang,
+Singularwertdiagnosen, Linkbudget und getrennten Laufzeiten. Drei PNG-Plots
+vergleichen Kanal, SINR und Laufzeit über den Antennenabstand.
+
+Abnahmekriterium: wiederholte CPU-Kanalantworten sind byteidentisch; Geometrie
+und Grad-/Radiantumrechnung erreichen die tatsächlichen PlanarArrays und
+Radioobjekte; analytische sowie eingefrorene reale Kanäle liefern die
+Referenz-Singularwerte und -SINRs. Die elf automatisierten neuen Prüfungen
+und die relevanten Regressionen sind in Abschnitt 7.14 dokumentiert.
+Dieser Teil berichtet keine absolute PER oder Wi-Fi-Datenrate: die gemessene
+Kalibrierung aus Unterphase 5.1 gilt ausschließlich für die dokumentierte
+1x1-Konfiguration und darf nicht auf 2x2 übertragen werden.
+
 #### Weitere Phase-5-Arbeitspakete
 
-- Sensitivität gegenüber Antennenabstand, Orientierung, CSI-Alter und
-  Raytracing-Samples untersuchen.
+- Weitere Teile von Phase 5.2 untersuchen getrennte TX-/RX-Abstände,
+  zusätzliche Winkel, CSI-Alter und die Konvergenz über Raytracing-Samples.
 - Cache- und IPC-Speicherbedarf für große $N_\mathrm{sc}$, $N_\mathrm{tx}$ und $N_\mathrm{rx}$ messen.
 - Deterministische Seeds, Ergebnisformate und CI-Matrix für CPU/GPU festlegen.
 
@@ -2495,6 +2541,119 @@ Bei synthetischer Quelle oder überschrittenem Grenzwert lautet der Status
 `candidate_awgn_snr_offset_db` bleiben zur Diagnose sichtbar. Für andere
 PHY-Konfigurationen sind neue Link-Level-Referenzen erforderlich.
 
+### 5.20 Messvertrag und Formeln des Benchmarks aus Unterphase 5.2.1
+
+Feste Szene ist `simple_room/simple_room.xml` einschließlich ihrer
+OBJ-/Materialdateien. TX-Knoten 0 befindet sich bei (3,2,2) m und RX-Knoten 1
+bei (4,3,1) m. Beide verwenden ein vertikal polarisiertes 1x2-PlanarArray;
+TX verwendet `tr38901`, RX `dipole`, der ungenutzte vertikale Abstand ist
+0,5 Wellenlängen. Der native Seed ist 42, Run 1; der Server und sein
+`PathSolver` verwenden ebenfalls Seed 42. Mittenfrequenz ist 5180 MHz,
+Bandbreite 20 MHz, FFT-Länge 256, Tonabstand 78125 Hz. Jeder Request gilt
+bei Zeit null im P2P-/Positionsmodus mit fester Kohärenzdauer 5 ms.
+
+Der feste CPU-Vertrag nutzt `llvm_ad_mono_polarized` mit einem Dr.Jit-Worker,
+100000 Samples je Quelle, Tiefe 3, LOS, spekulare Reflexion und Refraktion.
+Diffuse Reflexion, Diffraktion, Kantendiffraktion und synthetische Arrays
+sind ausgeschaltet; tatsächliche Antennenelemente werden raygetraced.
+Alle Fälle verwenden dieselben Solveroptionen. Die normalen Serverdefaults
+werden durch diesen eigenständigen Workflow nicht verändert. Ein früher
+Vier-Worker-Probelauf zeigte trotz gleicher Seeds bis zu etwa 4,4 ppm Drift
+des schwachen Singularwerts. Die feste Ein-Worker-Ausführung beseitigte diese
+Drift und lieferte für alle zwölf Paare byteidentische Antworten.
+
+Die Arraykoordinaten vor der Knotendrehung lauten in Wellenlängen
+
+\[
+  \mathbf p_0=(0,-d/2,0),\qquad \mathbf p_1=(0,d/2,0),
+  \qquad d\in\{0{,}25,0{,}5,1\}.
+\]
+
+Orientierungen werden explizit in Grad konfiguriert und gemäß Abschnitt 6.5
+mit \(\pi/180\) in Sionna-Radiant umgerechnet. Die Validierung liest
+`scene.tx_array.normalized_positions`, `scene.rx_array.normalized_positions`
+sowie Position und Orientierung der tatsächlich platzierten Objekte `tx`
+und `rx1`; sie prüft daher mehr als die exportierten Konfigurationswerte.
+
+Die bestehende gemeinsame CFR-Normalisierung aus Abschnitt 4.3 bleibt
+unverändert. Der vom Raytracer erzeugte Wideband-Verlust darf sich durch
+Geometrie und Elementmuster ändern; nur die Eingabekontrollen bleiben fest.
+Bei 20 dBm Gesamtleistung, 290 K und 7 dB Rauschzahl gilt
+
+\[
+  N=1{,}3803\cdot10^{-23}\,290\,(20\cdot10^6)\,10^{7/10}
+    =4{,}0123746837392\cdot10^{-13}\ \mathrm W,
+  \qquad
+  \rho=\frac{10^{(20-L_\mathrm{wb}-30)/10}}{N}.
+\]
+
+`WifiLinkBudget` berechnet diese Größen. Ohne Precoding trägt jede
+TX-Antenne einen Stream, sodass \(N_s=2\). Der native Kern berechnet
+
+\[
+  E[k]=\left(I+\frac{\rho}{2}H[k]^H H[k]\right)^{-1},
+  \qquad \gamma_s[k]=\frac{1}{E_{s,s}[k]}-1,
+\]
+
+\[
+  \gamma_{\mathrm{MI},s}
+    =\exp\left(\frac1{256}\sum_k\ln(1+\gamma_s[k])\right)-1,
+  \qquad
+  \eta=\frac1{256}\sum_{k,s}\log_2(1+\gamma_s[k]).
+\]
+
+Die CSV-SINRs sind linear; nur die Zusammenfassung und Plots verwenden
+zusätzlich \(10\log_{10}\gamma_{\mathrm{MI},s}\). MI ist hier eine
+kalibrierungsfreie Diagnose. Die SVD von \(H[k]\) liefert
+\(\sigma_0[k]\geq\sigma_1[k]\geq0\), den Rang
+\(r[k]=\#\{i:\sigma_i[k]>10^{-12}\sigma_0[k]\}\) und den
+zusätzlichen Konditionsindikator
+\(\operatorname{median}_k(\sigma_1[k]/\sigma_0[k])\).
+Es wird kein SVD-Precoder auf den Kanal angewendet. Singularwerte gehören
+zur normalisierten CFR; rohe Singularwerte lassen sich durch Multiplikation
+mit \(10^{-L_\mathrm{wb}/20}\) rekonstruieren. Der numerische Rang allein
+beschreibt nicht die Nutzbarkeit einer schwachen Mode.
+
+Alle 256 FFT-Bins werden mit gleichem Gewicht ausgewertet, einschließlich
+DC und Guard-/Nulltönen. Das ist ein vollständig nachvollziehbarer
+Kanalsensitivitätsvergleich und keine auf belegte HE-Nutzdatentöne beschränkte
+PER-/Durchsatzprognose. \(\eta\) ist die ideale gaußsche spektrale Effizienz,
+keine gemessene 802.11-Nutzdatenrate. Auch der feste kleine Sampleumfang ist
+noch keine Konvergenzstudie.
+
+`init_seconds` misst das Laden und Initialisieren der Szene;
+`cfr_seconds` misst den Serveraufruf einschließlich Platzierung, Raytracing,
+CFR-Konvertierung und Antwortaufbau. `analysis_seconds` misst im nativen
+Programm Deserialisierung, Prüfung, Linkbudget, MMSE/MI und SVD, vor dem
+CSV-Schreiben. `native_process_seconds` enthält zusätzlich Prozessstart
+und CSV-Ausgabe; `case_seconds` umfasst einen einzelnen Lauf einschließlich
+Geometrieprüfung, Ergebnislesung und Wiederholungsvergleich, nach dem
+Konfigurationsexport. `sweep_seconds` enthält alle Fälle und
+Konfigurationsexporte, nach Python-/Sionna-Import und vor Plot-/Manifestausgabe.
+Diese Wanduhrzeiten enthalten gegebenenfalls JIT-Aufwand und sind weder
+bitidentisch noch unabhängige Performance-Stichproben. IPC-/Cache-Latenz und
+MAC-/PHY-Laufzeit werden in dieser Unterphase nicht gemessen.
+
+`data/sumimo_frozen_reference.json` definiert zusätzlich fünf analytische
+2x2-Töne: \(\sqrt2 I\), die Einsmatrix, eine phasengedrehte Diagonalmatrix
+mit Betrag 2, eine Nullmatrix und eine komplexe asymmetrische Matrix. Ihr
+gemeinsames mittleres Antennenpaarleistungsniveau ist eins. Die ersten vier
+Fälle liefern pro Stream die SINRs \(\rho\), \(\rho/(1+\rho)\),
+\(2\rho\) und null. Für den fünften Fall sind die Gram-Diagonalen 1,6 und
+2,4 und das Betragsquadrat des Kreuzterms 1,28. Mit \(a=\rho/2\) folgt
+
+\[
+  \gamma_0=1{,}6a-\frac{1{,}28a^2}{1+2{,}4a},\qquad
+  \gamma_1=2{,}4a-\frac{1{,}28a^2}{1+1{,}6a}.
+\]
+
+Damit entstehen unabhängige Referenzwerte für Rangverlust, Nulltöne,
+Frequenzselektivität, komplexe Koeffizienten und flache CFR-Reihenfolge.
+Die Tests vergleichen zusätzlich alle realen eingefrorenen Kanäle mit
+NumPy-SVD und unabhängig invertierter MMSE-Fehlerkovarianz. Diese NumPy-
+Rechnung ist ausschließlich Validierung; die exportierte Linkabstraktion
+stammt aus dem vorhandenen C++-Kern.
+
 ## 6. High-Level-API-Vertrag bis Unterphase 4.8
 
 ### 6.1 Typen, Besitz und Defaults
@@ -2899,7 +3058,7 @@ Simulator-Timer, keine implizite CSI-Abfrage und keinen MAC-Feedbacktransport;
 diese Grenzen verhindern, dass das explizite Forschungsmodell eine
 vollständige 802.11-Soundingprozedur vortäuscht.
 
-## 7. Validierung der Unterphasen 1.1 bis 4.8
+## 7. Validierung bis Unterphase 5.2.1
 
 Die native Suite sionna enthält die schnellen API-, Numerik- und Adapterfälle:
 
@@ -3538,6 +3697,96 @@ ideales Timing, perfekte RX-CSI und drei kontrollierte Zweitap-Kanäle;
 TGax-Kanalmodelle wurde nicht belegt. Deshalb bleiben Beta und Offset ohne
 explizite, passende Benutzerkonfiguration ausgeschaltet.
 
+### 7.14 CPU-Ergebnisse und Validierung der Unterphase 5.2.1
+
+Am 28. September 2026 wurde die feste Vergleichsmatrix mit Sionna/Sionna RT
+2.0.1, Mitsuba 3.8.0, Dr.Jit 1.3.1, NumPy 2.5.2 und PyTorch 2.9.1+cpu
+ausgeführt. Der Sweep benötigte 21,641 s nach den Imports. Alle zwölf Paare
+frisch initialisierter Serverumgebungen lieferten byteidentische vollständige
+Kanalantworten. Laufzeit bleibt von dieser Gleichheitsprüfung ausgenommen;
+die nativen Diagnosefelder werden zusätzlich mit relativer Toleranz
+\(10^{-6}\) und absoluter Toleranz \(10^{-7}\) geprüft. Diese Toleranzen sind
+Numerikgrenzen und keine Messunsicherheits- oder Kalibrierangaben.
+
+Alle 256 Töne aller Fälle besitzen numerischen Rang zwei. Die folgenden
+Werte stehen für beide identischen Wiederholungen; Winkel sind Grad,
+Abstände sind Wellenlängen, SINRs sind MI-komprimierte Streamwerte in dB.
+Die vollständigen Singularwerte und Ton-SINRs bleiben in `tones.csv` erhalten.
+
+| Fall | Abstand | TX-Azimut | RX-Azimut | Median sigma1/sigma0 | Stream 0 dB | Stream 1 dB | eta bit/s/Hz |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 00 | 0,25 | 0 | 0 | 0,084037 | 45,679 | 41,029 | 28,804 |
+| 01 | 0,25 | 0 | 90 | 0,270370 | 56,947 | 55,114 | 37,226 |
+| 02 | 0,25 | 90 | 0 | 0,091984 | 47,577 | 46,894 | 31,383 |
+| 03 | 0,25 | 90 | 90 | 0,030958 | 39,189 | 38,617 | 25,847 |
+| 04 | 0,5 | 0 | 0 | 0,218708 | 53,154 | 50,099 | 34,300 |
+| 05 | 0,5 | 0 | 90 | 0,256484 | 57,090 | 57,460 | 38,052 |
+| 06 | 0,5 | 90 | 0 | 0,515959 | 55,202 | 56,403 | 37,074 |
+| 07 | 0,5 | 90 | 90 | 0,074755 | 46,810 | 46,407 | 30,966 |
+| 08 | 1 | 0 | 0 | 0,327041 | 56,491 | 57,387 | 37,830 |
+| 09 | 1 | 0 | 90 | 0,143210 | 51,537 | 48,973 | 33,389 |
+| 10 | 1 | 90 | 0 | 0,488056 | 60,024 | 60,095 | 39,903 |
+| 11 | 1 | 90 | 90 | 0,165965 | 53,823 | 53,034 | 35,497 |
+
+Der Konditionsindikator variiert von 0,030958 bis 0,515959, obwohl der Rang
+überall zwei bleibt. Beim TX-/RX-Azimutpaar 0/90 sinken die Stream-SINRs
+zwischen Abstand 0,5 und 1 von 57,090/57,460 auf 51,537/48,973 dB. Der
+Abstandseffekt ist in dieser konkreten Szene somit nicht durchgehend monoton.
+Die gekoppelte Änderung von Wideband-Verlust und räumlicher CFR ist in den
+Exporten getrennt nachvollziehbar. Aus diesem einzelnen statischen Link
+folgt keine allgemeine optimale Arraygeometrie.
+
+Über die 24 Läufe beträgt der Median der Szeneninitialisierung 3,104 ms,
+der CFR-/Raytracing-Zeit 0,716 s und der nativen Analyse 0,687 ms. Die
+CFR-Zeiten liegen zwischen 0,677 und 1,375 s; der Median inklusive nativem
+Prozessstart und CSV-Ausgabe ist 32,211 ms. Import, IPC und MAC-Verkehr sind
+gemäß Abschnitt 5.20 abgegrenzt. Die drei geprüften Vergleichsplots sind:
+
+- [Kanalvergleich](data/phase5_2_spacing_orientation/channel_comparison.png)
+- [SINR-/MI-Vergleich](data/phase5_2_spacing_orientation/sinr_comparison.png)
+- [Laufzeitvergleich](data/phase5_2_spacing_orientation/runtime_comparison.png)
+
+Die abschließende automatisierte Validierung war erfolgreich:
+
+- `./ns3 configure --enable-examples --enable-tests` und gezielte Builds von
+  `ns3_wifi_sumimo_benchmark`, `sionna-test`, SU-Minimal, SU-Precoding,
+  MU-Beispiel und AWGN-Export waren erfolgreich.
+- `python -m unittest -v test_benchmark_sumimo`: elf Fälle bestanden in
+  5,606 s. Sie prüfen sämtliche Sweepkontrollen und Exportlängen, Hashes,
+  byteidentische Wiederholungen, die explizite Konfiguration aller drei
+  Eulerkomponenten, tatsächliche Sionna-Array-/Radio-Geometrie, analytische
+  Rang-/Singularwert-/MMSE-/MI-Referenzen sowie negative Geometrie- und
+  Datenvertragsfälle. Alle zwölf eingefrorenen realen Kanäle wurden im
+  nativen Programm erneut ausgewertet und gegen unabhängige NumPy-SVD und
+  MMSE-Inversion geprüft. Drei repräsentative Fälle (00, 05, 10) wurden
+  zusätzlich in einem frischen Python-Prozess erneut raygetraced und
+  stimmen bytegenau mit der früher erzeugten Referenz überein.
+- Die sieben nativen Suites `sionna` (38 Fälle),
+  `sionna-mimo-csi-feedback`, `dl-mu-mimo-runtime`, `dl-mu-mimo-ru`,
+  `he-dl-mu-spectrum-ru`, `ul-mu-mimo` und
+  `he-ul-mu-mimo-phy-adapter` bestanden im vorhandenen Test-Runner.
+- Die sechs ExampleAsTest-Suites für SU-Minimal, Helper-Konfiguration,
+  Helper-Laufzeit, SU-Precoding, Precoding-Negativfälle und MU-MIMO bestanden.
+  Der umfassende MU-Referenzloglauf benötigte 243,979 s.
+- Der Server-Importcheck und die vollständige Python-/CPU-Serversuite
+  aus Datenvertrag, deterministischer Mobilität, Kohärenzzeit und
+  Server-Unit-Tests bestanden mit 19 Fällen in 192,187 s, einschließlich
+  realer 1x1-/2x2-CFR und beider Platzierungspfade.
+- `python -m unittest -v test_calibrate_eesm`: acht Fälle bestanden.
+- `git diff --check` war ohne Befund. Nach der letzten Dokumentationsänderung
+  wurde das Modell-PDF genau einmal erzeugt und mit Seitenzahlprüfung sowie
+  vollständiger Textextraktion auf die neuen Abschnitte validiert.
+
+Alle Regressionen wurden sequenziell ausgeführt. Die Befehle, Exitcodes,
+Wanduhrzeiten und Log-Hashes stehen in
+`data/phase5_2_spacing_orientation/validation.json`. Die elf neuen Tests
+verwenden standardmäßig die versionierten Referenzen und lassen sich ohne
+externen Server reproduzieren; die vier tatsächlichen Raytracing-Aufrufe
+der Geometrie-/Referenztests benötigen das dokumentierte CPU-Environment.
+Der erste Teil von Phase 5.2 ist damit abgeschlossen. Zusätzliche Winkel,
+getrennte TX-/RX-Abstände, CSI-Alter, Samplekonvergenz und Cache-/IPC-Skalierung
+bleiben weitere Arbeitspakete. Eine 2x2-PER-Kalibrierung wurde nicht abgeleitet.
+
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 
 - SionnaMimoHelper überträgt eine gemeinsame TX- und RX-Geometrie für die
@@ -3676,6 +3925,24 @@ Vom ns-3.40-Verzeichnis:
       --quantization=coarse --csiUpdateIntervalMs=5 --feedbackDelayMs=2"
 
     ./ns3 run "ns3_wifi_mumimo --eesmBetaLinear=2 --rzfAlpha=0.25 --verify=1"
+
+Reproduzierbarer Phase-5.2.1-Benchmark, vom ns-3-Verzeichnis aus, mit leerem
+Ausgabeverzeichnis und ohne laufenden ZMQ-Server:
+
+    ./ns3 build ns3_wifi_sumimo_benchmark sionna-test
+    conda run --no-capture-output -n sionna-venv python \
+      contrib/sionna/tools/benchmark_sumimo.py \
+      --output=/tmp/sumimo-spacing-orientation
+    cd contrib/sionna/tools
+    conda run --no-capture-output -n sionna-venv python \
+      -m unittest -v test_benchmark_sumimo
+
+Die Tests nutzen standardmäßig die versionierte CPU-Referenz. Mit
+`SUMIMO_BENCHMARK_RESULTS=/tmp/sumimo-spacing-orientation` wird die neue
+vollständige Ausgabe überprüft. Ein einzelner eingefrorener realer Kanal
+kann vom ns-3-Verzeichnis aus ohne Raytracing erneut ausgewertet werden:
+
+    ./ns3 run 'ns3_wifi_sumimo_benchmark --action=analyze --input=contrib/sionna/data/phase5_2_spacing_orientation/case_00/channel_00.pb --output=/tmp/sumimo-replay.csv'
 
 Python-Vertrag und Server vom Verzeichnis contrib/sionna/model/ns3sionna:
 
