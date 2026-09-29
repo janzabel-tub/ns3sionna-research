@@ -2,7 +2,7 @@
 
 Stand: 29. September 2026, Phase 4 einschließlich Unterphase 4.8 implementiert;
 Unterphase 5.1 für HE MCS 0/BCC/32 Byte/1x1 anhand von Link-Level-Daten validiert;
-Unterphasen 5.2.1/5.2.2 mit reproduzierbarem 2x2-Benchmark und Samplekonvergenz implementiert
+Unterphasen 5.2.1/5.2.2/5.2.3 mit Kanal-, Samplekonvergenz- und Cache-/IPC-Benchmarks implementiert
 
 Arbeitszweig: feature/su-mimo-minimal
 
@@ -85,6 +85,8 @@ Kanal-/MMSE-/MI-Messvertrags.
 Unterphase 5.2.2 ergänzt gepaarte Seed-/Samplebudgetvergleiche für vier
 repräsentative Konfigurationen mit vorab definierten Toleranzen,
 byteidentischen Wiederholungen und unabhängiger Referenzvalidierung.
+Unterphase 5.2.3 misst den bestehenden Cache und tatsächliche lokale
+Prozess-IPC mit eingefrorenen Kanalantworten, getrennt von Raytracing.
 
 ## 2. Reproduzierbare Ausgangsbasis
 
@@ -811,11 +813,38 @@ und automatisierte Validierung in Abschnitt 7.15. PER wird weiterhin nicht
 abgeleitet: die 5.1-Kalibrierung gilt ausschließlich für die dokumentierte
 HE-MCS-0/BCC/32-Byte/1x1-Konfiguration.
 
+#### Unterphase 5.2.3: Cache-/IPC-Skalierung (implementiert)
+
+`examples/ns3_sionna_cache_ipc_benchmark.cc` nutzt die bestehenden
+`SionnaPropagationCache`-Getter, deren Misspfad und den unveränderten
+`SionnaHelper`-REQ-Socket. `tools/benchmark_cache_ipc.py` startet einen
+separaten Python-REP-Prozess mit vorserialisierten eingefrorenen Antworten.
+Der Sweep umfasst 64/256/1024 Subcarrier, TX/RX-Dimensionen 1/1, 2/2,
+4/4, 2/4 und 8/8 sowie 1/16/64 gleichzeitig gecachte Links: 45 Fälle mit
+je drei frischen nativen Prozessen. Seed 42 und Run 1 bleiben fest.
+
+Pro Fall werden Serialisierung, Deserialisierung, einzelne CFR-Dekodierung,
+reale lokale ZMQ-Roundtrips, Cache-Hits und frische Cache-Misses gemessen.
+Logischer Koeffizienten-/Frequenzspeicher, glibc-Live-Heap und Linux-RSS
+werden getrennt ausgewiesen. Die vorab exportierten Abnahmekriterien
+verlangen exakte Daten-/Byteerhaltung, erwartete Request- und Hit-/Misszahlen
+sowie den inklusiven Gültigkeitsrand und die anschließende Cacheexpiration.
+Laufzeit- und Allokatordeltas werden als Verteilungen berichtet.
+
+Die CPU-Referenz liegt in `data/phase5_2_cache_ipc/`. Sie enthält
+15 kompakte Protobuf-Vorlagen, vollständige Messkonfigurationen und
+SHA-256-Nachweise, Zusammenfassungen, sämtliche Zeitstichproben und
+Requesttranskripte. Drei Vergleichsplots bleiben lokal und unversioniert.
+Abschnitt 5.22 definiert Messvertrag und Formeln; Abschnitt 7.16 berichtet
+Ergebnisse und automatisierte Validierung. Die Produktionsdateien von
+Cache, Helper, Protobuf und Server werden nicht verändert.
+
 #### Weitere Phase-5-Arbeitspakete
 
 - Weitere Teile von Phase 5.2 untersuchen getrennte TX-/RX-Abstände,
   zusätzliche Winkel, CSI-Alter und weitere Szenen/Solveroptionen.
-- Cache- und IPC-Speicherbedarf für große $N_\mathrm{sc}$, $N_\mathrm{tx}$ und $N_\mathrm{rx}$ messen.
+- Cache-/IPC-Skalierung mit realen Serverberechnungen, weiteren Transporten
+  und längeren zeitlichen Snapshotfolgen erweitern.
 - Deterministische Seeds, Ergebnisformate und CI-Matrix für CPU/GPU festlegen.
 
 ## 4. Datenmodell und IPC-Vertrag der Unterphasen 1.1/1.2
@@ -2772,6 +2801,152 @@ Die 256 FFT-Bins einschließlich DC/Guards und gaußsche MI-Effizienz bleiben
 derselbe Kanalvergleich wie in 5.2.1; daraus entsteht keine 2x2-PER- oder
 Wi-Fi-Durchsatzkalibrierung.
 
+### 5.22 Messvertrag und Formeln der Unterphase 5.2.3
+
+Dieser Benchmark isoliert Datenhaltung und Transport. Sein eingefrorener
+Anker ist der 100000-Sample-/Seed-42-Kanal von Fall 05 aus Unterphase 5.2.2.
+Die 256x2x2-CFR wird für jede gewünschte Transportdimension deterministisch
+mit sc/rx/tx-Indizes modulo 256/2/2 wiederholt. Für Linknummer l gilt
+
+\[
+  H_l[k,r,t]=\mathrm i^{(42+l-1)\bmod4}
+    H_\mathrm{Anker}[k\bmod256,r\bmod2,t\bmod2],
+  \quad L_l=L_\mathrm{Anker}+(l-1)/8.
+\]
+
+Die vier Phasen werden mit exakten Vorzeichen-/Real-/Imaginärtauschoperationen
+erzeugt. Der Delay in ns erhöht sich um l-1; IDs sind TX 0 und RX 1 bis L.
+Alle Radios behalten die Ankerpositionen; der Frequenzvektor enthält
+(k-Nsc/2)*78125 Hz in der dokumentierten Reihenfolge. Die größere CFR ist
+eine Transportfixture, keine neue physikalische Array-/Bandbreitensimulation.
+Rang, SINR, PER und Wi-Fi-Durchsatz werden hier nicht ausgewertet.
+
+Alle L Links kommen in einem gemeinsamen `ChannelStateResponse`-Snapshot
+innerhalb eines `Wrapper`. Die größeren Antworten werden bei Bedarf aus
+einer der 15 gespeicherten Einzel-Link-Vorlagen rekonstruiert. Manifest und
+Tests prüfen sowohl Vorlagenhashes als auch SHA-256 der vollständigen
+rekonstruierten Batchantwort. Der native Prüfer vergleicht jedes gecachte
+komplexe Element bitgenau und alle Metadaten exakt mit dieser Antwort.
+Zusätzlich berechnet NumPy unabhängig eine geordnete, nichtkryptografische
+IEEE-754-Bitprüfsumme über sämtliche Koeffizienten. Dabei wird mit
+globalem flachem Index j das XOR der beiden Produkte
+bits(real_j)*(2j+1) und bits(imag_j)*(2j+3), jeweils modulo 2^64, gebildet.
+
+Mit K=Nsc*Nrx*Ntx pro Link und double-Präzision gilt für den logisch
+gespeicherten Nutzdatenspeicher des Caches auf der Referenzplattform
+
+\[
+  B_\mathrm{CFR}=16LK,\qquad B_f=4LN_\mathrm{sc},\qquad
+  B_\mathrm{logisch}=L N_\mathrm{sc}(16N_\mathrm{rx}N_\mathrm{tx}+4).
+\]
+
+Dieser Wert enthält komplexe Koeffizienten und int32-Frequenzen, aber
+keine CacheEntry-/Map-/Vektorköpfe, Allokatorausrichtung oder Socketpuffer.
+Die tatsächliche serialisierte Größe B_wire ist die Länge des
+kanonischen `Wrapper.SerializeToString`-Ergebnisses; der native C++-Encoder
+muss exakt dieselben Bytes erzeugen. Die doppelt gepackten CSI-double-
+Arrays tragen ebenfalls 16LK Bytes bei. Protobuf-Tags, Längenpräfixe,
+Positionen, IDs, Delay, Verlust und die gepackten Frequenz-Varints kommen
+hinzu. Negative int32-Frequenzen verwenden längere Wire-Varints; deshalb
+ist Wiregröße nicht identisch mit logischem Cache-Nutzdatenspeicher.
+
+Die native glibc-Messung verwendet
+
+\[
+  A=\mathtt{mallinfo2().uordblks}+\mathtt{mallinfo2().hblkhd},\qquad
+  \Delta A_\mathrm{fill}=A_\mathrm{live}-A_\mathrm{before},\quad
+  \Delta A_\mathrm{release}=A_\mathrm{live}-A_\mathrm{released}.
+\]
+
+Der Socket wird vorher mit vollständigen Antworten aufgewärmt. Ein eigener
+Cache wird anschließend einmal mit dem Batch befüllt, an allen Links
+validiert und wieder zerstört. Zwischen den beiden Live-/Release-
+Heapschnappschüssen erfolgen keine weiteren Benchmarkallokationen.
+Delta A_release misst die beim Löschen dieses Caches sichtbare Änderung
+der glibc-Buchhaltung einschließlich Verwaltungsdaten und Allokatorrundung.
+Kleine freigegebene Blöcke im Threadcache können weiter in uordblks enthalten
+bleiben; das Release-Delta kann deshalb kleiner als die logische
+Payloadgröße sein. Es ist keine vollständige Zählung lebender Cacheobjekte.
+ZMQ-Hintergrundaktivität kann weitere kleine Störungen verursachen.
+Beide Deltas werden vorzeichenbehaftet exportiert und müssen nicht
+bitidentisch wiederholbar sein.
+
+RSS und Peak-RSS stammen aus `VmRSS` beziehungsweise `VmHWM` in
+`/proc/self/status` des aktuellen Programmadressraums. Der zusätzliche
+`getrusage`-Lebenszeitpeak wird separat als Diagnose exportiert; er kann
+Speicherzustände vor exec beziehungsweise aus dem Elternprozess enthalten.
+Baseline-, Live- und
+Release-RSS werden getrennt exportiert. RSS enthält Fixture, Protobuf,
+Sockets, Bibliotheken und behaltene freie Allokatorseiten. Ein nach
+Cachefreigabe hoher RSS-Wert ist daher keine Messung des verbleibenden
+Cacheinhalts. Weder Payloadgröße noch RSS werden als alleinige genaue
+Cacheallokationsgröße ausgegeben.
+Die Prozesspeaks umfassen sämtliche Messphasen einschließlich Fixture,
+temporärer Dekodierungen und Expirationsprobe; der logische Cachebedarf
+bezieht sich auf genau einen Snapshot je Link im separaten Speicherprüfcache.
+
+Es gelten 16 Zeitstichproben pro Serialisierungs-/Parse-/CFR-Dekodierungs-
+und Roundtripoperation, drei Warmups, 128 gemessene Getter-Hits und fünf
+frische Cache-Misses je Prozess. Die drei Prozesse je Fall erzeugen
+insgesamt 135 Läufe und 30915 Zeitstichproben. C++ misst mit steady_clock,
+Python mit perf_counter_ns. Zusammenfassungen enthalten Median, 95.
+Perzentil, Minimum und Maximum pro Operation/Prozess; die Plots zeigen
+Median und Min-/Max-Spanne der drei Prozessmediane.
+
+Die Timergrenzen sind bewusst explizit:
+
+- C++-Serialisierung und Parse: vollständiger Response-Wrapper,
+  einschließlich lokaler Ergebnisfreigabe; einzelne Matrixdekodierung:
+  `DeserializeChannelMatrix` nur für einen RX-Kanal einschließlich Freigabe.
+- Python-Serialisierung und Parse: vollständiger Wrapper; Freigabe des
+  lokalen Ergebnisses erfolgt nach dem Timer. Diese Werte sind daher kein
+  identischer Mikrobenchmarkvertrag zu den C++-Werten.
+- Roundtrip: tatsächliches Send/Recv über lokalen ipc://-Transport zu
+  einem zweiten Prozess. Requestserialisierung, vollständiger Bytevergleich,
+  Socketaufbau und Warmups liegen außerhalb der gemessenen Stichproben.
+  Der REP-Prozess prüft Requests und sendet vorbereitete Antwortbytes.
+- Hit: öffentlicher `GetPropagationChannelMatrix`-Aufruf einschließlich
+  CFR-Kopien und sofortiger Rückgabewertfreigabe. Der innere Cachepfad
+  kopiert CacheEntry-Werte; gemessen wird daher mehr als reine Map-Suche.
+- Miss: derselbe Getter auf einem neu angelegten Cache, einschließlich
+  Requestserialisierung, Send/Recv, Protobuf-/CFR-Dekodierung und Einfügen
+  sämtlicher L Links. Cachekonstruktion und Cachezerstörung erfolgen
+  außerhalb des Miss-Timers. Dadurch werden keine doppelten alten Snapshots
+  in einem wiederholt deaktivierten Cache akkumuliert.
+
+Alle Getter bleiben echte Produktionsaufrufe. Die Optimierung für weit
+entfernte Radios wird ausgeschaltet, damit auch Delay-/Loss-Prüfungen
+den Cache verwenden. Die anfängliche Gültigkeit ist [0,5000000] ns.
+Am Zeitpunkt 5000000 muss ein Hit ohne IPC erfolgen; bei 5000001 muss
+ein Miss einen neuen Snapshot [5000001,10000001] anfordern. Nur Zeitfelder
+ändern sich bei dieser vorbereiteten Antwort. Das prüft den inklusiven
+Gültigkeitsrand und die produktive Expiration ohne Raytracing.
+
+Die erwartete Requestzahl je Prozess ist
+
+\[
+  R=(3+16)_\mathrm{Roundtrip}+1_\mathrm{memory}+1_\mathrm{warmcache}
+     +5_\mathrm{coldmiss}+1_\mathrm{expiry}=27.
+\]
+
+26 Requests gelten bei Zeit null, genau einer bei 5000001. Danach muss
+der bestehende Helper-Closepfad genau ein ACK erhalten. Alle 3645
+Channel-Requests werden exportiert. Der Zeitcache hat 132 Hits
+(3 Warmups, 128 Stichproben, ein Randhit) und zwei Misses; seine Hitquote
+ist 132/134. Der separate Speicherprüfcache hat 4L Validierungshits
+(CFR/Frequenz/Loss/Delay) nach einem einzigen Batchmiss: Quote 4L/(4L+1).
+
+Vor der ersten Sweepmessung wird `plan.json` mit folgenden Abnahmekriterien
+und Zeitstempel geschrieben: vollständige 45x3-Matrix, exakte Fixture-/
+Kanal-/Metadaten-/Byteerhaltung, exakte logische Speicherformeln, erwartete
+Requestfolgen und Hit-/Misszahlen mit 1e-12 Quotentoleranz, korrekte
+Expiration und identische deterministische Ergebnisse aller drei Prozesse.
+Jede Operation muss vollständig mit endlichen positiven Zeitstichproben
+vorliegen; RSS und Live-Heap-Schnappschüsse müssen positiv sein.
+Allokatordeltas und Zeitmediane sind Beobachtungen ohne starre
+Performance-Abnahmegrenze. Messungen erfolgen sequenziell; es gibt keine
+gleichzeitig ausgeführten Raytraces, Regressionen oder Benchmarkfälle.
+
 ## 6. High-Level-API-Vertrag bis Unterphase 4.8
 
 ### 6.1 Typen, Besitz und Defaults
@@ -4040,6 +4215,151 @@ Stabilitätsplateau erreicht. Das größte Budget bleibt eine endliche
 Referenz. Eine 2x2-PER-Kalibrierung oder asymptotische Konvergenzaussage
 wird aus diesen Daten nicht abgeleitet.
 
+### 7.16 CPU-Cache-/IPC-Skalierung und Validierung der Unterphase 5.2.3
+
+Die finale Referenz vom 29.09.2026 umfasst alle 45 Konfigurationen mit
+je drei frischen nativen Prozessen und separaten Python-REP-Prozessen.
+Alle vorab definierten Abnahmekriterien aus Abschnitt 5.22 sind erfüllt:
+bitgenaue CFR-Erhaltung, exakte Metadaten und Wirebytes, vollständige
+logische Speicherformeln, reproduzierbare deterministische Ergebnisse,
+korrekte Hit-/Misszahlen und echte Expiration über den produktiven Cache.
+Die Daten liegen in `data/phase5_2_cache_ipc/`: 15 Protobuf-Vorlagen,
+`plan.json`, `manifest.json`, 135 Zusammenfassungen in `summary.csv`,
+30915 Zeitstichproben in `timings.csv` und 3645 Channel-Requests in
+`requests.csv`. Große Batchantworten bleiben aus den Vorlagen und den
+festen Ableitungsregeln vollständig rekonstruierbar und hashgeprüft.
+
+Die Plattform ist Linux x86_64 mit glibc 2.39, Python 3.12.12, NumPy
+2.5.2, Python-Protobuf 7.35.1, C++-Protobuf 3.21.12 und libzmq 4.3.5
+(PyZMQ 27.1.0). Szenen-/Solverlaufzeit ist ausgeschlossen. Seed 42,
+Run 1, Fixture, Radio-Geometrie, Gültigkeit und Transport bleiben fest.
+Der Sweep benötigte 125,273 s ohne Import, CSV-/Plot-/Manifestausgabe;
+der vollständige Runnerprozess benötigte 131,951 s. Es gab keine
+parallelen Benchmark- oder Regressionstestprozesse.
+
+Die folgenden Latenzen sind Mediane der drei Prozessmediane. Die
+256-Subcarrier-/2x2-Matrix entspricht den Transportdimensionen des
+bisherigen SU-Benchmarks. Nutzbytes enthalten CFR und Frequenzvektoren;
+Heapdelta bezeichnet Delta A_release aus Abschnitt 5.22.
+
+| Links | Wire / Byte | Nutzbytes | Heapdelta / Byte | Hit / us | Miss / ms | RTT / ms |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | 18255 | 17408 | 16592 | 1,964 | 0,142230 | 0,127272 |
+| 16 | 291420 | 278528 | 278672 | 2,044 | 0,603779 | 0,261919 |
+| 64 | 1165548 | 1114112 | 1134992 | 2,235 | 2,310256 | 0,804902 |
+
+Bei festem Tensor bleiben Getter-Hits damit nahe 2 us, während ein
+Batchmiss alle Links transportiert, dekodiert und einfügt. Der Hit
+ist ein öffentlicher Getter mit CFR-Kopien und Ergebnisfreigabe. Die
+Beobachtung beschreibt diesen Cachepfad; sie ist keine Messung einer
+isolierten Map-Suche. Seine Hitquote ist in allen 135 Läufen 132/134
+(98,507463 Prozent). Der separate Speicherprüfcache liefert für
+1/16/64 Links genau 4L/(4L+1): 80/98,461538/99,610895 Prozent.
+Kein Warmhit erzeugt einen Channel-Request. Der Randhit bei 5000000 ns
+und der neue Request bei 5000001 ns sind im Transkript nachgewiesen.
+Je Prozess wurden 27 Channel-Requests und ein Close-ACK bestätigt.
+
+Bei 1024 Subcarriern und 64 Links wächst der logische Bedarf exakt
+linear mit dem Antennenprodukt. Die nächste Tabelle verwendet MiB
+(2^20 Byte) und die Reihenfolge TX/RX, auch für den asymmetrischen Fall.
+
+| TX/RX | Wire / MiB | Nutz / MiB | Heapdelta / MiB | Hit / us | Miss / ms | RTT / ms |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2/2 | 4,439802 | 4,25 | 4,274933 | 12,073 | 10,483940 | 3,181524 |
+| 2/4 | 8,439802 | 8,25 | 8,274857 | 17,113 | 17,000560 | 5,558643 |
+| 4/4 | 16,439802 | 16,25 | 16,274933 | 32,497 | 28,949737 | 9,720021 |
+| 8/8 | 64,439802 | 64,25 | 64,274689 | 110,871 | 212,156401 | 127,523298 |
+
+Die größte Antwort hat 67570030 Wirebytes. Ihr Cache enthält 64 MiB
+komplexe Koeffizienten plus 0,25 MiB Frequenzen. Delta A_fill beträgt
+67399616 Byte, Delta A_release 67396896 Byte; letzteres liegt rund
+25888 Byte über dem logischen Nutzbedarf. Bei kleinen Blöcken zeigt
+die glibc-Buchhaltung dagegen die dokumentierte Threadcache-Grenze:
+für 64 Subcarrier, 1/1 und einen Link sind Nutzbedarf 1280 Byte,
+Delta A_fill 1376 Byte und Delta A_release nur 192 Byte. Die übrigen
+freigegebenen Blöcke müssen nicht aus uordblks verschwinden. Diese
+Abweichung verletzt keine Daten-/Speicherformel und wird nicht als
+negative Cachegröße oder als exakte Objektzählung interpretiert.
+
+Für die größte Konfiguration sind die medianen nativen RSS-Werte
+vor Befüllung/live/nach Freigabe 219,500/285,500/205,121 MiB. Der
+aktuelle native VmHWM beträgt 414,680 MiB, der des REP-Prozesses
+485,602 MiB. Beide Peaks umfassen alle Messphasen und temporäre
+Objekte, nicht nur den isoliert gemessenen Cache. Der zusätzliche
+native Lebenszeitpeak aus getrusage liegt bei 663,758 MiB und kann
+den vor exec vorhandenen Elternspeicher einschließen; er wird separat
+exportiert und nicht als aktueller Programmpeak berichtet. Ein erster
+Sweep wurde nach dieser Peak-Abgrenzung durch den finalen vollständigen
+Sweep ersetzt. Die finale Referenz verwendet durchgehend VmHWM.
+
+Die getrennten Protobuf-Operationen zeigen für den größten Wrapper
+folgende Mediane und Min-/Max-Spannen der drei Prozessmediane:
+
+| Operation | Median / ms | Min / ms | Max / ms |
+| --- | --- | --- | --- |
+| C++-Serialisierung | 58,579679 | 55,996002 | 96,448522 |
+| C++-Parse | 11,561986 | 9,398454 | 12,133919 |
+| Python-Serialisierung | 247,430939 | 236,522898 | 250,878334 |
+| Python-Parse | 10,742933 | 10,566953 | 10,793618 |
+| Einzel-CFR-Dekodierung | 0,211423 | 0,204865 | 0,440899 |
+| IPC-Roundtrip | 127,523298 | 105,808909 | 171,125000 |
+| Cache-Hit | 0,110871 | 0,089786 | 0,159248 |
+| Cache-Miss | 212,156401 | 207,712946 | 281,981298 |
+
+Die Timergrenzen unterscheiden sich wie in Abschnitt 5.22 angegeben.
+Der REP-Prozess sendet vorbereitete Bytes; die separate Python-
+Serialisierung gehört deshalb nicht zur gemessenen RTT oder zum
+gemessenen Cachemiss. Ein normaler Server würde zusätzlich seine
+Kanalberechnung und Antwortserialisierung ausführen. Systemlast und
+Allokationszustand erklären mögliche Streuung, ohne hier kausal
+isoliert zu sein. Drei Prozesse liefern deskriptive Spannen, keine
+Konfidenzintervalle und keine allgemeine Serverdimensionierung.
+Es wurden vorab keine pauschalen Latenz- oder RSS-Grenzen festgelegt.
+
+Die drei erzeugten und visuell geprüften Plots heißen
+`memory_comparison.png`, `cache_comparison.png` und `ipc_comparison.png`.
+Sie zeigen alle Tensorformen, Linkzahlen und Subcarrierbudgets mit
+Median und Min-/Max-Spanne. PNGs bleiben gemäß den bestehenden
+Ignore-Regeln lokal; der Runner rekonstruiert sie aus einem neuen Sweep.
+
+Die sequenziellen automatisierten Prüfungen waren vollständig erfolgreich:
+
+- Konfiguration mit Examples/Tests und Build von
+  `ns3_sionna_cache_ipc_benchmark` und `sionna-test` bestanden.
+- Die neun `test_benchmark_cache_ipc`-Fälle bestanden abschließend
+  in 20,762 s (21,035 s mit Prozessstart). Sie prüfen unabhängige
+  flache Ankerindizes aller 15 Formen, Phasen-/Linkmetadaten und
+  IEEE-Bitprüfsumme, Bytewiederholbarkeit, sichere Ausgabeverzeichnisse,
+  reale native Wiederholungen, Manipulationen/ungültige Fixtures,
+  vollständige 45x3-Matrix, alle Referenzbytes/Quoten/Requestfolgen,
+  sämtliche Rohzeitstatistiken und frische Replays dreier Randfälle
+  einschließlich 1024/8x8/64. Asymmetrische 2/4-Layouts sind abgedeckt.
+- Alle 21 bisherigen SU-/Samplekonvergenz-Benchmarktests bestanden
+  in 20,096 s. Die gespeicherten 5.2.1-/5.2.2-Referenzen bleiben erhalten.
+- Die sieben nativen Suites `sionna` (38 Fälle),
+  `sionna-mimo-csi-feedback`, `dl-mu-mimo-runtime`, `dl-mu-mimo-ru`,
+  `he-dl-mu-spectrum-ru`, `ul-mu-mimo` und
+  `he-ul-mu-mimo-phy-adapter` bestanden.
+- Alle sechs ExampleAsTest-Suites für SU-Minimal, Helper-Konfiguration,
+  Helper-Laufzeit, SU-Precoding, Precoding-Negativfälle und MU-MIMO
+  bestanden; der MU-Prozess benötigte 226,706 s.
+- Server-Importcheck und alle 19 Datenvertrag-/Mobilitäts-/Kohärenz-/
+  CPU-Kanalregressionen bestanden in 199,305 s Testzeit; die acht
+  `test_calibrate_eesm`-Fälle bestanden ebenfalls.
+- Alle 13 aufgezeichneten Quellhashes, der Ankerhash und der native
+  Binärhash stimmen mit der finalen Implementierung überein.
+- `git diff --check` bestand. Nach den finalen Dokumentationsänderungen
+  wurde das PDF genau einmal erzeugt und durch Seitenzahl, Textmarker,
+  vollständige Seitenfußzeilen und Sichtprüfung validiert.
+
+Befehle, Exitcodes, Laufzeiten und Log-Hashes stehen in `validation.json`;
+PDF-/Quellhash und Seitennachweise in `pdf_validation.json` im selben
+Referenzverzeichnis. Die Unterphase ist als Mess-/Validierungsarbeit
+abgeschlossen. Cache-, Helper-, Server- und Protobuf-Produktion bleiben
+unverändert; konkrete Speicher-/Kopier-/Transportoptimierungen können
+anschließend gegen diese Referenz geprüft werden. Die Transportfixtures
+begründen keine PHY-, PER- oder Durchsatzprognose für größere Arrays.
+
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 
 - SionnaMimoHelper überträgt eine gemeinsame TX- und RX-Geometrie für die
@@ -4214,6 +4534,25 @@ vollständige Ausgabe. Der Runner exportiert zwei frische Traces pro
 Fall/Seed/Budget, bewertet gepaarte Seeds und erzeugt vier unversionierte
 Vergleichsplots. Der bestehende 5.2.1-Runner bleibt mit seinen Defaultkontrollen
 unverändert nutzbar.
+
+Reproduzierbare Phase-5.2.3-Cache-/IPC-Skalierung, vom ns-3-Verzeichnis aus:
+
+    ./ns3 configure --enable-examples --enable-tests
+    ./ns3 build ns3_sionna_cache_ipc_benchmark sionna-test
+    conda run --no-capture-output -n sionna-venv python \
+      contrib/sionna/tools/benchmark_cache_ipc.py \
+      --output=/tmp/sionna-cache-ipc
+    cd contrib/sionna/tools
+    conda run --no-capture-output -n sionna-venv python \
+      -m unittest -v test_benchmark_cache_ipc
+
+Ein leerer Ausgabeordner ist erforderlich. Der Runner startet und beendet
+seinen lokalen Frozen-REP-Prozess selbst; ein Sionna-RT-Server ist nicht nötig.
+Die Tests verwenden die versionierte Referenz unter `data/phase5_2_cache_ipc/`;
+`CACHE_IPC_BENCHMARK_RESULTS=/tmp/sionna-cache-ipc` prüft einen neuen Export.
+Alle Fixture-, Cache- und IPC-Validierungen bleiben von PER-Kalibrierung
+unabhängig. Native/RPC-Zeitstichproben und speicherbezogene Diagnosen stehen
+in CSV; die drei generierten PNG-Plots bleiben unversioniert.
 
 Python-Vertrag und Server vom Verzeichnis contrib/sionna/model/ns3sionna:
 

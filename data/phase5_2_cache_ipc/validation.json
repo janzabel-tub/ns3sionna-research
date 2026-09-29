@@ -1,0 +1,356 @@
+{
+  "subphase": "5.2.3",
+  "date": "2026-09-29",
+  "sequential": true,
+  "results": [
+    {
+      "name": "initial_sweep",
+      "command": [
+        "/home/janzabel/miniconda3/envs/sionna-venv/bin/python",
+        "benchmark_cache_ipc.py",
+        "--output=/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/contrib/sionna/data/phase5_2_cache_ipc"
+      ],
+      "cwd": "contrib/sionna/tools",
+      "exit_code": 0,
+      "seconds": 111.85315171399998,
+      "log_sha256": "8cc6c5f01721d2147a09838c02896c6e473bf17328813b3948d5de7e945d32b8"
+    },
+    {
+      "name": "initial_cache_ipc_validation",
+      "command": [
+        "/home/janzabel/miniconda3/envs/sionna-venv/bin/python",
+        "-m",
+        "unittest",
+        "-v",
+        "test_benchmark_cache_ipc"
+      ],
+      "cwd": "contrib/sionna/tools",
+      "exit_code": 0,
+      "seconds": 20.945014898999943,
+      "log_sha256": "79fd890e3569afaa39c02502859edadd8e70dddf55c46cecfc32e39ca598b5ac"
+    },
+    {
+      "name": "channel_benchmarks_regression",
+      "command": [
+        "/home/janzabel/miniconda3/envs/sionna-venv/bin/python",
+        "-m",
+        "unittest",
+        "-v",
+        "test_benchmark_sumimo",
+        "test_benchmark_rt_convergence"
+      ],
+      "cwd": "contrib/sionna/tools",
+      "exit_code": 0,
+      "seconds": 20.63319634299978,
+      "log_sha256": "6b17011a3881b255e0498df3862facc19bda0707d95af41f7afd22c6811ea0e8"
+    },
+    {
+      "name": "sionna",
+      "command": [
+        "/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/build/utils/ns3.40-test-runner-default",
+        "--suite=sionna",
+        "--verbose"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "seconds": 0.218393971000296,
+      "log_sha256": "46a2c06575169d488803f60a531741efb5427e9bd024adf6a11e0f3fa146f127"
+    },
+    {
+      "name": "sionna-mimo-csi-feedback",
+      "command": [
+        "/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/build/utils/ns3.40-test-runner-default",
+        "--suite=sionna-mimo-csi-feedback",
+        "--verbose"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "seconds": 0.1343844830003036,
+      "log_sha256": "12b4bd6e7a9560b7977c72d1e6f75abe3861cce61718f3946f8a19e5e60764ae"
+    },
+    {
+      "name": "dl-mu-mimo-runtime",
+      "command": [
+        "/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/build/utils/ns3.40-test-runner-default",
+        "--suite=dl-mu-mimo-runtime",
+        "--verbose"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "seconds": 0.24595317200009958,
+      "log_sha256": "15e6f0af0321ff899b4f9f92c49d9a129a2a651fa511b4ca4bf3b4ecdc168b03"
+    },
+    {
+      "name": "dl-mu-mimo-ru",
+      "command": [
+        "/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/build/utils/ns3.40-test-runner-default",
+        "--suite=dl-mu-mimo-ru",
+        "--verbose"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "seconds": 0.22223613100004513,
+      "log_sha256": "8c65334881829354c0a1797a45cae07cb6a530b5111a1da7207e7c673331365c"
+    },
+    {
+      "name": "he-dl-mu-spectrum-ru",
+      "command": [
+        "/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/build/utils/ns3.40-test-runner-default",
+        "--suite=he-dl-mu-spectrum-ru",
+        "--verbose"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "seconds": 0.2971486090000326,
+      "log_sha256": "8ceb073d31d1b3fb7054801cc6c69abbb47f7058f6dca34055abdc47a0232817"
+    },
+    {
+      "name": "ul-mu-mimo",
+      "command": [
+        "/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/build/utils/ns3.40-test-runner-default",
+        "--suite=ul-mu-mimo",
+        "--verbose"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "seconds": 0.13937726399990424,
+      "log_sha256": "79cfa7008f60ae083606f43876bcb31b5660c9fb4758d59c6414ebd99aee355b"
+    },
+    {
+      "name": "he-ul-mu-mimo-phy-adapter",
+      "command": [
+        "/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/build/utils/ns3.40-test-runner-default",
+        "--suite=he-ul-mu-mimo-phy-adapter",
+        "--verbose"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "seconds": 0.12097955599983834,
+      "log_sha256": "a06f48e2e505050499e6b2f925ac0ec03b690ad6ec9fe20d52d2d5148812ed8c"
+    },
+    {
+      "name": "sionna-example-sumimo-minimal",
+      "command": [
+        "/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/build/utils/ns3.40-test-runner-default",
+        "--suite=sionna-example-sumimo-minimal",
+        "--verbose"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "seconds": 13.144884002000254,
+      "log_sha256": "0280fcd1c7b41853d8138bd3b448545676053bc716b3050179ae3ff008fcacb4"
+    },
+    {
+      "name": "sionna-example-mimo-helper-configuration-negative",
+      "command": [
+        "/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/build/utils/ns3.40-test-runner-default",
+        "--suite=sionna-example-mimo-helper-configuration-negative",
+        "--verbose"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "seconds": 0.7507597929998155,
+      "log_sha256": "858c5c09b2d184bcfd3cf52f2af617346096db6840ad4af01cc3dc3beaf97a69"
+    },
+    {
+      "name": "sionna-example-mimo-helper-runtime-negative",
+      "command": [
+        "/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/build/utils/ns3.40-test-runner-default",
+        "--suite=sionna-example-mimo-helper-runtime-negative",
+        "--verbose"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "seconds": 1.5707766019995688,
+      "log_sha256": "2fad671bde7250405cb81714a49987870c34741cfb5dcb70f0c1f156af6ae962"
+    },
+    {
+      "name": "sionna-example-sumimo-precoding",
+      "command": [
+        "/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/build/utils/ns3.40-test-runner-default",
+        "--suite=sionna-example-sumimo-precoding",
+        "--verbose"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "seconds": 32.14423289999968,
+      "log_sha256": "d6665a64a673c7add5ae8c625a6e425fd9a45957c832bf523d15668fd11f01c3"
+    },
+    {
+      "name": "sionna-example-sumimo-precoding-negative",
+      "command": [
+        "/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/build/utils/ns3.40-test-runner-default",
+        "--suite=sionna-example-sumimo-precoding-negative",
+        "--verbose"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "seconds": 0.6181499260001146,
+      "log_sha256": "791cc3163a1dfe1eb4f3a40a6ec02d9f836b8a45bbccbfcee28666e948d6aa6f"
+    },
+    {
+      "name": "sionna-example-mumimo",
+      "command": [
+        "/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/build/utils/ns3.40-test-runner-default",
+        "--suite=sionna-example-mumimo",
+        "--verbose"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "seconds": 226.70579192400055,
+      "log_sha256": "d5e564243ad61d054295bc2f5871358963073da7b3a5993d23152c9e3fcb7441"
+    },
+    {
+      "name": "server_imports",
+      "command": [
+        "/home/janzabel/miniconda3/envs/sionna-venv/bin/python",
+        "tests/test_imports.py"
+      ],
+      "cwd": "contrib/sionna/model/ns3sionna",
+      "exit_code": 0,
+      "seconds": 3.6602179430001343,
+      "log_sha256": "7d62b7114284033c8aac6175d881b222f3f325c5fd899b842297b4ec79e38795"
+    },
+    {
+      "name": "server_regressions",
+      "command": [
+        "/home/janzabel/miniconda3/envs/sionna-venv/bin/python",
+        "-m",
+        "unittest",
+        "-v",
+        "tests.test_mimo_data_contract",
+        "tests.test_deterministic_mobility",
+        "tests.test_coherence_time_units",
+        "tests.unit_tests"
+      ],
+      "cwd": "contrib/sionna/model/ns3sionna",
+      "exit_code": 0,
+      "seconds": 202.3657357760003,
+      "log_sha256": "95ac11bc94b25e56c0092fc253dd4e01af41f6607e6086ea2a858c57d6dcc312"
+    },
+    {
+      "name": "calibration_regression",
+      "command": [
+        "/home/janzabel/miniconda3/envs/sionna-venv/bin/python",
+        "-m",
+        "unittest",
+        "-v",
+        "test_calibrate_eesm"
+      ],
+      "cwd": "contrib/sionna/tools",
+      "exit_code": 0,
+      "seconds": 0.17989070499970694,
+      "log_sha256": "db072ff0f421e2d83dda4a31368a6a82962c0c7cd0c21c7365a7cb04e6bf5c9a"
+    },
+    {
+      "name": "final_sweep",
+      "command": [
+        "/home/janzabel/miniconda3/envs/sionna-venv/bin/python",
+        "benchmark_cache_ipc.py",
+        "--output=/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/contrib/sionna/data/phase5_2_cache_ipc"
+      ],
+      "cwd": "contrib/sionna/tools",
+      "exit_code": 0,
+      "seconds": 131.95069759499984,
+      "log_sha256": "e0a95778e95aa7d51f7ebc0de36a95947fe45c2ee51a92fb65ceb4cb20499e14"
+    },
+    {
+      "name": "final_cache_ipc_validation",
+      "command": [
+        "/home/janzabel/miniconda3/envs/sionna-venv/bin/python",
+        "-m",
+        "unittest",
+        "-v",
+        "test_benchmark_cache_ipc"
+      ],
+      "cwd": "contrib/sionna/tools",
+      "exit_code": 0,
+      "seconds": 21.034960950999448,
+      "log_sha256": "54d17ec5b8d9cb0ad1398fdf08f2bb6f265ad15aafaf1751b34e256f87758cc4"
+    },
+    {
+      "name": "configure",
+      "command": [
+        "./ns3",
+        "configure",
+        "--enable-examples",
+        "--enable-tests"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "log_sha256": "0b0cf0bf00bc16146fa6278720ca3a2229c34e1c841ba7a53681314272dfe3fb"
+    },
+    {
+      "name": "build",
+      "command": [
+        "./ns3",
+        "build",
+        "ns3_sionna_cache_ipc_benchmark",
+        "sionna-test"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "log_sha256": "28bdb7c21cc86852efa40e71f855eecdd3a0232b1c7dff810100eb9316c74eed"
+    },
+    {
+      "name": "final_memory_build",
+      "command": [
+        "./ns3",
+        "build",
+        "ns3_sionna_cache_ipc_benchmark"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "log_sha256": "e5ee0d898c8acf04afd4859e6997cc0223cc33b48a42e0e7fe3cfd7e662236f5"
+    },
+    {
+      "name": "native_smoke",
+      "command": [
+        "/home/janzabel/miniconda3/envs/sionna-venv/bin/python",
+        "-m",
+        "unittest",
+        "-v",
+        "test_benchmark_cache_ipc.TestNativeCacheIpc"
+      ],
+      "cwd": "contrib/sionna/tools",
+      "exit_code": 0,
+      "log_sha256": "7a2df8c64b6cfaa1243372ac98544221e63aad76fde68913af23a1a1ef66d9be"
+    }
+  ],
+  "status": "passed",
+  "initial_export": {
+    "path": "/tmp/phase523-initial-export-wk5pfhkc/export",
+    "superseded": "peak RSS now uses VmHWM; lifetime getrusage counter kept separately"
+  },
+  "provenance_validation": {
+    "status": "passed",
+    "source_hashes": 13,
+    "anchor_sha256": "f43172e6304e624a56e9c2ebe5b7733b941356646b3769bb53552f02bfb7bdaf",
+    "native_executable_sha256": "6a1cbb5ab3c73814530ff455e104fe2d9fdaa55101142dbdcb4d68ccf185b320"
+  },
+  "plots": [
+    {
+      "file": "memory_comparison.png",
+      "sha256": "a973bd041bf602da190f9781b33b6a368bb91e95a0b32d30e19541322d276246",
+      "visual_validation": "passed"
+    },
+    {
+      "file": "cache_comparison.png",
+      "sha256": "3efece6fa8b722f8976fdb9d5b3c826b67aab1b7b0605bbabd8148aa6632734a",
+      "visual_validation": "passed"
+    },
+    {
+      "file": "ipc_comparison.png",
+      "sha256": "2489c7d3dbd046f01606a9983118b7d743994b5019cf119bd82c75465c3e1315",
+      "visual_validation": "passed"
+    }
+  ],
+  "export_sha256": {
+    "plan.json": "f65b6c3ce21a200b0d5aa02a1bbd815d7139008328b6d37c907b33efc7865131",
+    "manifest.json": "7882853cdf81768568f73b3b1f6e7ce66944502dde1688b5826a7203122044ea",
+    "summary.csv": "c06c4f31641feddc4a25c4e59b0fd219ceefb2aa004fa447d1294fab432e1c1e",
+    "timings.csv": "e838ef35c6635734ddfedd323e1527aecc53c7a95bafe2a03b88aaee6de02837",
+    "requests.csv": "710cc201eaf7ab2814304e051f78cb85fabee975a79714e90faa9f0688a1a989"
+  },
+  "diff_check": "passed"
+}

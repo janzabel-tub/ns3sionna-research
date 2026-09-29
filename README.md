@@ -171,6 +171,35 @@ In the checked-in reference, all 12 case/seed pairs pass at 100,000 against
 1,000,000 samples. The 10,000 budget fails for case 03/seed 43 on singular values
 and per-tone SINR, making 100,000 the smallest supported budget for this matrix.
 
+Subphase 5.2.3 benchmarks the existing native cache and actual local ZMQ IPC
+using a separate frozen-response Python process. It sweeps 64/256/1024
+subcarriers, five TX/RX tensor shapes (including 2/4), and 1/16/64 cached links,
+with three fresh native processes per case. Ray tracing is excluded.
+From the ns-3 directory, with an empty output directory:
+
+```shell
+./ns3 configure --enable-examples --enable-tests
+./ns3 build ns3_sionna_cache_ipc_benchmark sionna-test
+conda run --no-capture-output -n sionna-venv python contrib/sionna/tools/benchmark_cache_ipc.py \
+  --output=/tmp/sionna-cache-ipc
+cd contrib/sionna/tools
+conda run --no-capture-output -n sionna-venv python -m unittest -v test_benchmark_cache_ipc
+```
+
+The runner exports its acceptance policy before measurement, replayable tensor
+templates, configurations/hashes, raw latency samples, request transcripts and
+memory summaries. It validates every cached coefficient and metadata field,
+actual transport bytes, hit/miss counts and the inclusive expiry boundary.
+Tests default to `data/phase5_2_cache_ipc/`; set `CACHE_IPC_BENCHMARK_RESULTS`
+to validate another complete export. Three PNG comparison plots remain local.
+Logical payload bytes, allocator bookkeeping and resident memory are separate
+metrics; the [model document](./ns3sionna_mimo_model.md) explains their limits.
+The larger tensors are transport fixtures derived from a frozen 2×2 channel.
+All 45 reference cases pass across three processes each. At 256 subcarriers
+and 2×2, median cache hits stay near 2 µs for 1–64 links; the largest 1024/8×8/64
+fixture has a 64.44 MiB wire response and a 127.5 ms median local IPC roundtrip.
+These are descriptive measurements with the ranges and timer limits in the report.
+
 Usage in HPC cluster
 ============
 

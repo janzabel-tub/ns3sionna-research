@@ -115,3 +115,9 @@ build_lib_example(
     SOURCE_FILES ns3_wifi_sumimo_benchmark.cc
     LIBRARIES_TO_LINK ${libsionna} ${libwifi} ${libspectrum}
 )
+
+build_lib_example(
+    NAME ns3_sionna_cache_ipc_benchmark
+    SOURCE_FILES ns3_sionna_cache_ipc_benchmark.cc
+    LIBRARIES_TO_LINK ${libsionna} ${libnetwork} ${libmobility}
+)

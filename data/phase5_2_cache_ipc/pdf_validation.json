@@ -1,0 +1,38 @@
+{
+  "status": "passed",
+  "render_calls": 1,
+  "pages": 76,
+  "expected_pages": 76,
+  "text_markers": [
+    "5.2.3",
+    "5.22",
+    "7.16",
+    "30915",
+    "3645",
+    "132/134",
+    "VmHWM",
+    "mallinfo2",
+    "Threadcache",
+    "tools/benchmark_cache_ipc.py",
+    "ns3_sionna_cache_ipc_benchmark",
+    "test_benchmark_cache_ipc",
+    "64 MiB"
+  ],
+  "source_sha256": "ccdbc726adcc1b23c81e15cc76dedd494a12fd355516d774495577deadf65379",
+  "pdf_sha256": "b3f8d985c47bdbd9af0561a7b3c793b9ecb5e5d8d3ca9f3b9714739621174533",
+  "inspected_pages": [
+    1,
+    47,
+    48,
+    49,
+    70,
+    71,
+    72,
+    75
+  ],
+  "date": "2026-09-29",
+  "visual_validation": "passed",
+  "text_extraction": "passed",
+  "footer_pages_verified": 76,
+  "source_unchanged_after_render": true
+}

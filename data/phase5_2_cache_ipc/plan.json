@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "subphase": "5.2.3",
+  "controls": {
+    "seed_ns3": 42,
+    "run_ns3": 1,
+    "fixture_seed": 42,
+    "repetitions": 3,
+    "iterations": 16,
+    "hit_iterations": 128,
+    "miss_iterations": 5,
+    "warmup": 3,
+    "transport": "local ipc:// REQ/REP, separate Python process",
+    "socket_timeout_ms": 10000,
+    "ray_tracing": false,
+    "validity_ns": [
+      0,
+      5000000
+    ],
+    "expiry_probe_ns": 5000001,
+    "frequency_spacing_hz": 78125,
+    "cache_optimization": false,
+    "cache_hit_timer": "public getter, CFR copies and cleanup",
+    "miss_timer": "fresh-cache getter including IPC, decoding and batch insertion",
+    "ipc_timer": "send/recv only; preencoded reply; byte validation outside timer",
+    "memory": "Linux RSS and glibc mallinfo2 uordblks+hblkhd; isolated native processes",
+    "fixture_derivation": "repeat source sc/rx/tx modulo 256/2/2; per-link exact quarter-turn phase (42+link-1)%4; loss += (link-1)/8; delay += link-1"
+  },
+  "sweep": {
+    "subcarriers": [
+      64,
+      256,
+      1024
+    ],
+    "antenna_pairs_tx_rx": [
+      [
+        1,
+        1
+      ],
+      [
+        2,
+        2
+      ],
+      [
+        4,
+        4
+      ],
+      [
+        2,
+        4
+      ],
+      [
+        8,
+        8
+      ]
+    ],
+    "links": [
+      1,
+      16,
+      64
+    ]
+  },
+  "acceptance": {
+    "coefficient_and_metadata_preservation": "bit-exact coefficients; exact dimensions, frequency order, wideband loss and delay for every cached link",
+    "payload_and_logical_memory": "exact Protobuf byte count and 16*L*Nsc*Nrx*Ntx + 4*L*Nsc bytes",
+    "native_hit_ratio_absolute_tolerance": 1e-12,
+    "transport": "all raw RTT replies byte-identical to the frozen Wrapper; exactly 27 channel requests (26 at time 0, one at 5000001), one acknowledged close",
+    "expiry": "inclusive end-time hit at 5000000; miss at 5000001",
+    "repeatability": "all deterministic fields and fixture hashes identical across three processes",
+    "measurements": "complete finite positive latency samples and positive RSS/heap snapshots; signed allocator deltas are observations, not hard performance thresholds"
+  },
+  "anchor": "data/phase5_2_sample_convergence/case_05/seed_42/samples_100000/channel_00.pb",
+  "anchor_sha256": "f43172e6304e624a56e9c2ebe5b7733b941356646b3769bb53552f02bfb7bdaf",
+  "defined_before_measurements_utc": "2026-09-29T10:14:32.585721+00:00"
+}

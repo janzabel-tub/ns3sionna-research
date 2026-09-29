@@ -1,0 +1,614 @@
+{
+  "schema_version": 1,
+  "subphase": "5.2.3",
+  "controls": {
+    "seed_ns3": 42,
+    "run_ns3": 1,
+    "fixture_seed": 42,
+    "repetitions": 3,
+    "iterations": 16,
+    "hit_iterations": 128,
+    "miss_iterations": 5,
+    "warmup": 3,
+    "transport": "local ipc:// REQ/REP, separate Python process",
+    "socket_timeout_ms": 10000,
+    "ray_tracing": false,
+    "validity_ns": [
+      0,
+      5000000
+    ],
+    "expiry_probe_ns": 5000001,
+    "frequency_spacing_hz": 78125,
+    "cache_optimization": false,
+    "cache_hit_timer": "public getter, CFR copies and cleanup",
+    "miss_timer": "fresh-cache getter including IPC, decoding and batch insertion",
+    "ipc_timer": "send/recv only; preencoded reply; byte validation outside timer",
+    "memory": "Linux RSS and glibc mallinfo2 uordblks+hblkhd; isolated native processes",
+    "fixture_derivation": "repeat source sc/rx/tx modulo 256/2/2; per-link exact quarter-turn phase (42+link-1)%4; loss += (link-1)/8; delay += link-1"
+  },
+  "sweep": {
+    "subcarriers": [
+      64,
+      256,
+      1024
+    ],
+    "antenna_pairs_tx_rx": [
+      [
+        1,
+        1
+      ],
+      [
+        2,
+        2
+      ],
+      [
+        4,
+        4
+      ],
+      [
+        2,
+        4
+      ],
+      [
+        8,
+        8
+      ]
+    ],
+    "links": [
+      1,
+      16,
+      64
+    ]
+  },
+  "acceptance": {
+    "coefficient_and_metadata_preservation": "bit-exact coefficients; exact dimensions, frequency order, wideband loss and delay for every cached link",
+    "payload_and_logical_memory": "exact Protobuf byte count and 16*L*Nsc*Nrx*Ntx + 4*L*Nsc bytes",
+    "native_hit_ratio_absolute_tolerance": 1e-12,
+    "transport": "all raw RTT replies byte-identical to the frozen Wrapper; exactly 27 channel requests (26 at time 0, one at 5000001), one acknowledged close",
+    "expiry": "inclusive end-time hit at 5000000; miss at 5000001",
+    "repeatability": "all deterministic fields and fixture hashes identical across three processes",
+    "measurements": "complete finite positive latency samples and positive RSS/heap snapshots; signed allocator deltas are observations, not hard performance thresholds"
+  },
+  "anchor": "data/phase5_2_sample_convergence/case_05/seed_42/samples_100000/channel_00.pb",
+  "anchor_sha256": "f43172e6304e624a56e9c2ebe5b7733b941356646b3769bb53552f02bfb7bdaf",
+  "defined_before_measurements_utc": "2026-09-29T10:14:32.585721+00:00",
+  "plan_sha256": "f65b6c3ce21a200b0d5aa02a1bbd815d7139008328b6d37c907b33efc7865131",
+  "configurations": [
+    {
+      "case_id": "case_00",
+      "subcarriers": 64,
+      "num_tx_antennas": 1,
+      "num_rx_antennas": 1,
+      "links": 1,
+      "template": "fixtures/nsc64_tx1_rx1.pb",
+      "template_sha256": "8b919ef878b2cb588105386ceb4397489551e5ef167742da244b09bb5e6ea59e",
+      "response_sha256": "3a957b397af2e5ee399b07d7e3349bcd1c1cd622b19453822cbfbdc2e2d162fe",
+      "coefficient_digest": "06c168e7b49ac12d"
+    },
+    {
+      "case_id": "case_01",
+      "subcarriers": 64,
+      "num_tx_antennas": 1,
+      "num_rx_antennas": 1,
+      "links": 16,
+      "template": "fixtures/nsc64_tx1_rx1.pb",
+      "template_sha256": "8b919ef878b2cb588105386ceb4397489551e5ef167742da244b09bb5e6ea59e",
+      "response_sha256": "2b11ba7f6133d5d11d9a09bd1767c95a1e6ca3208606bb58694a33736901c6dd",
+      "coefficient_digest": "0c2069314bdc4800"
+    },
+    {
+      "case_id": "case_02",
+      "subcarriers": 64,
+      "num_tx_antennas": 1,
+      "num_rx_antennas": 1,
+      "links": 64,
+      "template": "fixtures/nsc64_tx1_rx1.pb",
+      "template_sha256": "8b919ef878b2cb588105386ceb4397489551e5ef167742da244b09bb5e6ea59e",
+      "response_sha256": "324ef4ec04fb0a22165e65cb7a6ab7f2983e0e9a4288319e7f31279a0ba5e800",
+      "coefficient_digest": "bc68408d2b9ee000"
+    },
+    {
+      "case_id": "case_03",
+      "subcarriers": 64,
+      "num_tx_antennas": 2,
+      "num_rx_antennas": 2,
+      "links": 1,
+      "template": "fixtures/nsc64_tx2_rx2.pb",
+      "template_sha256": "55ace26efd7675d79c2d8c0e4c5c28ad600d7c6131031bc42e87643be645eebd",
+      "response_sha256": "e7e794ca68bf1c5c37bc2e5c158aa01d5e757c1563fbb2532c7586f3cf02cfb4",
+      "coefficient_digest": "2ac4798fec182575"
+    },
+    {
+      "case_id": "case_04",
+      "subcarriers": 64,
+      "num_tx_antennas": 2,
+      "num_rx_antennas": 2,
+      "links": 16,
+      "template": "fixtures/nsc64_tx2_rx2.pb",
+      "template_sha256": "55ace26efd7675d79c2d8c0e4c5c28ad600d7c6131031bc42e87643be645eebd",
+      "response_sha256": "dbc1f7a6001ed8bee659544f00806ff909ede024b557a8721cfc278849ff578d",
+      "coefficient_digest": "d8b6aa64e4ae6000"
+    },
+    {
+      "case_id": "case_05",
+      "subcarriers": 64,
+      "num_tx_antennas": 2,
+      "num_rx_antennas": 2,
+      "links": 64,
+      "template": "fixtures/nsc64_tx2_rx2.pb",
+      "template_sha256": "55ace26efd7675d79c2d8c0e4c5c28ad600d7c6131031bc42e87643be645eebd",
+      "response_sha256": "0151ad8679ab5541966bef896a3c5cc7d75246eca19d6d9337c055bf7626b072",
+      "coefficient_digest": "6ccfe72b88968000"
+    },
+    {
+      "case_id": "case_06",
+      "subcarriers": 64,
+      "num_tx_antennas": 4,
+      "num_rx_antennas": 4,
+      "links": 1,
+      "template": "fixtures/nsc64_tx4_rx4.pb",
+      "template_sha256": "004f3e1cd90a56abc2aabb5e1a1a0c6c4a94c1da83642cd4e55b61cfa4493dfd",
+      "response_sha256": "0d10d07f290742bec6277b2e1656352a6d5145acf731cd0dfa46774a91bcfdc6",
+      "coefficient_digest": "c55fb29b060ca1e0"
+    },
+    {
+      "case_id": "case_07",
+      "subcarriers": 64,
+      "num_tx_antennas": 4,
+      "num_rx_antennas": 4,
+      "links": 16,
+      "template": "fixtures/nsc64_tx4_rx4.pb",
+      "template_sha256": "004f3e1cd90a56abc2aabb5e1a1a0c6c4a94c1da83642cd4e55b61cfa4493dfd",
+      "response_sha256": "291c37e6cbfb92946256cccaec08e34b7ecf801cec309275a13fde5bb8bbc261",
+      "coefficient_digest": "55c39d42dc600000"
+    },
+    {
+      "case_id": "case_08",
+      "subcarriers": 64,
+      "num_tx_antennas": 4,
+      "num_rx_antennas": 4,
+      "links": 64,
+      "template": "fixtures/nsc64_tx4_rx4.pb",
+      "template_sha256": "004f3e1cd90a56abc2aabb5e1a1a0c6c4a94c1da83642cd4e55b61cfa4493dfd",
+      "response_sha256": "7469ab70465a724da480c80db0032c6fb62f3ae6aee50d4e794526970c10f741",
+      "coefficient_digest": "e09e5f3b48fc0000"
+    },
+    {
+      "case_id": "case_09",
+      "subcarriers": 64,
+      "num_tx_antennas": 2,
+      "num_rx_antennas": 4,
+      "links": 1,
+      "template": "fixtures/nsc64_tx2_rx4.pb",
+      "template_sha256": "89d9cc20816d00962d19cddb7e453bfc5739a075027e8fb2954d8e8ac404b8dd",
+      "response_sha256": "9fbabace13fb2900f5b377dad459b94b058f7e0f68143809303ff46ff444dbd6",
+      "coefficient_digest": "0eecec1b3bceb0c8"
+    },
+    {
+      "case_id": "case_10",
+      "subcarriers": 64,
+      "num_tx_antennas": 2,
+      "num_rx_antennas": 4,
+      "links": 16,
+      "template": "fixtures/nsc64_tx2_rx4.pb",
+      "template_sha256": "89d9cc20816d00962d19cddb7e453bfc5739a075027e8fb2954d8e8ac404b8dd",
+      "response_sha256": "4a31c17e6ce48fabf0bb7dce93e4caa0a118da8d070d344550293953670163f2",
+      "coefficient_digest": "d4e42b520b960000"
+    },
+    {
+      "case_id": "case_11",
+      "subcarriers": 64,
+      "num_tx_antennas": 2,
+      "num_rx_antennas": 4,
+      "links": 64,
+      "template": "fixtures/nsc64_tx2_rx4.pb",
+      "template_sha256": "89d9cc20816d00962d19cddb7e453bfc5739a075027e8fb2954d8e8ac404b8dd",
+      "response_sha256": "3630628503d75e8980343c2ea1b7f83835274f97b9a12b831fe6100bfdbe149e",
+      "coefficient_digest": "a8dea319c2b20000"
+    },
+    {
+      "case_id": "case_12",
+      "subcarriers": 64,
+      "num_tx_antennas": 8,
+      "num_rx_antennas": 8,
+      "links": 1,
+      "template": "fixtures/nsc64_tx8_rx8.pb",
+      "template_sha256": "1b6e50bc8aaeffc73199c17d5eb2fbbec014dd1105c3e99a4ca08b7c0ad4f9b1",
+      "response_sha256": "34358271e39253bdf8c3327a56e558bc38a494e5e6bb9b55de43d9d629ad5387",
+      "coefficient_digest": "e86115513636ac00"
+    },
+    {
+      "case_id": "case_13",
+      "subcarriers": 64,
+      "num_tx_antennas": 8,
+      "num_rx_antennas": 8,
+      "links": 16,
+      "template": "fixtures/nsc64_tx8_rx8.pb",
+      "template_sha256": "1b6e50bc8aaeffc73199c17d5eb2fbbec014dd1105c3e99a4ca08b7c0ad4f9b1",
+      "response_sha256": "f4e05b517b063e3768c7d3c1e8cec4048cd2c3f4160f7ceee3d4167371048dad",
+      "coefficient_digest": "3f71a98dc6b40000"
+    },
+    {
+      "case_id": "case_14",
+      "subcarriers": 64,
+      "num_tx_antennas": 8,
+      "num_rx_antennas": 8,
+      "links": 64,
+      "template": "fixtures/nsc64_tx8_rx8.pb",
+      "template_sha256": "1b6e50bc8aaeffc73199c17d5eb2fbbec014dd1105c3e99a4ca08b7c0ad4f9b1",
+      "response_sha256": "82c204f510a348457e75191f902ede6f57a0a3a0737d220f880026607b2ecd9a",
+      "coefficient_digest": "83bf9e9ba8200000"
+    },
+    {
+      "case_id": "case_15",
+      "subcarriers": 256,
+      "num_tx_antennas": 1,
+      "num_rx_antennas": 1,
+      "links": 1,
+      "template": "fixtures/nsc256_tx1_rx1.pb",
+      "template_sha256": "9d62c9ed5c53e7e7e99ecfaf840d116f42def45994cd4f43a246db2a69129691",
+      "response_sha256": "18907e86e769bd7538eb9c6dd8d491fba524ac382b10d7267b2e29ef5dc4a4d7",
+      "coefficient_digest": "3a1367a7f743083f"
+    },
+    {
+      "case_id": "case_16",
+      "subcarriers": 256,
+      "num_tx_antennas": 1,
+      "num_rx_antennas": 1,
+      "links": 16,
+      "template": "fixtures/nsc256_tx1_rx1.pb",
+      "template_sha256": "9d62c9ed5c53e7e7e99ecfaf840d116f42def45994cd4f43a246db2a69129691",
+      "response_sha256": "a3893a9c22decf74e4d61e900a6898a509d5040ed80d4f2f39c53fb219774030",
+      "coefficient_digest": "3f0eb5f859dd0000"
+    },
+    {
+      "case_id": "case_17",
+      "subcarriers": 256,
+      "num_tx_antennas": 1,
+      "num_rx_antennas": 1,
+      "links": 64,
+      "template": "fixtures/nsc256_tx1_rx1.pb",
+      "template_sha256": "9d62c9ed5c53e7e7e99ecfaf840d116f42def45994cd4f43a246db2a69129691",
+      "response_sha256": "2372a49658883c28519fed58ca85b29a1eadc450d526d1e0f705d3e93c031c9e",
+      "coefficient_digest": "84635c6a13120000"
+    },
+    {
+      "case_id": "case_18",
+      "subcarriers": 256,
+      "num_tx_antennas": 2,
+      "num_rx_antennas": 2,
+      "links": 1,
+      "template": "fixtures/nsc256_tx2_rx2.pb",
+      "template_sha256": "b033a191f2ff4747e547d767881e0883d41eb58fe8c51ecd134945b8d4149fe9",
+      "response_sha256": "107d89d80774ef30cadfcfb6f753c635d069bcc677ba3427bdd3dbf4a4931047",
+      "coefficient_digest": "e7216350493c01a8"
+    },
+    {
+      "case_id": "case_19",
+      "subcarriers": 256,
+      "num_tx_antennas": 2,
+      "num_rx_antennas": 2,
+      "links": 16,
+      "template": "fixtures/nsc256_tx2_rx2.pb",
+      "template_sha256": "b033a191f2ff4747e547d767881e0883d41eb58fe8c51ecd134945b8d4149fe9",
+      "response_sha256": "850c1757b53c820281188af5497478dfb61067398554bcda2697f72f900705b9",
+      "coefficient_digest": "48fb3722f3f38000"
+    },
+    {
+      "case_id": "case_20",
+      "subcarriers": 256,
+      "num_tx_antennas": 2,
+      "num_rx_antennas": 2,
+      "links": 64,
+      "template": "fixtures/nsc256_tx2_rx2.pb",
+      "template_sha256": "b033a191f2ff4747e547d767881e0883d41eb58fe8c51ecd134945b8d4149fe9",
+      "response_sha256": "76afb8fa74fd595a0ad16d612da07fabc95d7fef49c7ae464647382b84caf40c",
+      "coefficient_digest": "400f0dca1b620000"
+    },
+    {
+      "case_id": "case_21",
+      "subcarriers": 256,
+      "num_tx_antennas": 4,
+      "num_rx_antennas": 4,
+      "links": 1,
+      "template": "fixtures/nsc256_tx4_rx4.pb",
+      "template_sha256": "65edc34ee9ccdee799493a9080d4c64c791b22e2096821a100cd14502636a5da",
+      "response_sha256": "01549c456cd4e61156ad31421f38d81b2601161ec3aafc5791cbe42bef2ecfff",
+      "coefficient_digest": "f915a294b545b6a0"
+    },
+    {
+      "case_id": "case_22",
+      "subcarriers": 256,
+      "num_tx_antennas": 4,
+      "num_rx_antennas": 4,
+      "links": 16,
+      "template": "fixtures/nsc256_tx4_rx4.pb",
+      "template_sha256": "65edc34ee9ccdee799493a9080d4c64c791b22e2096821a100cd14502636a5da",
+      "response_sha256": "b2c82fe02903ce54102439a91708c9831130b5cf1eec55f5cb578c1d1d738a83",
+      "coefficient_digest": "679e6e3713820000"
+    },
+    {
+      "case_id": "case_23",
+      "subcarriers": 256,
+      "num_tx_antennas": 4,
+      "num_rx_antennas": 4,
+      "links": 64,
+      "template": "fixtures/nsc256_tx4_rx4.pb",
+      "template_sha256": "65edc34ee9ccdee799493a9080d4c64c791b22e2096821a100cd14502636a5da",
+      "response_sha256": "09847b5abce33a51706ff5e971bbede6ac3deccc7faa42a4faaf06d4bba3f82d",
+      "coefficient_digest": "248ac424d9e80000"
+    },
+    {
+      "case_id": "case_24",
+      "subcarriers": 256,
+      "num_tx_antennas": 2,
+      "num_rx_antennas": 4,
+      "links": 1,
+      "template": "fixtures/nsc256_tx2_rx4.pb",
+      "template_sha256": "e01922b5aa314bdf423b3b9a171ef8479b80ddfb354fadf28eeed5e9cfafb1c5",
+      "response_sha256": "2aaf2e49de562b0ee645c113e7f2b635f96baf5e1263c64f160ead2066ee89bc",
+      "coefficient_digest": "6f9fa2a9928ab080"
+    },
+    {
+      "case_id": "case_25",
+      "subcarriers": 256,
+      "num_tx_antennas": 2,
+      "num_rx_antennas": 4,
+      "links": 16,
+      "template": "fixtures/nsc256_tx2_rx4.pb",
+      "template_sha256": "e01922b5aa314bdf423b3b9a171ef8479b80ddfb354fadf28eeed5e9cfafb1c5",
+      "response_sha256": "18fb8ad93982a71ee852fa661054bfba7de8d3c2a4283af8f0e73ead89206fa3",
+      "coefficient_digest": "31486b9aaed70000"
+    },
+    {
+      "case_id": "case_26",
+      "subcarriers": 256,
+      "num_tx_antennas": 2,
+      "num_rx_antennas": 4,
+      "links": 64,
+      "template": "fixtures/nsc256_tx2_rx4.pb",
+      "template_sha256": "e01922b5aa314bdf423b3b9a171ef8479b80ddfb354fadf28eeed5e9cfafb1c5",
+      "response_sha256": "63d63f50077a753e3dc5f8ff5d8e96342fad7eafeac3b19e35e185a90bb1fa71",
+      "coefficient_digest": "288c0378a7440000"
+    },
+    {
+      "case_id": "case_27",
+      "subcarriers": 256,
+      "num_tx_antennas": 8,
+      "num_rx_antennas": 8,
+      "links": 1,
+      "template": "fixtures/nsc256_tx8_rx8.pb",
+      "template_sha256": "c65d2aa64c34f9466353bf8a2fa5ef126c4d61489837ffcd8d0872d64b6b9bca",
+      "response_sha256": "fde252f59b1ed58f9e9e4e2d352a865fc1696afdc4e1cfaa32edb1b93d2e7f08",
+      "coefficient_digest": "4fe8022dade09000"
+    },
+    {
+      "case_id": "case_28",
+      "subcarriers": 256,
+      "num_tx_antennas": 8,
+      "num_rx_antennas": 8,
+      "links": 16,
+      "template": "fixtures/nsc256_tx8_rx8.pb",
+      "template_sha256": "c65d2aa64c34f9466353bf8a2fa5ef126c4d61489837ffcd8d0872d64b6b9bca",
+      "response_sha256": "a06b51acffb8a5e9e09643cde66df44c11b577e6a50c5203a1886a76cb92de18",
+      "coefficient_digest": "c140949014f80000"
+    },
+    {
+      "case_id": "case_29",
+      "subcarriers": 256,
+      "num_tx_antennas": 8,
+      "num_rx_antennas": 8,
+      "links": 64,
+      "template": "fixtures/nsc256_tx8_rx8.pb",
+      "template_sha256": "c65d2aa64c34f9466353bf8a2fa5ef126c4d61489837ffcd8d0872d64b6b9bca",
+      "response_sha256": "e1b5ee23435fb5e0ae78a6e48fcfeca1220e123e90f16ce433c7b3af39dff01a",
+      "coefficient_digest": "f8e689c977e00000"
+    },
+    {
+      "case_id": "case_30",
+      "subcarriers": 1024,
+      "num_tx_antennas": 1,
+      "num_rx_antennas": 1,
+      "links": 1,
+      "template": "fixtures/nsc1024_tx1_rx1.pb",
+      "template_sha256": "8abc5f22ca8b17c0819077bb50d6e5ab24b7f4df95a4016bb9c417778e772916",
+      "response_sha256": "0166f464c4d756607d484bb06fb43e45d23a6990a1de876ceb66b766726d539f",
+      "coefficient_digest": "beba76ab19721000"
+    },
+    {
+      "case_id": "case_31",
+      "subcarriers": 1024,
+      "num_tx_antennas": 1,
+      "num_rx_antennas": 1,
+      "links": 16,
+      "template": "fixtures/nsc1024_tx1_rx1.pb",
+      "template_sha256": "8abc5f22ca8b17c0819077bb50d6e5ab24b7f4df95a4016bb9c417778e772916",
+      "response_sha256": "65c75720588c1091d5ae0de460e44e18e40e0f718d21940bf69653f571675e62",
+      "coefficient_digest": "6b701c7da35f0000"
+    },
+    {
+      "case_id": "case_32",
+      "subcarriers": 1024,
+      "num_tx_antennas": 1,
+      "num_rx_antennas": 1,
+      "links": 64,
+      "template": "fixtures/nsc1024_tx1_rx1.pb",
+      "template_sha256": "8abc5f22ca8b17c0819077bb50d6e5ab24b7f4df95a4016bb9c417778e772916",
+      "response_sha256": "6939e52e85d9faa954fb496c7fabf60e899f7b8f62aa860d024b0fa73726a933",
+      "coefficient_digest": "3b3d76ade8a40000"
+    },
+    {
+      "case_id": "case_33",
+      "subcarriers": 1024,
+      "num_tx_antennas": 2,
+      "num_rx_antennas": 2,
+      "links": 1,
+      "template": "fixtures/nsc1024_tx2_rx2.pb",
+      "template_sha256": "be2960fbe4d7b4ae0364b8dca57de6bed54fb23c0222f4bb4ae5099b338bf179",
+      "response_sha256": "a19d6a02ca154726f4c0b0652246d69bc806308e83ed539466ca3c912b5387a2",
+      "coefficient_digest": "3c72c986c716a000"
+    },
+    {
+      "case_id": "case_34",
+      "subcarriers": 1024,
+      "num_tx_antennas": 2,
+      "num_rx_antennas": 2,
+      "links": 16,
+      "template": "fixtures/nsc1024_tx2_rx2.pb",
+      "template_sha256": "be2960fbe4d7b4ae0364b8dca57de6bed54fb23c0222f4bb4ae5099b338bf179",
+      "response_sha256": "d0d1dce7a323608e4ea60442bc1571dd3ca2cfc73c7e5a78751f0e31029e3230",
+      "coefficient_digest": "10ce7310bf920000"
+    },
+    {
+      "case_id": "case_35",
+      "subcarriers": 1024,
+      "num_tx_antennas": 2,
+      "num_rx_antennas": 2,
+      "links": 64,
+      "template": "fixtures/nsc1024_tx2_rx2.pb",
+      "template_sha256": "be2960fbe4d7b4ae0364b8dca57de6bed54fb23c0222f4bb4ae5099b338bf179",
+      "response_sha256": "b7ff91dd7ecf7bdb3358634443b2658d232002654751be091d6f91f9f902ab90",
+      "coefficient_digest": "d673eb5fbd880000"
+    },
+    {
+      "case_id": "case_36",
+      "subcarriers": 1024,
+      "num_tx_antennas": 4,
+      "num_rx_antennas": 4,
+      "links": 1,
+      "template": "fixtures/nsc1024_tx4_rx4.pb",
+      "template_sha256": "6d599d30f473333d20101409178942ff9e02b5d89d40dcc0853a029272f8e9e1",
+      "response_sha256": "1abb71f8c7fbbda2258b6fccd5ab98c1a9ad65d1fd0890b107e55da4ca3f7a7e",
+      "coefficient_digest": "ba4e9aca235a0000"
+    },
+    {
+      "case_id": "case_37",
+      "subcarriers": 1024,
+      "num_tx_antennas": 4,
+      "num_rx_antennas": 4,
+      "links": 16,
+      "template": "fixtures/nsc1024_tx4_rx4.pb",
+      "template_sha256": "6d599d30f473333d20101409178942ff9e02b5d89d40dcc0853a029272f8e9e1",
+      "response_sha256": "e98373754d1ff5cd8ba4294b66c1468a56477c09191fc5cb86e842c61192d004",
+      "coefficient_digest": "5b17c7d27a880000"
+    },
+    {
+      "case_id": "case_38",
+      "subcarriers": 1024,
+      "num_tx_antennas": 4,
+      "num_rx_antennas": 4,
+      "links": 64,
+      "template": "fixtures/nsc1024_tx4_rx4.pb",
+      "template_sha256": "6d599d30f473333d20101409178942ff9e02b5d89d40dcc0853a029272f8e9e1",
+      "response_sha256": "4ee1a0c9391010869932a1cc178ef35991fe7ff57cc3d308e8dd75e4b078020f",
+      "coefficient_digest": "c7f2456969200000"
+    },
+    {
+      "case_id": "case_39",
+      "subcarriers": 1024,
+      "num_tx_antennas": 2,
+      "num_rx_antennas": 4,
+      "links": 1,
+      "template": "fixtures/nsc1024_tx2_rx4.pb",
+      "template_sha256": "6d0300a0f4367ee6953787807b29d7fb27a67a86fe66bd147d83c8b368bcdb5f",
+      "response_sha256": "faa01d37a1263abe1f099261e3dc8e3c4fb1663eb3edc8aad590fa6e12973822",
+      "coefficient_digest": "5d298fe27b8ec000"
+    },
+    {
+      "case_id": "case_40",
+      "subcarriers": 1024,
+      "num_tx_antennas": 2,
+      "num_rx_antennas": 4,
+      "links": 16,
+      "template": "fixtures/nsc1024_tx2_rx4.pb",
+      "template_sha256": "6d0300a0f4367ee6953787807b29d7fb27a67a86fe66bd147d83c8b368bcdb5f",
+      "response_sha256": "c2dd39c60c7de027ae365543dec8248214c06f224884096c27ef5f814dc6a722",
+      "coefficient_digest": "50894120a22c0000"
+    },
+    {
+      "case_id": "case_41",
+      "subcarriers": 1024,
+      "num_tx_antennas": 2,
+      "num_rx_antennas": 4,
+      "links": 64,
+      "template": "fixtures/nsc1024_tx2_rx4.pb",
+      "template_sha256": "6d0300a0f4367ee6953787807b29d7fb27a67a86fe66bd147d83c8b368bcdb5f",
+      "response_sha256": "424da5bd8bc54044b796cb785ee7bc04eb1fe3aeaf2a4db34022777e78417071",
+      "coefficient_digest": "24d024b161f00000"
+    },
+    {
+      "case_id": "case_42",
+      "subcarriers": 1024,
+      "num_tx_antennas": 8,
+      "num_rx_antennas": 8,
+      "links": 1,
+      "template": "fixtures/nsc1024_tx8_rx8.pb",
+      "template_sha256": "aa91449ce8cb09157b93c9b677b3d7de9f158196eb0c2bd4a0af49b280870e67",
+      "response_sha256": "9d8b5210e811263c9a292bd6ba4a3151ece77bba1e62ce78be314612bef2e31e",
+      "coefficient_digest": "ea5f3eca21d00000"
+    },
+    {
+      "case_id": "case_43",
+      "subcarriers": 1024,
+      "num_tx_antennas": 8,
+      "num_rx_antennas": 8,
+      "links": 16,
+      "template": "fixtures/nsc1024_tx8_rx8.pb",
+      "template_sha256": "aa91449ce8cb09157b93c9b677b3d7de9f158196eb0c2bd4a0af49b280870e67",
+      "response_sha256": "cccfcd5448d1f6b055e4adf6a6173490b552fd9589ba70d9fcb211c4c570d1ef",
+      "coefficient_digest": "35b9f1f1f6e00000"
+    },
+    {
+      "case_id": "case_44",
+      "subcarriers": 1024,
+      "num_tx_antennas": 8,
+      "num_rx_antennas": 8,
+      "links": 64,
+      "template": "fixtures/nsc1024_tx8_rx8.pb",
+      "template_sha256": "aa91449ce8cb09157b93c9b677b3d7de9f158196eb0c2bd4a0af49b280870e67",
+      "response_sha256": "c7a4b1ae84d2c9184b83bc6bead78d716612e85441418b2551bef5c24cde7c5a",
+      "coefficient_digest": "16c80d314b800000"
+    }
+  ],
+  "provenance": {
+    "platform": "Linux-7.0.0-34-generic-x86_64-with-glibc2.39",
+    "python": "3.12.12",
+    "libc": [
+      "glibc",
+      "2.39"
+    ],
+    "pyzmq_libzmq": "4.3.5",
+    "versions": {
+      "numpy": "2.5.2",
+      "protobuf": "7.35.1",
+      "pyzmq": "27.1.0"
+    },
+    "native_executable_sha256": "6a1cbb5ab3c73814530ff455e104fe2d9fdaa55101142dbdcb4d68ccf185b320",
+    "source_sha256": {
+      "tools/benchmark_cache_ipc.py": "e5252065de41d1a8042ad3dba7b42ca74d66e1978abe379696a59613a0d5b6a7",
+      "tools/test_benchmark_cache_ipc.py": "c3c47089277a54705a38152b4f06500fc87852af4642560c8e0b97f20e19189d",
+      "tools/benchmark_sumimo.py": "d027386b126e0045198efcfaa013be3ae302cbe912a5c65e729ac44e57574ba2",
+      "examples/ns3_sionna_cache_ipc_benchmark.cc": "09b9b2be0f5d0db5de1a3116da0c5a65a68bf1b01319c19c36f880357fd8a31d",
+      "examples/CMakeLists.txt": "5e9b2036e28c595e24a07d68ceceb1e9424a2d97af1f08ad0abf2155bd117a75",
+      "model/message.proto": "1e6eaf630e1556216a2de7b0fd8352fa86615c419adf9371340214170f4556c5",
+      "model/mimo-channel-matrix.cc": "75b4c292dc7bf2a6fcdfb91b060b6f570a16c3f0397245cae08e7af2bd9454a4",
+      "model/mimo-channel-matrix.h": "917124887d55fa68e3ce13f7f85bc4a0cabf5879015610caf77e05fd92ab2dc2",
+      "model/sionna-propagation-cache.cc": "577499957d21ed8ca96b8f1a5a3d7b33d6d67684e7452c6a1dae92d48acdb697",
+      "model/sionna-propagation-cache.h": "7ea7d76d64ba17e5fd2282c9d97ea715aa736f3c88ce82bcc476e815bfb87469",
+      "helper/sionna-helper.cc": "8e263c2f9308774c074acfceeede78a76a0471a0066daf04dbd2e65fc335020b",
+      "helper/sionna-helper.h": "6f325b7404bee834e9c4834afdb0a177cc165a3e4cbe7c85c8918b87c5e23d32",
+      "model/sionna-mobility-model.cc": "5b12634ea141866fbedb093d3448c2db2dfdc6010fc4758c6198547c0d83d5c2"
+    }
+  },
+  "validation": {
+    "status": "passed",
+    "repeatability": "passed",
+    "bit_exact_cache_and_raw_ipc": true,
+    "expiry": "passed",
+    "cases": 45,
+    "native_processes": 135,
+    "timing_samples": 30915,
+    "channel_requests": 3645
+  },
+  "sweep_seconds": 125.2734434970007
+}
