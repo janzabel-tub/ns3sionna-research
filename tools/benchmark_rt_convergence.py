@@ -4,6 +4,7 @@
 All channel/link metrics come from the existing server and native ns-3 analyzer.
 The policy is exported before importing the ray tracer or starting any trace.
 The largest sampled budget is a numerical reference, not a truth channel.
+--independent-spacing runs the small Phase 5.2.4 matrix with selected spot checks.
 """
 
 from __future__ import annotations
@@ -30,6 +31,16 @@ CASES = (
     ("case_06", 0.5, 90.0, 0.0, "best median sigma1/sigma0: 0.515959"),
     ("case_10", 1.0, 90.0, 0.0, "highest earlier MI efficiency: 39.902643 bit/s/Hz"),
 )
+# (case, TX spacing, RX spacing, TX azimuth, RX azimuth, selection reason).
+# Fixed before tracing; the control reuses Phase 5.2.2 case_06.
+SPACING_CASES = (
+    ("case_00", 0.5, 0.5, 90.0, 0.0, "existing shared-spacing control"),
+    ("case_01", 1.0, 0.25, 90.0, 0.0, "wide TX, narrow RX"),
+    ("case_02", 0.25, 1.0, 90.0, 0.0, "narrow TX, wide RX"),
+    ("case_03", 1.0, 0.25, 45.0, -45.0, "wide TX with new azimuths"),
+    ("case_04", 0.25, 1.0, 45.0, -45.0, "wide RX with new azimuths"),
+)
+SPACING_SPOT_CHECKS = ("case_03", "case_04")
 TOLERANCES = {
     "wideband_loss_db": 0.5,
     "rank_changed_tones": 0,
@@ -47,7 +58,16 @@ IDENTITY_FIELDS = ("case_id", "seed", "samples_per_src", "repetition", "spacing_
                    "tx_azimuth_deg", "rx_azimuth_deg")
 
 
-def plan(repetitions=2) -> dict:
+def plan(repetitions=2, independent_spacing=False) -> dict:
+    if independent_spacing:
+        return {"schema_version": 1, "subphase": "5.2.4", "controls": CONTROLS,
+            "sweep": {"samples_per_src": 100000, "seeds": SEEDS, "cases": SPACING_CASES,
+                      "repetitions": repetitions}, "tolerances": TOLERANCES,
+            "spot_checks": {"case_ids": SPACING_SPOT_CHECKS, "reference_samples_per_src": 1000000},
+            "decision": "paired 100k/1M checks for both selected new-angle cases and every seed; "
+                        "the result does not certify all untested configurations",
+            "validation": "byte-identical repetitions; actual endpoint geometry; "
+                          "independent NumPy SVD/MMSE/MI and link budget on every trace"}
     return {"schema_version": 1, "subphase": "5.2.2", "controls": CONTROLS,
             "sweep": {"samples_per_src": BUDGETS, "seeds": SEEDS, "cases": CASES,
                       "repetitions": repetitions}, "tolerances": TOLERANCES,
@@ -183,30 +203,34 @@ def plots(output: Path, summaries: list[dict], errors: list[dict]) -> None:
     plt.close(fig)
 
 
-def run(output: Path, binary: Path, repetitions=2) -> dict:
+def run(output: Path, binary: Path, repetitions=2, independent_spacing=False) -> dict:
     if repetitions < 2:
         raise ValueError("At least two fresh repetitions are required")
     if output.exists() and any(output.iterdir()):
         raise ValueError("Use an empty output directory to preserve results")
     output.mkdir(parents=True, exist_ok=True)
-    policy = {**plan(repetitions), "defined_before_tracing_utc": datetime.now(timezone.utc).isoformat()}
+    policy = {**plan(repetitions, independent_spacing),
+              "defined_before_tracing_utc": datetime.now(timezone.utc).isoformat()}
     (output / "plan.json").write_text(json.dumps(policy, indent=2) + "\n")
     env_class, mi = base.runtime()
     started = time.perf_counter()
     summaries, tones, configurations, paired_metrics = [], [], [], {}
-    for case_id, spacing, tx_yaw, rx_yaw, reason in CASES:
+    cases = SPACING_CASES if independent_spacing else [
+        (case, spacing, spacing, tx, rx, reason) for case, spacing, tx, rx, reason in CASES]
+    for case_id, spacing, rx_spacing, tx_yaw, rx_yaw, reason in cases:
         for seed in SEEDS:
             directory = output / case_id / f"seed_{seed}"
             directory.mkdir(parents=True)
             config_path = directory / "configuration.pb"
             config = base.export_configuration(binary, config_path, spacing,
-                        (tx_yaw, 0, 0), (rx_yaw, 0, 0), seed=seed)
+                        (tx_yaw, 0, 0), (rx_yaw, 0, 0), seed=seed, rx_spacing=rx_spacing)
             config_bytes = config_path.read_bytes()
             record = {"case_id": case_id, "seed": seed, "selection_reason": reason,
                       "configuration": base.MessageToDict(config, preserving_proto_field_name=True,
                           always_print_fields_with_no_presence=True),
                       "configuration_sha256": base.sha256(config_path), "traces": []}
-            for budget in BUDGETS:
+            budgets = ((100000, 1000000) if case_id in SPACING_SPOT_CHECKS else (100000,))
+            for budget in (budgets if independent_spacing else BUDGETS):
                 trace_dir = directory / f"samples_{budget}"
                 trace_dir.mkdir()
                 first_response, first_metrics = None, None
@@ -222,6 +246,8 @@ def run(output: Path, binary: Path, repetitions=2) -> dict:
                         base.native(binary, action="analyze", input=response_path, output=metrics_path)
                         native_seconds = time.perf_counter() - native_started
                         metrics = base.read_metrics(metrics_path)
+                    if independent_spacing:
+                        base.validate_reference_metrics(response, metrics)
                     if first_response is None:
                         first_response, first_metrics = response, metrics
                         paired_metrics[case_id, seed, budget] = metrics
@@ -229,6 +255,9 @@ def run(output: Path, binary: Path, repetitions=2) -> dict:
                         base.compare_repetitions(first_response, response, first_metrics, metrics)
                     common = dict(zip(IDENTITY_FIELDS, (case_id, seed, budget, repetition,
                                                        spacing, tx_yaw, rx_yaw)))
+                    if independent_spacing:
+                        common["tx_spacing_lambda"] = common.pop("spacing_lambda")
+                        common["rx_spacing_lambda"] = rx_spacing
                     summary = {**common, "minimum_rank": min(row["rank"] for row in metrics),
                         **{f"median_sigma{s}": float(np.median([row[f"sigma{s}"] for row in metrics]))
                            for s in range(2)},
@@ -253,12 +282,24 @@ def run(output: Path, binary: Path, repetitions=2) -> dict:
                       f"{summary['effective_sinr1_db']:.3f})", flush=True)
             configurations.append(record)
     sweep_seconds = time.perf_counter() - started
-    errors = comparisons(paired_metrics)
-    decision = verdict(errors)
+    if independent_spacing:
+        errors = [{"case_id": case, "seed": seed, "samples_per_src": 100000,
+                   "reference_samples_per_src": 1000000,
+                   **compare(paired_metrics[case, seed, 100000], paired_metrics[case, seed, 1000000])}
+                  for case in SPACING_SPOT_CHECKS for seed in SEEDS]
+        decision = {"spot_checks_passed": all(row["passed"] for row in errors),
+                    "checked_case_seed_pairs": len(errors), "scope": policy["decision"]}
+    else:
+        errors = comparisons(paired_metrics)
+        decision = verdict(errors)
     for filename, rows in (("summary.csv", summaries), ("tones.csv", tones), ("convergence.csv", errors)):
         base.write_csv(output / filename, rows)
     (output / "convergence.json").write_text(json.dumps(decision, indent=2) + "\n")
-    plots(output, summaries, errors)
+    if independent_spacing:
+        base.plots(output, [row for row in summaries if row["samples_per_src"] == 100000],
+                   independent_spacing=True)
+    else:
+        plots(output, summaries, errors)
     source_paths = [Path(__file__), Path(base.__file__),
                     Path(__file__).with_name("test_benchmark_rt_convergence.py"),
                     base.MODULE / "examples/ns3_wifi_sumimo_benchmark.cc",
@@ -277,6 +318,8 @@ def run(output: Path, binary: Path, repetitions=2) -> dict:
             "source_sha256": {str(path.relative_to(base.MODULE)): base.sha256(path) for path in source_paths}},
         "validation": {"repeatability": "passed", "geometry_orientation": "passed",
                        "channel_responses_byte_identical_within_seed_budget": True,
+                       **({"independent_numpy_reference": "passed", "cases": len(cases)}
+                          if independent_spacing else {}),
                        "fresh_traces": len(summaries)},
         "sweep_seconds": sweep_seconds, "convergence": decision, "configurations": configurations}
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
@@ -287,8 +330,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--executable", type=Path, default=None)
+    parser.add_argument("--independent-spacing", action="store_true",
+                        help="Phase 5.2.4 independent TX/RX spacing with selected 100k/1M checks")
     args = parser.parse_args()
-    result = run(args.output.resolve(), (args.executable or base.executable()).resolve())
+    result = run(args.output.resolve(), (args.executable or base.executable()).resolve(),
+                 independent_spacing=args.independent_spacing)
     print(json.dumps(result["convergence"], indent=2))
 
 

@@ -67,6 +67,16 @@ class TestNativeBenchmark(unittest.TestCase):
         broken.nodes[1].ClearField("orientation")
         with self.assertRaises(AssertionError):
             benchmark.validate_configuration(broken, 0.25, tx, rx)
+        # Independent spacings must survive the same helper/Protobuf boundary.
+        for tx_spacing, rx_spacing in ((0.25, 1.0), (1.0, 0.25)):
+            first = self.path / "independent.pb"
+            independent = benchmark.export_configuration(self.binary, first, tx_spacing, tx, rx,
+                                                         rx_spacing=rx_spacing)
+            benchmark.export_configuration(self.binary, self.path / "repeat.pb", tx_spacing,
+                                           tx, rx, rx_spacing=rx_spacing)
+            self.assertEqual(first.read_bytes(), (self.path / "repeat.pb").read_bytes())
+            self.assertEqual(independent.tx_array.horizontal_spacing, tx_spacing)
+            self.assertEqual(independent.rx_array.horizontal_spacing, rx_spacing)
         broken = copy.deepcopy(config)
         broken.rx_array.horizontal_spacing = 0.5
         with self.assertRaises(AssertionError):
@@ -74,6 +84,8 @@ class TestNativeBenchmark(unittest.TestCase):
 
     def test_invalid_geometry_and_orientation_rejected(self):
         for options in ({"spacingLambda": 0}, {"spacingLambda": "nan"},
+                        {"txSpacingLambda": -1}, {"rxSpacingLambda": 0},
+                        {"txSpacingLambda": "inf"}, {"rxSpacingLambda": "0.5junk"},
                         {"txElevation": 91}, {"rxAzimuth": 181}, {"rxRoll": "inf"}):
             with self.subTest(options=options), self.assertRaises(subprocess.CalledProcessError):
                 benchmark.native(self.binary, action="config", output=self.path / "bad.pb", **options)
@@ -139,7 +151,7 @@ class TestServerGeometry(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="sumimo-geometry-") as temporary:
             config = benchmark.export_configuration(benchmark.executable(),
                 Path(temporary) / "configuration.pb", 0.75,
-                (90, -30, 45), (-60, 20, -90))
+                (90, -30, 45), (-60, 20, -90), rx_spacing=0.25)
             # trace checks actual PlanarArray coordinates and actual placed radio
             # Euler angles against the independently known degree/radian values.
             _, observed, _, _ = benchmark.trace(config, env_class)
@@ -242,23 +254,12 @@ class TestExportedBenchmark(unittest.TestCase):
         for record in self.manifest["configurations"]:
             path = self.output / record["case_id"] / "channel_00.pb"
             response = benchmark.message_pb2.ChannelStateResponse.FromString(path.read_bytes())
-            h = benchmark.channel_array(response)
-            metrics = [row for row in self.tones if row["case_id"] == record["case_id"]
+            metrics = [{key: float(value) for key, value in row.items()
+                        if key not in ("case_id", "repetition", "spacing_lambda",
+                                       "tx_azimuth_deg", "rx_azimuth_deg")}
+                       for row in self.tones if row["case_id"] == record["case_id"]
                        and int(row["repetition"]) == 0]
-            rho = float(metrics[0]["reference_snr_linear"])
-            gram = h.conj().transpose(0, 2, 1) @ h
-            error = np.linalg.inv(np.eye(2) + (rho / 2) * gram)
-            sinr = 1 / np.diagonal(error, axis1=1, axis2=2).real - 1
-            singular = np.linalg.svd(h, compute_uv=False)
-            ranks = np.sum(singular > 1e-12 * singular[:, :1], axis=1)
-            np.testing.assert_allclose([[float(row["sinr0_linear"]), float(row["sinr1_linear"])]
-                                       for row in metrics], sinr, rtol=1e-8, atol=1e-8)
-            np.testing.assert_allclose([[float(row["sigma0"]), float(row["sigma1"])]
-                                       for row in metrics], singular, rtol=1e-10, atol=1e-10)
-            np.testing.assert_array_equal([float(row["rank"]) for row in metrics], ranks)
-            np.testing.assert_allclose([float(metrics[0][f"effective_sinr{s}_linear"])
-                                       for s in range(2)], np.expm1(np.mean(np.log1p(sinr), axis=0)),
-                                       rtol=1e-8, atol=1e-8)
+            benchmark.validate_reference_metrics(response, metrics)
 
     def test_native_replay_of_frozen_real_channel(self):
         with tempfile.TemporaryDirectory(prefix="sumimo-replay-") as temporary:

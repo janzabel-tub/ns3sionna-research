@@ -2,7 +2,7 @@
 
 Stand: 29. September 2026, Phase 4 einschließlich Unterphase 4.8 implementiert;
 Unterphase 5.1 für HE MCS 0/BCC/32 Byte/1x1 anhand von Link-Level-Daten validiert;
-Unterphasen 5.2.1/5.2.2/5.2.3 mit Kanal-, Samplekonvergenz- und Cache-/IPC-Benchmarks implementiert
+Unterphasen 5.2.1 bis 5.2.4 mit Kanal-, Konvergenz-, Cache-/IPC- und getrennten Arrayabständen implementiert
 
 Arbeitszweig: feature/su-mimo-minimal
 
@@ -87,6 +87,8 @@ repräsentative Konfigurationen mit vorab definierten Toleranzen,
 byteidentischen Wiederholungen und unabhängiger Referenzvalidierung.
 Unterphase 5.2.3 misst den bestehenden Cache und tatsächliche lokale
 Prozess-IPC mit eingefrorenen Kanalantworten, getrennt von Raytracing.
+Unterphase 5.2.4 ergänzt getrennte TX-/RX-Abstände und ausgewählte Azimute
+im bestehenden Benchmark. Neue Messartefakte bleiben lokal und unversioniert.
 
 ## 2. Reproduzierbare Ausgangsbasis
 
@@ -839,10 +841,23 @@ Abschnitt 5.22 definiert Messvertrag und Formeln; Abschnitt 7.16 berichtet
 Ergebnisse und automatisierte Validierung. Die Produktionsdateien von
 Cache, Helper, Protobuf und Server werden nicht verändert.
 
+#### Unterphase 5.2.4: Getrennte TX-/RX-Abstände und Azimute (implementiert)
+
+Der bestehende Runner `benchmark_rt_convergence.py --independent-spacing`
+misst fünf vorab festgelegte Konfigurationen mit Seeds 42/43/44 und zwei
+frischen CPU-Traces. Alle Fälle verwenden 100000 Samples; die beiden
+Fälle mit neuen Azimuten werden zusätzlich mit 1000000 Samples geprüft.
+Die bestehenden nativen Optionen erhalten unabhängige TX-/RX-Overrides,
+und die Geometrieprüfung liest den Abstand des jeweiligen Endpunkts.
+Produktionshelper, Server, Protobuf und Linkmodelle bleiben unverändert.
+Vorhandene Tests werden erweitert; zusätzliche Testsuites, Fixturedateien
+oder Messergebnisse werden nicht eingecheckt. Abschnitt 5.23 beschreibt
+den Messvertrag, Abschnitt 7.17 die Ergebnisse.
+
 #### Weitere Phase-5-Arbeitspakete
 
-- Weitere Teile von Phase 5.2 untersuchen getrennte TX-/RX-Abstände,
-  zusätzliche Winkel, CSI-Alter und weitere Szenen/Solveroptionen.
+- Als nächster kleiner Teil von Phase 5.2 bleibt die Untersuchung des
+  CSI-Alters. Weitere Winkel, Szenen und Solveroptionen sind Erweiterungen.
 - Cache-/IPC-Skalierung mit realen Serverberechnungen, weiteren Transporten
   und längeren zeitlichen Snapshotfolgen erweitern.
 - Deterministische Seeds, Ergebnisformate und CI-Matrix für CPU/GPU festlegen.
@@ -2947,6 +2962,57 @@ Allokatordeltas und Zeitmediane sind Beobachtungen ohne starre
 Performance-Abnahmegrenze. Messungen erfolgen sequenziell; es gibt keine
 gleichzeitig ausgeführten Raytraces, Regressionen oder Benchmarkfälle.
 
+### 5.23 Messvertrag der Unterphase 5.2.4
+
+Die beiden 1x2-Arrays haben unabhängige horizontale Abstände d_tx und
+d_rx in Wellenlängen. Ihre normierten lokalen Elementkoordinaten sind
+
+\[
+  q_{e,0}=(0,-d_e/2,0),\quad q_{e,1}=(0,d_e/2,0),\qquad
+  x_{e,i}=p_e+\lambda R_z(\phi_e)q_{e,i},\quad e\in\{tx,rx\}.
+\]
+
+Die Zentren p_e bleiben bei (3,2,2)/(4,3,1) m. Elevation und Roll sind
+null, Azimute werden in Grad übergeben und am tatsächlichen Radioobjekt
+in Radiant geprüft. Beide tatsächlichen PlanarArrays müssen die jeweiligen
+lokalen Koordinaten liefern; der RX-Abstand wird unabhängig vom TX geprüft.
+Die Produktion unterstützt diese Geometrie bereits. Der Benchmark nutzt
+`spacingLambda` als bisherigen gemeinsamen Default; `txSpacingLambda`
+und `rxSpacingLambda` überschreiben ihn einzeln.
+
+Die vorab fixierte kleine Matrix lautet:
+
+| Fall | d_tx / lambda | d_rx / lambda | TX-Azimut / Grad | RX-Azimut / Grad |
+| --- | --- | --- | --- | --- |
+| 00 | 0,5 | 0,5 | 90 | 0 |
+| 01 | 1 | 0,25 | 90 | 0 |
+| 02 | 0,25 | 1 | 90 | 0 |
+| 03 | 1 | 0,25 | 45 | -45 |
+| 04 | 0,25 | 1 | 45 | -45 |
+
+Fall 00 entspricht Fall 06 aus 5.2.2. Die Fälle 01/02 isolieren die
+vertauschten Abstände bei festen Orientierungen; 03/04 ergänzen ausgewählte
+neue Winkel. TX verwendet weiterhin tr38901, RX dipole, beide V-Polarisation.
+Szene, Frequenz, Positionen, 256 FFT-Bins, 20 dBm Gesamtleistung, 290 K,
+7 dB Rauschzahl und sämtliche Solveroptionen aus Abschnitt 5.20 bleiben fest.
+Die drei Seeds sind 42/43/44, Run ist eins. Zwei Wiederholungen pro Seed
+ergeben 30 Traces bei 100000 Samples und zwölf weitere für 03/04 bei
+1000000, insgesamt 42. Der Runner schreibt `plan.json` vor dem ersten Trace.
+
+Vergleiche und Formeln für Rang, Singularwerte, Open-Loop-MMSE, MI-SINR
+und Linkbudget werden unverändert aus 5.20/5.21 übernommen. Jeder Trace
+wird zusätzlich mit der bereits vorhandenen unabhängigen NumPy-SVD-/
+MMSE-/MI-Referenz geprüft; diese Prüfung wird mit den bestehenden Tests
+geteilt. Die CFR und alle deterministischen nativen Felder müssen innerhalb
+jedes Falls/Seeds/Budgets wiederholbar sein, die CFR zusätzlich byteidentisch.
+Die sechs gepaarten 100000/1000000-Spotchecks verwenden vorab dieselben
+Toleranzen wie 5.2.2: 0,5 dB Verlust, unveränderter Rang auf jedem Ton,
+5 Prozent plus 1e-7 Singularwertfehler, 1 dB Ton-SINR, 0,5 dB MI-SINR
+und 0,2 bit/s/Hz MI-Effizienz. Ein bestandener Spotcheck belegt nur die
+ausgewählten Fälle und Seeds, nicht die Konvergenz der gesamten Matrix.
+PER und Wi-Fi-Durchsatz bleiben wegen der ausschließlich dokumentierten
+1x1-Kalibrierung außerhalb dieses Messvertrags.
+
 ## 6. High-Level-API-Vertrag bis Unterphase 4.8
 
 ### 6.1 Typen, Besitz und Defaults
@@ -4360,6 +4426,84 @@ unverändert; konkrete Speicher-/Kopier-/Transportoptimierungen können
 anschließend gegen diese Referenz geprüft werden. Die Transportfixtures
 begründen keine PHY-, PER- oder Durchsatzprognose für größere Arrays.
 
+### 7.17 Ergebnisse und Validierung der Unterphase 5.2.4
+
+Der CPU-Lauf vom 29.09.2026 erzeugte alle 42 vorab geplanten Traces und
+10752 Tonzeilen. Sämtliche Wiederholungen waren byteidentisch; die
+tatsächlichen Array-/Radio-Geometrien und unabhängigen SVD-/MMSE-/MI-/
+Linkbudgetprüfungen bestanden für alle Traces. Die drei 100000-Sample-
+Kontrollkanäle von Fall 00 stimmen für jeden Seed bytegenau mit dem
+früheren Fall 06 aus 5.2.2 überein. Alle Töne aller Traces haben Rang zwei.
+
+Die Tabelle zeigt Mediane über drei Seeds mit je zwei Wiederholungen bei
+100000 Samples. sigma0/sigma1 sind zunächst Tonmediane je Lauf. MI-SINR
+ist in dB, die Effizienz in bit/s/Hz angegeben.
+
+| Fall | Verlust / dB | sigma0/sigma1 | MI-SINR 0/1 / dB | MI / bit/s/Hz |
+| --- | --- | --- | --- | --- |
+| 00 | 55,848764 | 1,713904/0,884302 | 55,201884/56,402762 | 37,074269 |
+| 01 | 51,467147 | 1,904154/0,589488 | 58,649012/56,795143 | 38,349723 |
+| 02 | 52,087101 | 1,972575/0,190528 | 46,584869/47,079595 | 31,114722 |
+| 03 | 46,739740 | 1,866247/0,678221 | 64,526283/62,399438 | 42,163812 |
+| 04 | 48,373161 | 1,995263/0,322120 | 55,386478/55,815199 | 36,940405 |
+
+Bei gleichen Winkeln unterscheiden sich 01 und 02 im medianen
+Wideband-Verlust nur um 0,620 dB, aber in der MI-Effizienz um
+7,235 bit/s/Hz. Der mediane Tonquotient sigma1/sigma0 beträgt
+0,309964 beziehungsweise 0,098778. Der Rang allein beschreibt diese
+schwächere zweite Mode nicht. Vertauschte TX-/RX-Abstände sind für diesen
+Link mit unterschiedlichen Arraymustern und Orientierungen nicht äquivalent.
+Bei 45/-45 Grad beträgt der Effizienzunterschied 5,223 bit/s/Hz.
+Diese Beobachtung ist auf die feste Szene und den Open-Loop-Messvertrag
+begrenzt; die hohen gaußschen MI-Werte sind keine Wi-Fi-Payloadraten.
+
+Alle sechs gepaarten Seed-/Fall-Spotchecks bestanden. Die schlechtesten
+Abweichungen über diese Checks sind:
+
+| Kriterium | Maximum | Grenze |
+| --- | --- | --- |
+| Wideband-Verlust / dB | 0,000063766 | 0,5 |
+| Töne mit Rangänderung | 0 | 0 |
+| Skalierter Singularwertfehler D_sigma | 0,004976263 | 1 |
+| Ton-/Stream-SINR / dB | 0,002644970 | 1 |
+| Effektive Stream-SINR / dB | 0,000149771 | 0,5 |
+| MI-Effizienz / bit/s/Hz | 0,000090278 | 0,2 |
+
+100000 Samples sind damit für die beiden ausgewählten neuen Winkel-/
+Abstandskonfigurationen innerhalb der bestehenden Toleranzen stabil.
+Für die neuen Fälle 01/02 wurde kein zusätzlicher höherer Budgetlauf
+ausgeführt; aus dem Spotcheck wird kein globales Konvergenzurteil abgeleitet.
+Min-/Max-Spannen über drei Seeds sind deskriptiv, keine Konfidenzintervalle.
+
+Die CFR-Mediane betragen 0,698006 s bei 100000 (30 Traces) und
+6,451845 s bei 1000000 (zwölf Traces). Native Analysemediane liegen
+bei 0,678 beziehungsweise 0,651 ms; native Prozessaufrufe bei rund
+32 ms. `sweep_seconds` ist 107,656 s, der vollständige Runnerprozess
+benötigte 112,533 s. Laufzeiten bleiben host-/JIT-/lastabhängige Diagnosen.
+Software und Backend entsprechen 5.2.2: Sionna/RT 2.0.1, Mitsuba 3.8.0,
+Dr.Jit 1.3.1, NumPy 2.5.2 und LLVM-CPU mit einem Dr.Jit-Thread.
+
+Die vorhandenen 21 Benchmarktests bestanden in 19,969 s. Ihre bestehenden
+Geometrie-, Wiederholungs- und Negativtests wurden um getrennte Abstände
+erweitert; die reale Geometrieprüfung verwendet nun unterschiedliche
+TX-/RX-Abstände. Es wurden keine neuen Testdateien oder Suites hinzugefügt.
+Der gezielte Build von `ns3_wifi_sumimo_benchmark`/`sionna-test` und die
+native `sionna`-Suite mit 38 Fällen bestanden. Die lokale Exportprüfung
+validierte alle Traces, Rohmetriken, Hashes und Spotcheckentscheidungen,
+bestätigte die alten Kontrollkanäle und replayte zwei neue Kanäle nativ.
+Alle 21 aufgezeichneten Quell-/Szenenhashes und der Binärhash stimmen.
+Die drei Vergleichsplots wurden visuell geprüft. Unveränderte teure
+MU-Example-/Serverregressionen wurden nicht erneut ausgeführt.
+
+Messwerte, Konfigurationen, Kanalfixtures, Vergleichsplots und Prüfprotokolle
+liegen lokal unter `data/phase5_2_independent_spacing/`; das gesamte
+Verzeichnis ist ignoriert. Der Commit enthält ausschließlich die kleine
+Erweiterung vorhandener Beispiele/Tools/Tests und die Dokumentation.
+Nach den finalen Dokumentationsänderungen wurde das PDF einmal erzeugt,
+durch Seitenzahl, Textextraktion und Sichtprüfung validiert. Die Hashes
+und Prüfprotokolle bleiben ebenfalls lokale Artefakte. Produktionsmodelle,
+Helper, Server und Protobuf wurden für diese Unterphase nicht geändert.
+
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 
 - SionnaMimoHelper überträgt eine gemeinsame TX- und RX-Geometrie für die
@@ -4553,6 +4697,19 @@ Die Tests verwenden die versionierte Referenz unter `data/phase5_2_cache_ipc/`;
 Alle Fixture-, Cache- und IPC-Validierungen bleiben von PER-Kalibrierung
 unabhängig. Native/RPC-Zeitstichproben und speicherbezogene Diagnosen stehen
 in CSV; die drei generierten PNG-Plots bleiben unversioniert.
+
+Phase 5.2.4 verwendet denselben Runner mit optionalem kleinem Sweep:
+
+    ./ns3 build ns3_wifi_sumimo_benchmark sionna-test
+    conda run --no-capture-output -n sionna-venv python \
+      contrib/sionna/tools/benchmark_rt_convergence.py \
+      --independent-spacing --output=/tmp/sumimo-independent-spacing
+
+Ein leerer Ausgabeordner ist erforderlich. Die vorhandenen Tests werden mit
+`python -m unittest -v test_benchmark_sumimo test_benchmark_rt_convergence`
+im Tools-Verzeichnis ausgeführt. Der Runner prüft jede neue CFR gegen die
+unabhängigen Referenzformeln und jeden höheren Budgetlauf gegen die vorab
+festgelegten Toleranzen. Neue Messergebnisse und Fixtures bleiben lokal.
 
 Python-Vertrag und Server vom Verzeichnis contrib/sionna/model/ns3sionna:
 

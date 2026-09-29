@@ -70,28 +70,32 @@ def native(binary: Path, **arguments) -> None:
 
 
 def export_configuration(binary: Path, output: Path, spacing: float,
-                         tx_angles=(0.0, 0.0, 0.0), rx_angles=(0.0, 0.0, 0.0), seed=42):
+                         tx_angles=(0.0, 0.0, 0.0), rx_angles=(0.0, 0.0, 0.0), seed=42,
+                         rx_spacing=None):
     arguments = dict(action="config", output=output, spacingLambda=spacing, seed=seed)
+    if rx_spacing is not None:
+        arguments["rxSpacingLambda"] = rx_spacing
     for endpoint, angles in (("tx", tx_angles), ("rx", rx_angles)):
         arguments.update({endpoint + label: value for label, value in
                           zip(("Azimuth", "Elevation", "Roll"), angles)})
     native(binary, **arguments)
     config = message_pb2.SimInitMessage.FromString(output.read_bytes())
-    validate_configuration(config, spacing, tx_angles, rx_angles, seed)
+    validate_configuration(config, spacing, tx_angles, rx_angles, seed, rx_spacing)
     return config
 
 
-def validate_configuration(config, spacing, tx_angles, rx_angles, seed=42) -> None:
+def validate_configuration(config, spacing, tx_angles, rx_angles, seed=42, rx_spacing=None) -> None:
     """Assert fixed controls on the bytes emitted by the real native helper."""
     assert (config.scene_fname, config.seed, config.frequency, config.channel_bw,
             config.fft_size, config.subcarrier_spacing, config.mode, config.sub_mode,
             config.fixed_coherence_time_ms, config.time_evo_model) == (
                 SCENE, seed, 5180, 20, 256, 78125, 1, -1, 5, "position")
     assert [node.id for node in config.nodes] == [0, 1]
-    for array, pattern in ((config.tx_array, "tr38901"), (config.rx_array, "dipole")):
+    for array, pattern, distance in ((config.tx_array, "tr38901", spacing),
+            (config.rx_array, "dipole", spacing if rx_spacing is None else rx_spacing)):
         assert (array.num_rows, array.num_cols, array.vertical_spacing,
                 array.horizontal_spacing, array.pattern, array.polarization) == (
-                    1, 2, 0.5, spacing, pattern, "V")
+                    1, 2, 0.5, distance, pattern, "V")
     for node, position, angles in zip(config.nodes, POSITIONS, (tx_angles, rx_angles)):
         assert node.WhichOneof("model") == "constant_position_model"
         point = node.constant_position_model.position
@@ -121,8 +125,8 @@ def observed_geometry(env, config) -> dict:
         array = getattr(env.scene, endpoint + "_array")
         positions = np.asarray(array.normalized_positions).T
         # Dr.Jit vector arrays have coordinate-major NumPy layout.
-        np.testing.assert_allclose(positions, [[0, -config.tx_array.horizontal_spacing / 2, 0],
-                                              [0, config.tx_array.horizontal_spacing / 2, 0]],
+        spacing = getattr(config, endpoint + "_array").horizontal_spacing
+        np.testing.assert_allclose(positions, [[0, -spacing / 2, 0], [0, spacing / 2, 0]],
                                    rtol=0, atol=1e-7)
         radio = env.scene.get("tx" if endpoint == "tx" else "rx1")
         angles = [node.orientation.azimuth, node.orientation.elevation, node.orientation.roll]
@@ -190,6 +194,36 @@ def read_metrics(path: Path) -> list[dict]:
     return rows
 
 
+def validate_reference_metrics(response, rows) -> None:
+    """Independent NumPy SVD/MMSE/MI and link-budget check, shared with tests."""
+    h = channel_array(response)
+    rx = response.csi[0].rx_nodes[0]
+    assert len(rows) == len(h)
+    np.testing.assert_array_equal([row["subcarrier"] for row in rows], np.arange(len(h)))
+    np.testing.assert_array_equal([row["frequency_offset_hz"] for row in rows], rx.frequencies)
+    noise = 1.3803e-23 * 290 * 20e6 * 10 ** 0.7
+    power = 10 ** ((20 - rx.wb_loss - 30) / 10)
+    rho = power / noise
+    error = np.linalg.inv(np.eye(2) + rho / 2 * (h.conj().transpose(0, 2, 1) @ h))
+    sinr = 1 / np.diagonal(error, axis1=1, axis2=2).real - 1
+    singular = np.linalg.svd(h, compute_uv=False)
+    np.testing.assert_allclose([[row["sinr0_linear"], row["sinr1_linear"]] for row in rows],
+                               sinr, rtol=1e-8, atol=1e-8)
+    np.testing.assert_allclose([[row["sigma0"], row["sigma1"]] for row in rows],
+                               singular, rtol=1e-10, atol=1e-10)
+    np.testing.assert_array_equal([row["rank"] for row in rows],
+                                 np.sum(singular > 1e-12 * singular[:, :1], axis=1))
+    effective = np.expm1(np.mean(np.log1p(sinr), axis=0))
+    for row in rows:
+        np.testing.assert_allclose([row[f"effective_sinr{s}_linear"] for s in range(2)],
+                                   effective, rtol=1e-8, atol=1e-8)
+        np.testing.assert_allclose([row["wideband_loss_db"], row["noise_power_w"],
+            row["received_power_w"], row["reference_snr_linear"]],
+            [rx.wb_loss, noise, power, rho], rtol=1e-12)
+        np.testing.assert_allclose(row["spectral_efficiency_bps_hz"],
+            np.mean(np.sum(np.log2(1 + sinr), axis=1)), rtol=1e-9, atol=1e-8)
+
+
 def compare_repetitions(first_response, response, first_metrics, metrics) -> None:
     # Runtime is deliberately excluded. Compare CFR plus every deterministic native field.
     assert response.SerializeToString(deterministic=True) == first_response.SerializeToString(
@@ -218,7 +252,7 @@ def write_csv(path: Path, rows: list[dict]) -> None:
         writer.writerows(rows)
 
 
-def plots(output: Path, summaries: list[dict]) -> None:
+def plots(output: Path, summaries: list[dict], independent_spacing=False) -> None:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -243,16 +277,34 @@ def plots(output: Path, summaries: list[dict]) -> None:
     for filename, keys in figures.items():
         fig, axes = plt.subplots(1, len(keys), figsize=(4 * len(keys), 3.9), squeeze=False)
         for axis, key in zip(axes[0], keys):
-            for tx, rx in groups:
-                values = [np.median([row[key] for row in summaries
-                                     if row["spacing_lambda"] == spacing
-                                     and row["tx_azimuth_deg"] == tx
-                                     and row["rx_azimuth_deg"] == rx]) for spacing in SPACINGS]
-                axis.plot(SPACINGS, values, marker="o", label=f"TX {tx:g}°, RX {rx:g}°")
-            axis.set(xlabel="TX and RX spacing (wavelengths)", ylabel=labels[key], xticks=SPACINGS)
+            if independent_spacing:
+                cases = sorted({row["case_id"] for row in summaries})
+                samples = [[row[key] for row in summaries if row["case_id"] == case] for case in cases]
+                axis.plot(range(len(cases)), [np.median(values) for values in samples], marker="o")
+                axis.fill_between(range(len(cases)), [min(values) for values in samples],
+                                  [max(values) for values in samples], alpha=0.15)
+                captions = []
+                for case in cases:
+                    row = next(row for row in summaries if row["case_id"] == case)
+                    captions.append(f"{case[-2:]}: {row['tx_spacing_lambda']:g}/{row['rx_spacing_lambda']:g}λ\n"
+                                    f"{row['tx_azimuth_deg']:g}/{row['rx_azimuth_deg']:g}°")
+                axis.set(xlabel="Case: TX/RX spacing, azimuth", xticks=range(len(cases)),
+                         xticklabels=captions, ylabel=labels[key])
+                axis.tick_params(axis="x", labelsize=7)
+            else:
+                for tx, rx in groups:
+                    values = [np.median([row[key] for row in summaries
+                                         if row["spacing_lambda"] == spacing
+                                         and row["tx_azimuth_deg"] == tx
+                                         and row["rx_azimuth_deg"] == rx]) for spacing in SPACINGS]
+                    axis.plot(SPACINGS, values, marker="o", label=f"TX {tx:g}°, RX {rx:g}°")
+                axis.set(xlabel="TX and RX spacing (wavelengths)", ylabel=labels[key], xticks=SPACINGS)
             axis.grid(alpha=0.25)
-        axes[0][0].legend(fontsize=8)
-        fig.suptitle("Fixed 2×2 open-loop SU-MIMO, CPU; medians over fresh repetitions")
+        if not independent_spacing:
+            axes[0][0].legend(fontsize=8)
+        fig.suptitle("Fixed 2×2 open-loop SU-MIMO, CPU; " + (
+            "100k samples: median and seed/repetition range" if independent_spacing else
+            "medians over fresh repetitions"))
         fig.tight_layout()
         fig.savefig(output / filename, dpi=150)
         plt.close(fig)

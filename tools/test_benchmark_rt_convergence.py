@@ -76,6 +76,13 @@ class TestConvergencePolicy(unittest.TestCase):
                 convergence.verdict(broken)
 
     def test_native_seed_export_and_invalid_controls(self):
+        # The optional 5.2.4 mode keeps a small, predefined matrix and existing policy.
+        policy = convergence.plan(independent_spacing=True)
+        self.assertEqual(policy["subphase"], "5.2.4")
+        self.assertEqual(len(policy["sweep"]["cases"]), 5)
+        self.assertEqual(policy["sweep"]["samples_per_src"], 100000)
+        self.assertEqual(policy["spot_checks"]["case_ids"], ("case_03", "case_04"))
+        self.assertEqual(policy["tolerances"], convergence.TOLERANCES)
         with tempfile.TemporaryDirectory(prefix="sumimo-seeds-") as temporary:
             path = Path(temporary)
             for seed in convergence.SEEDS:

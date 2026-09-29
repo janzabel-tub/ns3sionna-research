@@ -3,3 +3,5 @@
 /data/**/*.png
 /data/**/*.svg
 /data/**/*.pdf
+# Phase 5.2.4 measurements and fixtures remain local experiment artifacts.
+/data/phase5_2_independent_spacing/

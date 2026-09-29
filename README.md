@@ -200,6 +200,24 @@ and 2×2, median cache hits stay near 2 µs for 1–64 links; the largest 1024/8
 fixture has a 64.44 MiB wire response and a 127.5 ms median local IPC roundtrip.
 These are descriptive measurements with the ranges and timer limits in the report.
 
+Subphase 5.2.4 reuses the convergence runner for five independent TX/RX spacing
+and azimuth configurations, seeds 42/43/44 and two repetitions. All cases use
+100,000 samples; two selected new-angle cases also use 1,000,000 samples.
+From the ns-3 directory, with an empty output directory:
+
+```shell
+./ns3 build ns3_wifi_sumimo_benchmark sionna-test
+conda run --no-capture-output -n sionna-venv python contrib/sionna/tools/benchmark_rt_convergence.py \
+  --independent-spacing --output=/tmp/sumimo-independent-spacing
+```
+
+The existing tests cover independent array geometry and repeatability. Every new
+trace is checked against independent NumPy SVD/MMSE/MI and link-budget formulas.
+All six paired-seed convergence spot checks passed. Measurements, fixtures and
+plots remain local; `data/phase5_2_independent_spacing/` is ignored by Git.
+The native example accepts `txSpacingLambda` and `rxSpacingLambda` overrides;
+the existing shared `spacingLambda` option remains the default for both arrays.
+
 Usage in HPC cluster
 ============
 

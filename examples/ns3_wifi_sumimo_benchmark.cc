@@ -61,7 +61,8 @@ MatchesPosition(const Position& position, const std::array<double, 3>& expected)
 
 void
 WriteConfiguration(const std::string& output,
-                   double spacingLambda,
+                   double txSpacingLambda,
+                   double rxSpacingLambda,
                    const SionnaMimoOrientation& txOrientation,
                    const SionnaMimoOrientation& rxOrientation)
 {
@@ -69,8 +70,8 @@ WriteConfiguration(const std::string& output,
     configuration.mode = SionnaMimoMode::SU_MIMO_SPATIAL_MULTIPLEXING;
     configuration.txArray.numColumns = 2;
     configuration.rxArray.numColumns = 2;
-    configuration.txArray.horizontalSpacing = spacingLambda;
-    configuration.rxArray.horizontalSpacing = spacingLambda;
+    configuration.txArray.horizontalSpacing = txSpacingLambda;
+    configuration.rxArray.horizontalSpacing = rxSpacingLambda;
     configuration.numTxAntennas = 2;
     configuration.numRxAntennas = 2;
     configuration.maxNss = 2;
@@ -248,6 +249,7 @@ main(int argc, char* argv[])
     std::string input;
     std::string output;
     double spacingLambda = 0.5;
+    std::string txSpacingOverride, rxSpacingOverride;
     uint32_t seed = 42;
     SionnaMimoOrientation txOrientation;
     SionnaMimoOrientation rxOrientation;
@@ -256,6 +258,8 @@ main(int argc, char* argv[])
     cmd.AddValue("input", "Raw ChannelStateResponse protobuf file for analyze", input);
     cmd.AddValue("output", "Raw SimInitMessage file (config) or diagnostic CSV (analyze)", output);
     cmd.AddValue("spacingLambda", "TX/RX horizontal antenna spacing in wavelengths", spacingLambda);
+    cmd.AddValue("txSpacingLambda", "Override TX spacing; otherwise use spacingLambda", txSpacingOverride);
+    cmd.AddValue("rxSpacingLambda", "Override RX spacing; otherwise use spacingLambda", rxSpacingOverride);
     cmd.AddValue("seed", "ns-3 and exported Sionna RT seed (run stays 1)", seed);
     cmd.AddValue("txAzimuth", "TX azimuth in degrees", txOrientation.azimuthDegrees);
     cmd.AddValue("txElevation", "TX elevation in degrees", txOrientation.elevationDegrees);
@@ -273,7 +277,18 @@ main(int argc, char* argv[])
         Require(!output.empty(), "Provide --output=<path>");
         if (action == "config")
         {
-            WriteConfiguration(output, spacingLambda, txOrientation, rxOrientation);
+            const auto spacing = [spacingLambda](const std::string& override) {
+                if (override.empty())
+                {
+                    return spacingLambda;
+                }
+                std::size_t consumed;
+                const double value = std::stod(override, &consumed);
+                Require(consumed == override.size(), "Invalid antenna spacing");
+                return value; // The existing helper validates positive, finite geometry.
+            };
+            WriteConfiguration(output, spacing(txSpacingOverride), spacing(rxSpacingOverride),
+                               txOrientation, rxOrientation);
         }
         else if (action == "analyze")
         {
