@@ -1,0 +1,32 @@
+{
+  "status": "passed",
+  "render_calls": 1,
+  "pages": 70,
+  "expected_pages": 70,
+  "text_markers": [
+    "5.2.2",
+    "5.21",
+    "7.15",
+    "0,038117",
+    "0,007545",
+    "1,852972",
+    "22,8148",
+    "34 von 36",
+    "1000000",
+    "tools/benchmark_rt_convergence.py",
+    "test_benchmark_rt_convergence",
+    "10000/1000000",
+    "0,151796",
+    "6,530119"
+  ],
+  "source_sha256": "add330193f5c95bee2878be943c5fcee701bb72fdfa2dfd00b8551ad15f22233",
+  "pdf_sha256": "728d7b7798dfe8d5b464d6e6cfa0ac21667ca799fc8ce04f040d1a9ecc1cc83e",
+  "inspected_pages": [
+    1,
+    45,
+    65,
+    66
+  ],
+  "date": "2026-09-29",
+  "visual_validation": "passed; title, tolerance/formula and result tables readable without clipping"
+}

@@ -1,0 +1,29 @@
+{
+  "convergence_achieved_in_tested_range": true,
+  "minimum_supported_samples_per_src": 100000,
+  "passed_comparisons": 34,
+  "total_comparisons": 36,
+  "failed_comparisons": [
+    {
+      "case_id": "case_03",
+      "seed": 43,
+      "samples_per_src": 10000,
+      "reference_samples_per_src": 100000,
+      "failed_metrics": [
+        "singular_value_scaled_error",
+        "per_tone_sinr_db"
+      ]
+    },
+    {
+      "case_id": "case_03",
+      "seed": 43,
+      "samples_per_src": 10000,
+      "reference_samples_per_src": 1000000,
+      "failed_metrics": [
+        "singular_value_scaled_error",
+        "per_tone_sinr_db"
+      ]
+    }
+  ],
+  "scope": "four static simple_room 2x2 links, three seeds, stated solver options; 1M is a sampled reference, no asymptotic or PER claim"
+}

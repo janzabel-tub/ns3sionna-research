@@ -1,0 +1,4960 @@
+{
+  "schema_version": 1,
+  "subphase": "5.2.2",
+  "controls": {
+    "scene": "simple_room/simple_room.xml",
+    "run_ns3": 1,
+    "frequency_mhz": 5180,
+    "bandwidth_hz": 20000000.0,
+    "fft_size": 256,
+    "subcarrier_spacing_hz": 78125,
+    "tx_power_dbm_total": 20.0,
+    "temperature_k": 290.0,
+    "noise_figure_db": 7.0,
+    "nss": 2,
+    "precoding": "open_loop",
+    "normalization": "unit_average_pair_power",
+    "rank_relative_tolerance": 1e-12,
+    "effective_sinr": "MI: exp(mean(log1p(SINR)))-1",
+    "tone_selection": "all_256_fft_bins_including_dc_and_guards",
+    "tx_position_m": [
+      3.0,
+      2.0,
+      2.0
+    ],
+    "rx_position_m": [
+      4.0,
+      3.0,
+      1.0
+    ],
+    "tx_pattern": "tr38901",
+    "rx_pattern": "dipole",
+    "polarization": "V",
+    "array_rows": 1,
+    "array_columns": 2,
+    "vertical_spacing_lambda": 0.5,
+    "fixed_coherence_time_ms": 5,
+    "csi_time_ns": 0,
+    "server_mode": "P2P",
+    "max_depth": 3,
+    "synthetic_array": false,
+    "los": true,
+    "specular_reflection": true,
+    "diffuse_reflection": false,
+    "refraction": true,
+    "diffraction": false,
+    "edge_diffraction": false,
+    "diffraction_lit_region": false,
+    "drjit_threads": 1,
+    "repeatability_rtol": 1e-06,
+    "repeatability_atol": 1e-07,
+    "seed_contract": "each seed sets ns-3, SimInitMessage, NumPy and PathSolver; run=1"
+  },
+  "sweep": {
+    "samples_per_src": [
+      10000,
+      100000,
+      1000000
+    ],
+    "seeds": [
+      42,
+      43,
+      44
+    ],
+    "cases": [
+      [
+        "case_03",
+        0.25,
+        90.0,
+        90.0,
+        "weakest median sigma1/sigma0: 0.030958"
+      ],
+      [
+        "case_05",
+        0.5,
+        0.0,
+        90.0,
+        "mixed orientation; median sigma1/sigma0: 0.256484"
+      ],
+      [
+        "case_06",
+        0.5,
+        90.0,
+        0.0,
+        "best median sigma1/sigma0: 0.515959"
+      ],
+      [
+        "case_10",
+        1.0,
+        90.0,
+        0.0,
+        "highest earlier MI efficiency: 39.902643 bit/s/Hz"
+      ]
+    ],
+    "repetitions": 2
+  },
+  "tolerances": {
+    "wideband_loss_db": 0.5,
+    "rank_changed_tones": 0,
+    "singular_value_rtol": 0.05,
+    "singular_value_atol": 1e-07,
+    "per_tone_sinr_db": 1.0,
+    "effective_sinr_db": 0.5,
+    "spectral_efficiency_bps_hz": 0.2,
+    "sinr_linear_floor_for_db": 1e-12
+  },
+  "decision": "all tones, streams, cases and paired seeds must pass; 100k vs 1M establishes stabilization within the tested range; 10k is supported only if all three budget comparisons pass",
+  "defined_before_tracing_utc": "2026-09-29T09:24:15.097818+00:00",
+  "plan_sha256": "632154f134ddf61aad193efa1efed82b858035150380684a4649b94c7a39dbbd",
+  "provenance": {
+    "platform": "Linux-7.0.0-34-generic-x86_64-with-glibc2.39",
+    "python": "3.12.12",
+    "backend": "llvm_ad_mono_polarized",
+    "versions": {
+      "sionna": "2.0.1",
+      "sionna-rt": "2.0.1",
+      "mitsuba": "3.8.0",
+      "drjit": "1.3.1",
+      "numpy": "2.5.2",
+      "torch": "2.9.1+cpu"
+    },
+    "native_executable_sha256": "6effc6203592252e2bd6af19e6fb94b9054cdfebc71aba7d68efeb0a31529092",
+    "source_sha256": {
+      "tools/benchmark_rt_convergence.py": "39faa3cf335779cb99a35de9f258d70e0e2c0f83461b24ba2f11e46baacc8d7c",
+      "tools/benchmark_sumimo.py": "d027386b126e0045198efcfaa013be3ae302cbe912a5c65e729ac44e57574ba2",
+      "tools/test_benchmark_rt_convergence.py": "b2ed094ee89d2c620999fc6e4582d11a957c8497f80f824d5349c11e9fcd4805",
+      "examples/ns3_wifi_sumimo_benchmark.cc": "5227c8f05bf7a903598c0ce9ecd00bdf3ac4d6923aad5f8f5e11b98e2196edb4",
+      "model/ns3sionna/ns3sionna_server.py": "c888fe978d13181042ba80a6014bcdcb6a8b4aa01c8ecfae5b072a4c9223bc54",
+      "model/ns3sionna/mimo_data_contract.py": "c58f8566059cc94378c2fcba8b0da286415550595b22ffcb58c093d5b0b4a9ff",
+      "model/message.proto": "1e6eaf630e1556216a2de7b0fd8352fa86615c419adf9371340214170f4556c5",
+      "model/su-mimo-link-model.cc": "2b95a9a1080043fbf9852c1558cec10c01db1595cf42635b6f6b5d00bb850b16",
+      "model/mimo-channel-matrix.cc": "75b4c292dc7bf2a6fcdfb91b060b6f570a16c3f0397245cae08e7af2bd9454a4",
+      "model/wifi-link-budget.cc": "0f9b859056323465410ee146f5121c3352970b00313b649af7e422e20ec71a28",
+      "model/sionna-propagation-cache.cc": "577499957d21ed8ca96b8f1a5a3d7b33d6d67684e7452c6a1dae92d48acdb697",
+      "helper/sionna-mimo-helper.cc": "e45409d0ddfce4a618380dc813f4da9bfca346c3344fc99b8760d54d94fcb360",
+      "helper/sionna-helper.cc": "8e263c2f9308774c074acfceeede78a76a0471a0066daf04dbd2e65fc335020b",
+      "model/ns3sionna/models/simple_room/meshes/ceiling.mtl": "c74a67bed5e1f8321d6c872173eaff437aa962816316512941a337752b392ec3",
+      "model/ns3sionna/models/simple_room/meshes/ceiling.obj": "6175a37f55f992d3bd4339278f9d7a8139177af5a9c23e827bba9fe33ec06590",
+      "model/ns3sionna/models/simple_room/meshes/floor.mtl": "c74a67bed5e1f8321d6c872173eaff437aa962816316512941a337752b392ec3",
+      "model/ns3sionna/models/simple_room/meshes/floor.obj": "4a7be625a5cbfa37cecac9416638366b98e8ee94a1b74d75b6c7ee55e2a8750c",
+      "model/ns3sionna/models/simple_room/meshes/walls.mtl": "c74a67bed5e1f8321d6c872173eaff437aa962816316512941a337752b392ec3",
+      "model/ns3sionna/models/simple_room/meshes/walls.obj": "ab29a390ea7ec57d1e4ac11fa571986e0ae70d3688e0d9145deedee4b453bc73",
+      "model/ns3sionna/models/simple_room/simple_room.xml": "9b06235c4646065c772df8708d24e89675d5706efac24414e1dccce2a29039ff",
+      "model/ns3sionna/models/simple_room/simple_room_open.xml": "896fb17616daba166f7682305e52ab832267678d482fe6d0d7bf563ec04e479e"
+    }
+  },
+  "validation": {
+    "repeatability": "passed",
+    "geometry_orientation": "passed",
+    "channel_responses_byte_identical_within_seed_budget": true,
+    "fresh_traces": 72
+  },
+  "sweep_seconds": 202.463258923,
+  "convergence": {
+    "convergence_achieved_in_tested_range": true,
+    "minimum_supported_samples_per_src": 100000,
+    "passed_comparisons": 34,
+    "total_comparisons": 36,
+    "failed_comparisons": [
+      {
+        "case_id": "case_03",
+        "seed": 43,
+        "samples_per_src": 10000,
+        "reference_samples_per_src": 100000,
+        "failed_metrics": [
+          "singular_value_scaled_error",
+          "per_tone_sinr_db"
+        ]
+      },
+      {
+        "case_id": "case_03",
+        "seed": 43,
+        "samples_per_src": 10000,
+        "reference_samples_per_src": 1000000,
+        "failed_metrics": [
+          "singular_value_scaled_error",
+          "per_tone_sinr_db"
+        ]
+      }
+    ],
+    "scope": "four static simple_room 2x2 links, three seeds, stated solver options; 1M is a sampled reference, no asymptotic or PER claim"
+  },
+  "configurations": [
+    {
+      "case_id": "case_03",
+      "seed": 42,
+      "selection_reason": "weakest median sigma1/sigma0: 0.030958",
+      "configuration": {
+        "scene_fname": "simple_room/simple_room.xml",
+        "seed": 42,
+        "frequency": 5180,
+        "channel_bw": 20,
+        "fft_size": 256,
+        "subcarrier_spacing": 78125,
+        "mode": 1,
+        "sub_mode": -1,
+        "fixed_coherence_time_ms": 5,
+        "time_evo_model": "position",
+        "nodes": [
+          {
+            "constant_position_model": {
+              "position": {
+                "x": 3.0,
+                "y": 2.0,
+                "z": 2.0
+              }
+            },
+            "orientation": {
+              "azimuth": 90.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            },
+            "id": 0
+          },
+          {
+            "id": 1,
+            "constant_position_model": {
+              "position": {
+                "x": 4.0,
+                "y": 3.0,
+                "z": 1.0
+              }
+            },
+            "orientation": {
+              "azimuth": 90.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            }
+          }
+        ],
+        "tx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.25,
+          "pattern": "tr38901",
+          "polarization": "V"
+        },
+        "rx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.25,
+          "pattern": "dipole",
+          "polarization": "V"
+        }
+      },
+      "configuration_sha256": "8ca3c3760a10bb48e0e6c4af88e3b1a9dd88c71cc0ba5daf9f3fc41e89a6b47d",
+      "traces": [
+        {
+          "samples_per_src": 10000,
+          "repetition": 0,
+          "channel_sha256": "7f04e66a4377c05d43e9837a4dbedf816b18642aeae8536094c255693d28ce40",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 10000,
+          "repetition": 1,
+          "channel_sha256": "7f04e66a4377c05d43e9837a4dbedf816b18642aeae8536094c255693d28ce40",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 100000,
+          "repetition": 0,
+          "channel_sha256": "5e85f4f079d00e3b7cd5752a85b3d4f309162825a581b075cf51060256485f67",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 100000,
+          "repetition": 1,
+          "channel_sha256": "5e85f4f079d00e3b7cd5752a85b3d4f309162825a581b075cf51060256485f67",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 1000000,
+          "repetition": 0,
+          "channel_sha256": "55bf072972314369aaa3f093f4fb5a66ea530f377c50aa1ab4c7feddac7913ea",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 1000000,
+          "repetition": 1,
+          "channel_sha256": "55bf072972314369aaa3f093f4fb5a66ea530f377c50aa1ab4c7feddac7913ea",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "case_03",
+      "seed": 43,
+      "selection_reason": "weakest median sigma1/sigma0: 0.030958",
+      "configuration": {
+        "scene_fname": "simple_room/simple_room.xml",
+        "seed": 43,
+        "frequency": 5180,
+        "channel_bw": 20,
+        "fft_size": 256,
+        "subcarrier_spacing": 78125,
+        "mode": 1,
+        "sub_mode": -1,
+        "fixed_coherence_time_ms": 5,
+        "time_evo_model": "position",
+        "nodes": [
+          {
+            "constant_position_model": {
+              "position": {
+                "x": 3.0,
+                "y": 2.0,
+                "z": 2.0
+              }
+            },
+            "orientation": {
+              "azimuth": 90.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            },
+            "id": 0
+          },
+          {
+            "id": 1,
+            "constant_position_model": {
+              "position": {
+                "x": 4.0,
+                "y": 3.0,
+                "z": 1.0
+              }
+            },
+            "orientation": {
+              "azimuth": 90.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            }
+          }
+        ],
+        "tx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.25,
+          "pattern": "tr38901",
+          "polarization": "V"
+        },
+        "rx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.25,
+          "pattern": "dipole",
+          "polarization": "V"
+        }
+      },
+      "configuration_sha256": "a023da610ba33514a48b9c07efb7aa8ff6925ade5a2380a317aafa0f318456ae",
+      "traces": [
+        {
+          "samples_per_src": 10000,
+          "repetition": 0,
+          "channel_sha256": "bb6ecc224e20495b9d00299a4fb5ca285229d6c222a571f1d01140aba6944dde",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 10000,
+          "repetition": 1,
+          "channel_sha256": "bb6ecc224e20495b9d00299a4fb5ca285229d6c222a571f1d01140aba6944dde",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 100000,
+          "repetition": 0,
+          "channel_sha256": "76dfde70c8b944176c1a2028df8ab20712f22fbcceb0e2f9cc077d579f48cebc",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 100000,
+          "repetition": 1,
+          "channel_sha256": "76dfde70c8b944176c1a2028df8ab20712f22fbcceb0e2f9cc077d579f48cebc",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 1000000,
+          "repetition": 0,
+          "channel_sha256": "f0309a26d77ab4a84cd7d81c23f2ac24585957d77efd288d7201bd5671343de2",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 1000000,
+          "repetition": 1,
+          "channel_sha256": "f0309a26d77ab4a84cd7d81c23f2ac24585957d77efd288d7201bd5671343de2",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "case_03",
+      "seed": 44,
+      "selection_reason": "weakest median sigma1/sigma0: 0.030958",
+      "configuration": {
+        "scene_fname": "simple_room/simple_room.xml",
+        "seed": 44,
+        "frequency": 5180,
+        "channel_bw": 20,
+        "fft_size": 256,
+        "subcarrier_spacing": 78125,
+        "mode": 1,
+        "sub_mode": -1,
+        "fixed_coherence_time_ms": 5,
+        "time_evo_model": "position",
+        "nodes": [
+          {
+            "constant_position_model": {
+              "position": {
+                "x": 3.0,
+                "y": 2.0,
+                "z": 2.0
+              }
+            },
+            "orientation": {
+              "azimuth": 90.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            },
+            "id": 0
+          },
+          {
+            "id": 1,
+            "constant_position_model": {
+              "position": {
+                "x": 4.0,
+                "y": 3.0,
+                "z": 1.0
+              }
+            },
+            "orientation": {
+              "azimuth": 90.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            }
+          }
+        ],
+        "tx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.25,
+          "pattern": "tr38901",
+          "polarization": "V"
+        },
+        "rx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.25,
+          "pattern": "dipole",
+          "polarization": "V"
+        }
+      },
+      "configuration_sha256": "92e6e2074e967888317012aed26cc70fa0d70977afc48c4b80b4cb34e182f6ad",
+      "traces": [
+        {
+          "samples_per_src": 10000,
+          "repetition": 0,
+          "channel_sha256": "3cc78e9d931e0ae8b618c3ae5c1aa49814a0a46f20c75213b477fc749bbea893",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 10000,
+          "repetition": 1,
+          "channel_sha256": "3cc78e9d931e0ae8b618c3ae5c1aa49814a0a46f20c75213b477fc749bbea893",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 100000,
+          "repetition": 0,
+          "channel_sha256": "07b276ada70289ce4ea01c4a3155a4e42469c043d8a9d68ba61674c0e8ea2f34",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 100000,
+          "repetition": 1,
+          "channel_sha256": "07b276ada70289ce4ea01c4a3155a4e42469c043d8a9d68ba61674c0e8ea2f34",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 1000000,
+          "repetition": 0,
+          "channel_sha256": "c7c3ddac4616966bd27689044b8a3817e7001f0fec9fe2fb3ef25e73fa52bfd0",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 1000000,
+          "repetition": 1,
+          "channel_sha256": "c7c3ddac4616966bd27689044b8a3817e7001f0fec9fe2fb3ef25e73fa52bfd0",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.125,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.125,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "case_05",
+      "seed": 42,
+      "selection_reason": "mixed orientation; median sigma1/sigma0: 0.256484",
+      "configuration": {
+        "scene_fname": "simple_room/simple_room.xml",
+        "seed": 42,
+        "frequency": 5180,
+        "channel_bw": 20,
+        "fft_size": 256,
+        "subcarrier_spacing": 78125,
+        "mode": 1,
+        "sub_mode": -1,
+        "fixed_coherence_time_ms": 5,
+        "time_evo_model": "position",
+        "nodes": [
+          {
+            "constant_position_model": {
+              "position": {
+                "x": 3.0,
+                "y": 2.0,
+                "z": 2.0
+              }
+            },
+            "orientation": {
+              "azimuth": 0.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            },
+            "id": 0
+          },
+          {
+            "id": 1,
+            "constant_position_model": {
+              "position": {
+                "x": 4.0,
+                "y": 3.0,
+                "z": 1.0
+              }
+            },
+            "orientation": {
+              "azimuth": 90.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            }
+          }
+        ],
+        "tx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.5,
+          "pattern": "tr38901",
+          "polarization": "V"
+        },
+        "rx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.5,
+          "pattern": "dipole",
+          "polarization": "V"
+        }
+      },
+      "configuration_sha256": "2c32b9d26c5e744690113cbdcbb59f22b314536c1522c3b5644fffca2483bba9",
+      "traces": [
+        {
+          "samples_per_src": 10000,
+          "repetition": 0,
+          "channel_sha256": "63657c89ad3ef091eeec4279ee2cdd617162cbf0a4be281185384333cc21d8cb",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 10000,
+          "repetition": 1,
+          "channel_sha256": "63657c89ad3ef091eeec4279ee2cdd617162cbf0a4be281185384333cc21d8cb",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 100000,
+          "repetition": 0,
+          "channel_sha256": "f43172e6304e624a56e9c2ebe5b7733b941356646b3769bb53552f02bfb7bdaf",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 100000,
+          "repetition": 1,
+          "channel_sha256": "f43172e6304e624a56e9c2ebe5b7733b941356646b3769bb53552f02bfb7bdaf",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 1000000,
+          "repetition": 0,
+          "channel_sha256": "5e2491a515cdcb99160372a3489cbc7a1fc939f17084cff11f3d9399ed712b7d",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 1000000,
+          "repetition": 1,
+          "channel_sha256": "5e2491a515cdcb99160372a3489cbc7a1fc939f17084cff11f3d9399ed712b7d",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "case_05",
+      "seed": 43,
+      "selection_reason": "mixed orientation; median sigma1/sigma0: 0.256484",
+      "configuration": {
+        "scene_fname": "simple_room/simple_room.xml",
+        "seed": 43,
+        "frequency": 5180,
+        "channel_bw": 20,
+        "fft_size": 256,
+        "subcarrier_spacing": 78125,
+        "mode": 1,
+        "sub_mode": -1,
+        "fixed_coherence_time_ms": 5,
+        "time_evo_model": "position",
+        "nodes": [
+          {
+            "constant_position_model": {
+              "position": {
+                "x": 3.0,
+                "y": 2.0,
+                "z": 2.0
+              }
+            },
+            "orientation": {
+              "azimuth": 0.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            },
+            "id": 0
+          },
+          {
+            "id": 1,
+            "constant_position_model": {
+              "position": {
+                "x": 4.0,
+                "y": 3.0,
+                "z": 1.0
+              }
+            },
+            "orientation": {
+              "azimuth": 90.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            }
+          }
+        ],
+        "tx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.5,
+          "pattern": "tr38901",
+          "polarization": "V"
+        },
+        "rx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.5,
+          "pattern": "dipole",
+          "polarization": "V"
+        }
+      },
+      "configuration_sha256": "d2c3f1a2599561ca277f55fc095fb07bc161f36582ad6b8158e161e76bbf1fd4",
+      "traces": [
+        {
+          "samples_per_src": 10000,
+          "repetition": 0,
+          "channel_sha256": "620065349e79d5afb9a31d68da5ae15c4bbb675dab2e6863cbd2c8048a5126e9",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 10000,
+          "repetition": 1,
+          "channel_sha256": "620065349e79d5afb9a31d68da5ae15c4bbb675dab2e6863cbd2c8048a5126e9",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 100000,
+          "repetition": 0,
+          "channel_sha256": "35da74906f395b7d6795d30b53b5cad42b82773f2de5abe854f99120bd93a71a",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 100000,
+          "repetition": 1,
+          "channel_sha256": "35da74906f395b7d6795d30b53b5cad42b82773f2de5abe854f99120bd93a71a",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 1000000,
+          "repetition": 0,
+          "channel_sha256": "0623462f618f441c17d7cb1cb6f87190e72210061eb83db01485757e9907ca54",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 1000000,
+          "repetition": 1,
+          "channel_sha256": "0623462f618f441c17d7cb1cb6f87190e72210061eb83db01485757e9907ca54",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "case_05",
+      "seed": 44,
+      "selection_reason": "mixed orientation; median sigma1/sigma0: 0.256484",
+      "configuration": {
+        "scene_fname": "simple_room/simple_room.xml",
+        "seed": 44,
+        "frequency": 5180,
+        "channel_bw": 20,
+        "fft_size": 256,
+        "subcarrier_spacing": 78125,
+        "mode": 1,
+        "sub_mode": -1,
+        "fixed_coherence_time_ms": 5,
+        "time_evo_model": "position",
+        "nodes": [
+          {
+            "constant_position_model": {
+              "position": {
+                "x": 3.0,
+                "y": 2.0,
+                "z": 2.0
+              }
+            },
+            "orientation": {
+              "azimuth": 0.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            },
+            "id": 0
+          },
+          {
+            "id": 1,
+            "constant_position_model": {
+              "position": {
+                "x": 4.0,
+                "y": 3.0,
+                "z": 1.0
+              }
+            },
+            "orientation": {
+              "azimuth": 90.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            }
+          }
+        ],
+        "tx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.5,
+          "pattern": "tr38901",
+          "polarization": "V"
+        },
+        "rx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.5,
+          "pattern": "dipole",
+          "polarization": "V"
+        }
+      },
+      "configuration_sha256": "6cfe31f2ec0a95f6d9e43f63d4b12d2fb93df68fbe47573dc0d4bfe7db90b12e",
+      "traces": [
+        {
+          "samples_per_src": 10000,
+          "repetition": 0,
+          "channel_sha256": "b5b80281fe9c7b2dedf6d454a647646d772c89cbd9738c8b173b8e1215729b57",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 10000,
+          "repetition": 1,
+          "channel_sha256": "b5b80281fe9c7b2dedf6d454a647646d772c89cbd9738c8b173b8e1215729b57",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 100000,
+          "repetition": 0,
+          "channel_sha256": "feae1de438527a12d2aa88b10973a1a1a0a05bc18f2c4af3f18f460f73b5652d",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 100000,
+          "repetition": 1,
+          "channel_sha256": "feae1de438527a12d2aa88b10973a1a1a0a05bc18f2c4af3f18f460f73b5652d",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 1000000,
+          "repetition": 0,
+          "channel_sha256": "a92b3e85e9a2419b8fa5d1d5c5a2e1e391c3b8e75418a53b4fd54bda4b0621a5",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 1000000,
+          "repetition": 1,
+          "channel_sha256": "a92b3e85e9a2419b8fa5d1d5c5a2e1e391c3b8e75418a53b4fd54bda4b0621a5",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "case_06",
+      "seed": 42,
+      "selection_reason": "best median sigma1/sigma0: 0.515959",
+      "configuration": {
+        "scene_fname": "simple_room/simple_room.xml",
+        "seed": 42,
+        "frequency": 5180,
+        "channel_bw": 20,
+        "fft_size": 256,
+        "subcarrier_spacing": 78125,
+        "mode": 1,
+        "sub_mode": -1,
+        "fixed_coherence_time_ms": 5,
+        "time_evo_model": "position",
+        "nodes": [
+          {
+            "constant_position_model": {
+              "position": {
+                "x": 3.0,
+                "y": 2.0,
+                "z": 2.0
+              }
+            },
+            "orientation": {
+              "azimuth": 90.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            },
+            "id": 0
+          },
+          {
+            "id": 1,
+            "constant_position_model": {
+              "position": {
+                "x": 4.0,
+                "y": 3.0,
+                "z": 1.0
+              }
+            },
+            "orientation": {
+              "azimuth": 0.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            }
+          }
+        ],
+        "tx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.5,
+          "pattern": "tr38901",
+          "polarization": "V"
+        },
+        "rx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.5,
+          "pattern": "dipole",
+          "polarization": "V"
+        }
+      },
+      "configuration_sha256": "493d2c1c7a13f0016cce1544021157b917573fe13b3988c9be04398497307843",
+      "traces": [
+        {
+          "samples_per_src": 10000,
+          "repetition": 0,
+          "channel_sha256": "340767549190b9dbd3e76593ee60228fe9ca52d767cbea6e008df0de4ea071b7",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 10000,
+          "repetition": 1,
+          "channel_sha256": "340767549190b9dbd3e76593ee60228fe9ca52d767cbea6e008df0de4ea071b7",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 100000,
+          "repetition": 0,
+          "channel_sha256": "502d1b67fb2ef0535e8f65996fd3cd7d87481af85caafcb73647e780b311bd74",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 100000,
+          "repetition": 1,
+          "channel_sha256": "502d1b67fb2ef0535e8f65996fd3cd7d87481af85caafcb73647e780b311bd74",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 1000000,
+          "repetition": 0,
+          "channel_sha256": "a54fc4e9a3eade65208bbff87b56de6114baf9b629025812c2a01a1702052b4c",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 1000000,
+          "repetition": 1,
+          "channel_sha256": "a54fc4e9a3eade65208bbff87b56de6114baf9b629025812c2a01a1702052b4c",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "case_06",
+      "seed": 43,
+      "selection_reason": "best median sigma1/sigma0: 0.515959",
+      "configuration": {
+        "scene_fname": "simple_room/simple_room.xml",
+        "seed": 43,
+        "frequency": 5180,
+        "channel_bw": 20,
+        "fft_size": 256,
+        "subcarrier_spacing": 78125,
+        "mode": 1,
+        "sub_mode": -1,
+        "fixed_coherence_time_ms": 5,
+        "time_evo_model": "position",
+        "nodes": [
+          {
+            "constant_position_model": {
+              "position": {
+                "x": 3.0,
+                "y": 2.0,
+                "z": 2.0
+              }
+            },
+            "orientation": {
+              "azimuth": 90.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            },
+            "id": 0
+          },
+          {
+            "id": 1,
+            "constant_position_model": {
+              "position": {
+                "x": 4.0,
+                "y": 3.0,
+                "z": 1.0
+              }
+            },
+            "orientation": {
+              "azimuth": 0.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            }
+          }
+        ],
+        "tx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.5,
+          "pattern": "tr38901",
+          "polarization": "V"
+        },
+        "rx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.5,
+          "pattern": "dipole",
+          "polarization": "V"
+        }
+      },
+      "configuration_sha256": "38c0f1dba04c02af69cb7ecfdba9fb1de9732695b4e9750fba11b2e68aebde24",
+      "traces": [
+        {
+          "samples_per_src": 10000,
+          "repetition": 0,
+          "channel_sha256": "65915cb3bf7093de4aca14fcc68cdbe483b7d9bbceb915548384411a01ff5cf5",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 10000,
+          "repetition": 1,
+          "channel_sha256": "65915cb3bf7093de4aca14fcc68cdbe483b7d9bbceb915548384411a01ff5cf5",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 100000,
+          "repetition": 0,
+          "channel_sha256": "27e734783b2126947947ae25c436241e1f7ae71d9b6466c022b1a1a6befabc2c",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 100000,
+          "repetition": 1,
+          "channel_sha256": "27e734783b2126947947ae25c436241e1f7ae71d9b6466c022b1a1a6befabc2c",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 1000000,
+          "repetition": 0,
+          "channel_sha256": "082fa6fcfd85e1c77eae294f718a813aead76067416e964ccd695739f2302d13",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 1000000,
+          "repetition": 1,
+          "channel_sha256": "082fa6fcfd85e1c77eae294f718a813aead76067416e964ccd695739f2302d13",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "case_06",
+      "seed": 44,
+      "selection_reason": "best median sigma1/sigma0: 0.515959",
+      "configuration": {
+        "scene_fname": "simple_room/simple_room.xml",
+        "seed": 44,
+        "frequency": 5180,
+        "channel_bw": 20,
+        "fft_size": 256,
+        "subcarrier_spacing": 78125,
+        "mode": 1,
+        "sub_mode": -1,
+        "fixed_coherence_time_ms": 5,
+        "time_evo_model": "position",
+        "nodes": [
+          {
+            "constant_position_model": {
+              "position": {
+                "x": 3.0,
+                "y": 2.0,
+                "z": 2.0
+              }
+            },
+            "orientation": {
+              "azimuth": 90.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            },
+            "id": 0
+          },
+          {
+            "id": 1,
+            "constant_position_model": {
+              "position": {
+                "x": 4.0,
+                "y": 3.0,
+                "z": 1.0
+              }
+            },
+            "orientation": {
+              "azimuth": 0.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            }
+          }
+        ],
+        "tx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.5,
+          "pattern": "tr38901",
+          "polarization": "V"
+        },
+        "rx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 0.5,
+          "pattern": "dipole",
+          "polarization": "V"
+        }
+      },
+      "configuration_sha256": "b42164ccd68ad03726c7b3a1da55492e1802a52ed5ec71ca63bf4afa66ed431c",
+      "traces": [
+        {
+          "samples_per_src": 10000,
+          "repetition": 0,
+          "channel_sha256": "4dcfa694d7a83a1bbde82048ea13ce85101a5f8733ab6d1821804f88447bf17a",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 10000,
+          "repetition": 1,
+          "channel_sha256": "4dcfa694d7a83a1bbde82048ea13ce85101a5f8733ab6d1821804f88447bf17a",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 100000,
+          "repetition": 0,
+          "channel_sha256": "e4a7a281e449d87032365cfd66c68f934a4c193ba268af35ca135775d3901a22",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 100000,
+          "repetition": 1,
+          "channel_sha256": "e4a7a281e449d87032365cfd66c68f934a4c193ba268af35ca135775d3901a22",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 1000000,
+          "repetition": 0,
+          "channel_sha256": "177d5ea271eb3d7c0d5a5ac846064e51533a856864db4728dcefada4f685f945",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 1000000,
+          "repetition": 1,
+          "channel_sha256": "177d5ea271eb3d7c0d5a5ac846064e51533a856864db4728dcefada4f685f945",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.25,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.25,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "case_10",
+      "seed": 42,
+      "selection_reason": "highest earlier MI efficiency: 39.902643 bit/s/Hz",
+      "configuration": {
+        "scene_fname": "simple_room/simple_room.xml",
+        "seed": 42,
+        "frequency": 5180,
+        "channel_bw": 20,
+        "fft_size": 256,
+        "subcarrier_spacing": 78125,
+        "mode": 1,
+        "sub_mode": -1,
+        "fixed_coherence_time_ms": 5,
+        "time_evo_model": "position",
+        "nodes": [
+          {
+            "constant_position_model": {
+              "position": {
+                "x": 3.0,
+                "y": 2.0,
+                "z": 2.0
+              }
+            },
+            "orientation": {
+              "azimuth": 90.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            },
+            "id": 0
+          },
+          {
+            "id": 1,
+            "constant_position_model": {
+              "position": {
+                "x": 4.0,
+                "y": 3.0,
+                "z": 1.0
+              }
+            },
+            "orientation": {
+              "azimuth": 0.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            }
+          }
+        ],
+        "tx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 1.0,
+          "pattern": "tr38901",
+          "polarization": "V"
+        },
+        "rx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 1.0,
+          "pattern": "dipole",
+          "polarization": "V"
+        }
+      },
+      "configuration_sha256": "3ca5270db0e507298db9b06e32c02feb5291351fcc2638912930d71c384942b7",
+      "traces": [
+        {
+          "samples_per_src": 10000,
+          "repetition": 0,
+          "channel_sha256": "b1160f85f977732454d15aedda8f85d1455082fa9568105f4c155d1ddf9e6cf6",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 10000,
+          "repetition": 1,
+          "channel_sha256": "b1160f85f977732454d15aedda8f85d1455082fa9568105f4c155d1ddf9e6cf6",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 100000,
+          "repetition": 0,
+          "channel_sha256": "7321a57e957a1cde7ea409c1b51fcc3155d21971302d83782a18dc3fe92bc4bd",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 100000,
+          "repetition": 1,
+          "channel_sha256": "7321a57e957a1cde7ea409c1b51fcc3155d21971302d83782a18dc3fe92bc4bd",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 1000000,
+          "repetition": 0,
+          "channel_sha256": "ed7f5153c278920d750bd0ab517795d36e0c7ca0336d03cce72502d68d6c3a8e",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 1000000,
+          "repetition": 1,
+          "channel_sha256": "ed7f5153c278920d750bd0ab517795d36e0c7ca0336d03cce72502d68d6c3a8e",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "case_10",
+      "seed": 43,
+      "selection_reason": "highest earlier MI efficiency: 39.902643 bit/s/Hz",
+      "configuration": {
+        "scene_fname": "simple_room/simple_room.xml",
+        "seed": 43,
+        "frequency": 5180,
+        "channel_bw": 20,
+        "fft_size": 256,
+        "subcarrier_spacing": 78125,
+        "mode": 1,
+        "sub_mode": -1,
+        "fixed_coherence_time_ms": 5,
+        "time_evo_model": "position",
+        "nodes": [
+          {
+            "constant_position_model": {
+              "position": {
+                "x": 3.0,
+                "y": 2.0,
+                "z": 2.0
+              }
+            },
+            "orientation": {
+              "azimuth": 90.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            },
+            "id": 0
+          },
+          {
+            "id": 1,
+            "constant_position_model": {
+              "position": {
+                "x": 4.0,
+                "y": 3.0,
+                "z": 1.0
+              }
+            },
+            "orientation": {
+              "azimuth": 0.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            }
+          }
+        ],
+        "tx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 1.0,
+          "pattern": "tr38901",
+          "polarization": "V"
+        },
+        "rx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 1.0,
+          "pattern": "dipole",
+          "polarization": "V"
+        }
+      },
+      "configuration_sha256": "168f3cd6c151690730d1f881e818a0ec2905e6173a567ee05a9be4d07b42aa91",
+      "traces": [
+        {
+          "samples_per_src": 10000,
+          "repetition": 0,
+          "channel_sha256": "f17fe6ae906d4c5d4e7975647e250713eae460d8543c333b7b5abc1962de6d79",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 10000,
+          "repetition": 1,
+          "channel_sha256": "f17fe6ae906d4c5d4e7975647e250713eae460d8543c333b7b5abc1962de6d79",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 100000,
+          "repetition": 0,
+          "channel_sha256": "bd8a48ca9876f9e7311bad124b6048af167c67a2af0780c96cdd7d757a6713e3",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 100000,
+          "repetition": 1,
+          "channel_sha256": "bd8a48ca9876f9e7311bad124b6048af167c67a2af0780c96cdd7d757a6713e3",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 1000000,
+          "repetition": 0,
+          "channel_sha256": "a4033adf00eace291cc25555d1cddd8c3cf3b8b64d005bc0ab33e3f32e0b4875",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 1000000,
+          "repetition": 1,
+          "channel_sha256": "a4033adf00eace291cc25555d1cddd8c3cf3b8b64d005bc0ab33e3f32e0b4875",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "case_10",
+      "seed": 44,
+      "selection_reason": "highest earlier MI efficiency: 39.902643 bit/s/Hz",
+      "configuration": {
+        "scene_fname": "simple_room/simple_room.xml",
+        "seed": 44,
+        "frequency": 5180,
+        "channel_bw": 20,
+        "fft_size": 256,
+        "subcarrier_spacing": 78125,
+        "mode": 1,
+        "sub_mode": -1,
+        "fixed_coherence_time_ms": 5,
+        "time_evo_model": "position",
+        "nodes": [
+          {
+            "constant_position_model": {
+              "position": {
+                "x": 3.0,
+                "y": 2.0,
+                "z": 2.0
+              }
+            },
+            "orientation": {
+              "azimuth": 90.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            },
+            "id": 0
+          },
+          {
+            "id": 1,
+            "constant_position_model": {
+              "position": {
+                "x": 4.0,
+                "y": 3.0,
+                "z": 1.0
+              }
+            },
+            "orientation": {
+              "azimuth": 0.0,
+              "elevation": 0.0,
+              "roll": 0.0
+            }
+          }
+        ],
+        "tx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 1.0,
+          "pattern": "tr38901",
+          "polarization": "V"
+        },
+        "rx_array": {
+          "num_rows": 1,
+          "num_cols": 2,
+          "vertical_spacing": 0.5,
+          "horizontal_spacing": 1.0,
+          "pattern": "dipole",
+          "polarization": "V"
+        }
+      },
+      "configuration_sha256": "a554da23c236f8aa8fc7fa9cc38b84a60e23e48326eecda8d698cb7763e59af3",
+      "traces": [
+        {
+          "samples_per_src": 10000,
+          "repetition": 0,
+          "channel_sha256": "752fa489a1c8170774438e511417f9b5eaf88529aa5ebacaf9485264e04f9cb3",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 10000,
+          "repetition": 1,
+          "channel_sha256": "752fa489a1c8170774438e511417f9b5eaf88529aa5ebacaf9485264e04f9cb3",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 100000,
+          "repetition": 0,
+          "channel_sha256": "46b9467745b841261a5d7651949f80b6ef2aeeba2713d4ba1586fe09ba92eff4",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 100000,
+          "repetition": 1,
+          "channel_sha256": "46b9467745b841261a5d7651949f80b6ef2aeeba2713d4ba1586fe09ba92eff4",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 1000000,
+          "repetition": 0,
+          "channel_sha256": "cb42d8ea06f24e939bcf880e418366d763db0e6169f1f81391e698073d33ecc4",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        },
+        {
+          "samples_per_src": 1000000,
+          "repetition": 1,
+          "channel_sha256": "cb42d8ea06f24e939bcf880e418366d763db0e6169f1f81391e698073d33ecc4",
+          "observed_geometry": {
+            "tx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                1.5707963705062866,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                3.0,
+                2.0,
+                2.0
+              ]
+            },
+            "rx": {
+              "array_positions_lambda": [
+                [
+                  0.0,
+                  -0.5,
+                  0.0
+                ],
+                [
+                  0.0,
+                  0.5,
+                  0.0
+                ]
+              ],
+              "orientation_rad": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "position_m": [
+                4.0,
+                3.0,
+                1.0
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

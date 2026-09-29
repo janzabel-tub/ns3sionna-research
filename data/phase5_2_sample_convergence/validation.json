@@ -1,0 +1,282 @@
+{
+  "subphase": "5.2.2",
+  "date": "2026-09-29",
+  "sequential": true,
+  "results": [
+    {
+      "name": "sweep",
+      "command": [
+        "/home/janzabel/miniconda3/envs/sionna-venv/bin/python",
+        "benchmark_rt_convergence.py",
+        "--output=/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/contrib/sionna/data/phase5_2_sample_convergence"
+      ],
+      "cwd": "contrib/sionna/tools",
+      "exit_code": 0,
+      "seconds": 211.50035292799998,
+      "log_sha256": "f224e1a054af5069aa7af25657439d36863a1aaaebae60be980d49cafd2c44c8"
+    },
+    {
+      "name": "convergence_validation",
+      "command": [
+        "/home/janzabel/miniconda3/envs/sionna-venv/bin/python",
+        "-m",
+        "unittest",
+        "-v",
+        "test_benchmark_rt_convergence"
+      ],
+      "cwd": "contrib/sionna/tools",
+      "exit_code": 0,
+      "seconds": 16.60099183400007,
+      "log_sha256": "75745746b489e2d31e3298eaa8771cf54c2f98dec2894e5bb5772a880a7b09fd"
+    },
+    {
+      "name": "spacing_orientation_regression",
+      "command": [
+        "/home/janzabel/miniconda3/envs/sionna-venv/bin/python",
+        "-m",
+        "unittest",
+        "-v",
+        "test_benchmark_sumimo"
+      ],
+      "cwd": "contrib/sionna/tools",
+      "exit_code": 0,
+      "seconds": 8.625782098999935,
+      "log_sha256": "ae727196f9c5228fe7fbf1cf8428fd896bc72c86b9ab00e7f6e296ad7c584c4c"
+    },
+    {
+      "name": "sionna",
+      "command": [
+        "/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/build/utils/ns3.40-test-runner-default",
+        "--suite=sionna",
+        "--verbose"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "seconds": 0.5225312629997916,
+      "log_sha256": "5cf4dde600e4e5b59fd177620af3c2b6f04d4cbf8ef3ade1c60786190114c556"
+    },
+    {
+      "name": "sionna-mimo-csi-feedback",
+      "command": [
+        "/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/build/utils/ns3.40-test-runner-default",
+        "--suite=sionna-mimo-csi-feedback",
+        "--verbose"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "seconds": 0.17063979199997448,
+      "log_sha256": "6ec70f520b40cc13f698d3ee95862330c251aabbdbf30d2f4db70a9e254905bd"
+    },
+    {
+      "name": "dl-mu-mimo-runtime",
+      "command": [
+        "/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/build/utils/ns3.40-test-runner-default",
+        "--suite=dl-mu-mimo-runtime",
+        "--verbose"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "seconds": 0.16010577600013676,
+      "log_sha256": "9bf1b4b3a0c084eb6474b76685caec93f7540d73040d621aecd1effb5b1f3196"
+    },
+    {
+      "name": "dl-mu-mimo-ru",
+      "command": [
+        "/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/build/utils/ns3.40-test-runner-default",
+        "--suite=dl-mu-mimo-ru",
+        "--verbose"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "seconds": 0.1344677720001073,
+      "log_sha256": "8c65334881829354c0a1797a45cae07cb6a530b5111a1da7207e7c673331365c"
+    },
+    {
+      "name": "he-dl-mu-spectrum-ru",
+      "command": [
+        "/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/build/utils/ns3.40-test-runner-default",
+        "--suite=he-dl-mu-spectrum-ru",
+        "--verbose"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "seconds": 0.19010135100006664,
+      "log_sha256": "82fcd3b82240e2e5b0d25a8a0eede03efa44f27998e56e9b047a4f0f480a6ea9"
+    },
+    {
+      "name": "ul-mu-mimo",
+      "command": [
+        "/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/build/utils/ns3.40-test-runner-default",
+        "--suite=ul-mu-mimo",
+        "--verbose"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "seconds": 0.15102147300012803,
+      "log_sha256": "79cfa7008f60ae083606f43876bcb31b5660c9fb4758d59c6414ebd99aee355b"
+    },
+    {
+      "name": "he-ul-mu-mimo-phy-adapter",
+      "command": [
+        "/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/build/utils/ns3.40-test-runner-default",
+        "--suite=he-ul-mu-mimo-phy-adapter",
+        "--verbose"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "seconds": 0.1505820100001074,
+      "log_sha256": "d3e1ea1163317586fbd48c39fdae41e29b2eb38f64825602baaac2f377cb7c19"
+    },
+    {
+      "name": "sionna-example-sumimo-minimal",
+      "command": [
+        "/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/build/utils/ns3.40-test-runner-default",
+        "--suite=sionna-example-sumimo-minimal",
+        "--verbose"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "seconds": 13.266797939000071,
+      "log_sha256": "d3cffa466fcaf7b853ec4c61dba8d5de112b9a5fbaff7d55fe231e20890fcba9"
+    },
+    {
+      "name": "sionna-example-mimo-helper-configuration-negative",
+      "command": [
+        "/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/build/utils/ns3.40-test-runner-default",
+        "--suite=sionna-example-mimo-helper-configuration-negative",
+        "--verbose"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "seconds": 0.5042498650000198,
+      "log_sha256": "4dad0520295f12a01ca499ded1bf9a679d511f039982fc05d37a7f7dd169e336"
+    },
+    {
+      "name": "sionna-example-mimo-helper-runtime-negative",
+      "command": [
+        "/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/build/utils/ns3.40-test-runner-default",
+        "--suite=sionna-example-mimo-helper-runtime-negative",
+        "--verbose"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "seconds": 1.4804243940000106,
+      "log_sha256": "323ee467cb6ee1a145c0bd6eb94287aea3fe79f6cdf5b7d905b0163b043e1c94"
+    },
+    {
+      "name": "sionna-example-sumimo-precoding",
+      "command": [
+        "/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/build/utils/ns3.40-test-runner-default",
+        "--suite=sionna-example-sumimo-precoding",
+        "--verbose"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "seconds": 30.118787327000064,
+      "log_sha256": "e590636babf93846592d6d2ed4ecbc70f699379df490d5f3c5dd05767a96132c"
+    },
+    {
+      "name": "sionna-example-sumimo-precoding-negative",
+      "command": [
+        "/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/build/utils/ns3.40-test-runner-default",
+        "--suite=sionna-example-sumimo-precoding-negative",
+        "--verbose"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "seconds": 0.6208103250000931,
+      "log_sha256": "9c36d20ee5142320e1c5b9cdc2e9e1318601f69d9623b2413512b430c5e63ddc"
+    },
+    {
+      "name": "sionna-example-mumimo",
+      "command": [
+        "/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/build/utils/ns3.40-test-runner-default",
+        "--suite=sionna-example-mumimo",
+        "--verbose"
+      ],
+      "cwd": ".",
+      "exit_code": 0,
+      "seconds": 240.97241556099993,
+      "log_sha256": "5a208e55ee05add22c116b9dd8514efc657c6e38251d008a6d545cb0ea09b380"
+    },
+    {
+      "name": "server_imports",
+      "command": [
+        "/home/janzabel/miniconda3/envs/sionna-venv/bin/python",
+        "tests/test_imports.py"
+      ],
+      "cwd": "contrib/sionna/model/ns3sionna",
+      "exit_code": 0,
+      "seconds": 3.916393765000066,
+      "log_sha256": "7d62b7114284033c8aac6175d881b222f3f325c5fd899b842297b4ec79e38795"
+    },
+    {
+      "name": "server_regressions",
+      "command": [
+        "/home/janzabel/miniconda3/envs/sionna-venv/bin/python",
+        "-m",
+        "unittest",
+        "-v",
+        "tests.test_mimo_data_contract",
+        "tests.test_deterministic_mobility",
+        "tests.test_coherence_time_units",
+        "tests.unit_tests"
+      ],
+      "cwd": "contrib/sionna/model/ns3sionna",
+      "exit_code": 0,
+      "seconds": 196.1606235260001,
+      "log_sha256": "91d2f99777d04eef99722b45499d76c014ba2fa7495d286a6ce829569965eef6"
+    },
+    {
+      "name": "calibration_regression",
+      "command": [
+        "/home/janzabel/miniconda3/envs/sionna-venv/bin/python",
+        "-m",
+        "unittest",
+        "-v",
+        "test_calibrate_eesm"
+      ],
+      "cwd": "contrib/sionna/tools",
+      "exit_code": 0,
+      "seconds": 0.1570760749996225,
+      "log_sha256": "4787cda7830bf6fd85db79a707c9b8617e019b489dd901ec76f4e57f7c72058e"
+    }
+  ],
+  "status": "passed",
+  "build": {
+    "command": [
+      "./ns3",
+      "build",
+      "ns3_wifi_sumimo_benchmark",
+      "sionna-test"
+    ],
+    "cwd": ".",
+    "exit_code": 0,
+    "log_sha256": "919503beaa47f16579d6d27005fce59d2bc615f800a16dfe46b968478272328f",
+    "timing": "not captured; completed before the pre-trace policy checks"
+  },
+  "pre_trace_policy": {
+    "status": "passed",
+    "test_cases": 4,
+    "command": [
+      "/home/janzabel/miniconda3/envs/sionna-venv/bin/python",
+      "-m",
+      "unittest",
+      "-v",
+      "test_benchmark_rt_convergence.TestConvergencePolicy"
+    ],
+    "cwd": "contrib/sionna/tools",
+    "timing": "run before the sweep; also included in the final ten-test suite"
+  },
+  "plot_validation": {
+    "status": "passed",
+    "files": [
+      "channel_comparison.png",
+      "sinr_comparison.png",
+      "runtime_comparison.png",
+      "convergence_comparison.png"
+    ],
+    "generated_and_visually_inspected": true,
+    "versioned": false
+  }
+}

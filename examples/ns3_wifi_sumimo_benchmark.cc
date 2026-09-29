@@ -248,6 +248,7 @@ main(int argc, char* argv[])
     std::string input;
     std::string output;
     double spacingLambda = 0.5;
+    uint32_t seed = 42;
     SionnaMimoOrientation txOrientation;
     SionnaMimoOrientation rxOrientation;
     CommandLine cmd(__FILE__);
@@ -255,6 +256,7 @@ main(int argc, char* argv[])
     cmd.AddValue("input", "Raw ChannelStateResponse protobuf file for analyze", input);
     cmd.AddValue("output", "Raw SimInitMessage file (config) or diagnostic CSV (analyze)", output);
     cmd.AddValue("spacingLambda", "TX/RX horizontal antenna spacing in wavelengths", spacingLambda);
+    cmd.AddValue("seed", "ns-3 and exported Sionna RT seed (run stays 1)", seed);
     cmd.AddValue("txAzimuth", "TX azimuth in degrees", txOrientation.azimuthDegrees);
     cmd.AddValue("txElevation", "TX elevation in degrees", txOrientation.elevationDegrees);
     cmd.AddValue("txRoll", "TX roll in degrees", txOrientation.rollDegrees);
@@ -265,7 +267,8 @@ main(int argc, char* argv[])
 
     try
     {
-        RngSeedManager::SetSeed(42);
+        Require(seed > 0, "Seed must be positive");
+        RngSeedManager::SetSeed(seed);
         RngSeedManager::SetRun(1);
         Require(!output.empty(), "Provide --output=<path>");
         if (action == "config")

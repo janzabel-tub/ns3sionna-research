@@ -70,23 +70,23 @@ def native(binary: Path, **arguments) -> None:
 
 
 def export_configuration(binary: Path, output: Path, spacing: float,
-                         tx_angles=(0.0, 0.0, 0.0), rx_angles=(0.0, 0.0, 0.0)):
-    arguments = dict(action="config", output=output, spacingLambda=spacing)
+                         tx_angles=(0.0, 0.0, 0.0), rx_angles=(0.0, 0.0, 0.0), seed=42):
+    arguments = dict(action="config", output=output, spacingLambda=spacing, seed=seed)
     for endpoint, angles in (("tx", tx_angles), ("rx", rx_angles)):
         arguments.update({endpoint + label: value for label, value in
                           zip(("Azimuth", "Elevation", "Roll"), angles)})
     native(binary, **arguments)
     config = message_pb2.SimInitMessage.FromString(output.read_bytes())
-    validate_configuration(config, spacing, tx_angles, rx_angles)
+    validate_configuration(config, spacing, tx_angles, rx_angles, seed)
     return config
 
 
-def validate_configuration(config, spacing, tx_angles, rx_angles) -> None:
+def validate_configuration(config, spacing, tx_angles, rx_angles, seed=42) -> None:
     """Assert fixed controls on the bytes emitted by the real native helper."""
     assert (config.scene_fname, config.seed, config.frequency, config.channel_bw,
             config.fft_size, config.subcarrier_spacing, config.mode, config.sub_mode,
             config.fixed_coherence_time_ms, config.time_evo_model) == (
-                SCENE, 42, 5180, 20, 256, 78125, 1, -1, 5, "position")
+                SCENE, seed, 5180, 20, 256, 78125, 1, -1, 5, "position")
     assert [node.id for node in config.nodes] == [0, 1]
     for array, pattern in ((config.tx_array, "tr38901"), (config.rx_array, "dipole")):
         assert (array.num_rows, array.num_cols, array.vertical_spacing,
@@ -136,10 +136,15 @@ def observed_geometry(env, config) -> dict:
     return observed
 
 
-def trace(config, env_class):
+def trace(config, env_class, samples_per_src=None):
+    """Fresh CPU trace; an explicit sample budget supports the Phase 5.2.2 sweep."""
+    controls = {**CONTROLS, "samples_per_src": (
+        CONTROLS["samples_per_src"] if samples_per_src is None else samples_per_src)}
+    if not isinstance(controls["samples_per_src"], int) or controls["samples_per_src"] <= 0:
+        raise ValueError("Samples per source must be a positive integer")
     env = env_class(model_folder=str(SERVER / "models"), rt_fast=True,
                     rt_max_parallel_links=1, VERBOSE=False)
-    env.rt_samples_per_src = CONTROLS["samples_per_src"]
+    env.rt_samples_per_src = controls["samples_per_src"]
     init_start = time.perf_counter()
     successful, error = env.init_simulation_env(config)
     if not successful:
@@ -149,7 +154,8 @@ def trace(config, env_class):
         for option in ("max_depth", "synthetic_array", "los", "specular_reflection",
                        "diffuse_reflection", "refraction", "diffraction",
                        "edge_diffraction", "diffraction_lit_region", "samples_per_src"):
-            assert getattr(env, "rt_" + option) == CONTROLS[option]
+            assert getattr(env, "rt_" + option) == controls[option]
+        assert env.my_seed == config.seed
         request = message_pb2.ChannelStateRequest(tx_node=0, rx_node=1, time=0)
         wrapper = message_pb2.Wrapper()
         cfr_start = time.perf_counter()

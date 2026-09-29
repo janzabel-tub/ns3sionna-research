@@ -1,8 +1,8 @@
 # ns3sionna: MIMO-Abstraktionsmodell für IEEE 802.11ax/be
 
-Stand: 28. September 2026, Phase 4 einschließlich Unterphase 4.8 implementiert;
+Stand: 29. September 2026, Phase 4 einschließlich Unterphase 4.8 implementiert;
 Unterphase 5.1 für HE MCS 0/BCC/32 Byte/1x1 anhand von Link-Level-Daten validiert;
-Unterphase 5.2.1 mit reproduzierbarem 2x2-Abstands-/Orientierungsbenchmark implementiert
+Unterphasen 5.2.1/5.2.2 mit reproduzierbarem 2x2-Benchmark und Samplekonvergenz implementiert
 
 Arbeitszweig: feature/su-mimo-minimal
 
@@ -82,6 +82,9 @@ Unterphase 5.2.1 ergänzt einen festen 2x2-Kanalsensitivitätsbenchmark mit
 Abstands-/Orientierungssweep, wiederholbarem CPU-Raytracing und eingefrorenen
 Kanal-/SINR-Referenzen. Die Auswertung bleibt innerhalb des kalibrierungsfreien
 Kanal-/MMSE-/MI-Messvertrags.
+Unterphase 5.2.2 ergänzt gepaarte Seed-/Samplebudgetvergleiche für vier
+repräsentative Konfigurationen mit vorab definierten Toleranzen,
+byteidentischen Wiederholungen und unabhängiger Referenzvalidierung.
 
 ## 2. Reproduzierbare Ausgangsbasis
 
@@ -786,10 +789,32 @@ Dieser Teil berichtet keine absolute PER oder Wi-Fi-Datenrate: die gemessene
 Kalibrierung aus Unterphase 5.1 gilt ausschließlich für die dokumentierte
 1x1-Konfiguration und darf nicht auf 2x2 übertragen werden.
 
+#### Unterphase 5.2.2: Raytracing-Samplekonvergenz (implementiert)
+
+`tools/benchmark_rt_convergence.py` erweitert den bestehenden 2x2-Messvertrag
+um 10000, 100000 und 1000000 Samples je Quelle. Die vorab anhand der
+5.2.1-Referenz ausgewählten Fälle 03, 05, 06 und 10 decken schwache,
+mittlere und gute Konditionierung sowie alle drei Arrayabstände ab.
+Jeder Fall nutzt dieselben Seeds 42, 43 und 44 bei allen Budgets und
+jeweils zwei frische CPU-Raytraces: 72 Läufe insgesamt. Szene, Positionen,
+Arraymuster, Polarisation, Orientierungen, Leistung, Rauschen und sämtliche
+anderen Solveroptionen bleiben je Fall unverändert.
+
+Der Runner schreibt `plan.json` mit festen Toleranzen vor dem ersten Trace.
+`convergence.csv` enthält alle gepaarten Budgetvergleiche; die Entscheidung
+in `convergence.json` verlangt die Einhaltung jedes Kriteriums für jeden
+Ton, Stream, Fall und Seed. Die vollständigen Konfigurationen, Kanalantworten,
+Ton-/Zusammenfassungsmetriken und Laufzeiten liegen in
+`data/phase5_2_sample_convergence/`. Vier Vergleichsplots bleiben lokal und
+unversioniert. Messvertrag und Formeln stehen in Abschnitt 5.21, Ergebnisse
+und automatisierte Validierung in Abschnitt 7.15. PER wird weiterhin nicht
+abgeleitet: die 5.1-Kalibrierung gilt ausschließlich für die dokumentierte
+HE-MCS-0/BCC/32-Byte/1x1-Konfiguration.
+
 #### Weitere Phase-5-Arbeitspakete
 
 - Weitere Teile von Phase 5.2 untersuchen getrennte TX-/RX-Abstände,
-  zusätzliche Winkel, CSI-Alter und die Konvergenz über Raytracing-Samples.
+  zusätzliche Winkel, CSI-Alter und weitere Szenen/Solveroptionen.
 - Cache- und IPC-Speicherbedarf für große $N_\mathrm{sc}$, $N_\mathrm{tx}$ und $N_\mathrm{rx}$ messen.
 - Deterministische Seeds, Ergebnisformate und CI-Matrix für CPU/GPU festlegen.
 
@@ -2657,6 +2682,96 @@ NumPy-SVD und unabhängig invertierter MMSE-Fehlerkovarianz. Diese NumPy-
 Rechnung ist ausschließlich Validierung; die exportierte Linkabstraktion
 stammt aus dem vorhandenen C++-Kern.
 
+### 5.21 Messvertrag und Konvergenzformeln der Unterphase 5.2.2
+
+Die Kontrollen, Normalisierung, MMSE-/MI-/SVD-Formeln und Laufzeitgrenzen
+aus Abschnitt 5.20 bleiben gültig. Nur Samples je Quelle werden variiert;
+die Seedmenge wird über alle Budgets gepaart. Pro Seed setzt der native
+Konfigurationsexport `RngSeedManager::SetSeed(seed)` bei Run 1 und schreibt
+denselben Seed in `SimInitMessage`. Der Server verwendet ihn für NumPy und
+`PathSolver`. Eine Konfigurationsdatei je Fall/Seed wird unverändert für
+alle drei Budgets verwendet. Die neue optionale native `--seed`-Angabe
+hat weiterhin den Default 42; der alte 5.2.1-Export bleibt bytekompatibel.
+`benchmark_sumimo.trace` akzeptiert ein explizites Samplebudget, ohne globale
+Kontrollen oder Serverdefaults zu verändern. Die Linkabstraktion verbleibt
+vollständig im bestehenden nativen ns-3-Programm.
+
+Die Fallauswahl beruht ausschließlich auf dem früheren 100000-Sample-Lauf
+mit Seed 42; die neuen Ergebnisse beeinflussen Auswahl und Toleranzen nicht:
+
+| Fall | Abstand / Lambda | TX/RX-Azimut / Grad | Auswahlgrund aus 5.2.1 |
+| --- | --- | --- | --- |
+| 03 | 0,25 | 90/90 | kleinstes medianes sigma1/sigma0: 0,030958 |
+| 05 | 0,5 | 0/90 | gemischte Orientierung, Verhältnis 0,256484 |
+| 06 | 0,5 | 90/0 | größtes medianes sigma1/sigma0: 0,515959 |
+| 10 | 1 | 90/0 | höchste MI-Effizienz: 39,902643 bit/s/Hz |
+
+Vor dem ersten Raytrace wurden folgende technische Toleranzen festgelegt
+und zusammen mit Zeitstempel in `plan.json` exportiert. Sie sind praktische
+Stabilitätskriterien, keine aus PER abgeleiteten Unsicherheitsgrenzen:
+
+| Metrik | Kriterium für gleiches Fall-/Seed-Paar |
+| --- | --- |
+| Wideband-Verlust | absolute Differenz höchstens 0,5 dB |
+| Numerischer Rang | identischer Rang an allen 256 Tönen |
+| Beide Singularwerte | höchstens 5 Prozent relativ plus 1e-7 absolut, an jedem Ton |
+| Post-MMSE-Stream-SINR | größte dB-Differenz über Töne/Streams höchstens 1 dB |
+| MI-Effective-SINR | größte dB-Differenz über beide Streams höchstens 0,5 dB |
+| MI-Effizienz | absolute Differenz höchstens 0,2 bit/s/Hz |
+
+Für Budget b und größeres Referenzbudget q bei gleichem Seed gilt mit
+den normalisierten Singularwerten aus Abschnitt 5.20
+
+\[
+  D_\sigma(b,q)=\max_{k,i}
+    \frac{|\sigma_i^{(b)}[k]-\sigma_i^{(q)}[k]|}
+    {10^{-7}+0{,}05|\sigma_i^{(q)}[k]|}\leq1.
+\]
+
+Die relative Toleranz bezieht sich auf q; der absolute Term hält Nullmoden
+definiert. Für SINR-Differenzen verwendet die Auswertung
+
+\[
+  g(x)=10\log_{10}(\max(x,10^{-12})),\qquad
+  D_\gamma(b,q)=\max_{k,s}|g(\gamma_s^{(b)}[k])-g(\gamma_s^{(q)}[k])|,
+\]
+
+\[
+  D_\mathrm{MI}(b,q)=\max_s|g(\gamma_{\mathrm{MI},s}^{(b)})
+    -g(\gamma_{\mathrm{MI},s}^{(q)})|,\quad
+  D_\eta(b,q)=|\eta^{(b)}-\eta^{(q)}|.
+\]
+
+Der Floor entspricht -120 dB und dient ausschließlich dem Vergleich
+verschwindender SINRs; die exportierten nativen SINRs bleiben unverändert.
+Es werden 10000/100000, 100000/1000000 und 10000/1000000 verglichen:
+36 Zeilen für vier Fälle und drei Seeds. Ein Paar besteht nur, wenn alle
+sechs Kriterien erfüllt sind. Der globale Konvergenzbefund verlangt alle
+zwölf 100000/1000000-Paare. 10000 Samples werden nur dann als ausreichend
+ausgewiesen, wenn zusätzlich beide Vergleiche mit 10000 für alle Paare
+bestehen. Andernfalls sind bei bestandenem oberen Schritt 100000 Samples
+das kleinste unterstützte Budget. Wenn dieser Schritt scheitert, wird kein
+ausreichendes Budget angegeben; 1000000 wird nicht tautologisch als
+konvergiert bezeichnet.
+
+Verglichen werden gepaarte Seeds und sämtliche Tonwerte, keine nur über
+Seeds gemittelten Singularwerte oder SINRs. Die Plots zeigen zusätzlich
+Median und Min-/Max-Spanne über Seeds und Wiederholungen. Laufzeiten sind
+separat exportierte Wanduhrdiagnosen und kein Konvergenzkriterium.
+`plan.json` und `manifest.json` dokumentieren Solveroptionen, feste Kontrollen,
+Seed-/Budgetmatrix und Toleranzen. Das Manifest enthält beobachtete reale
+Array-/Radio-Geometrie und SHA-256-Hashes der Konfigurationen, Kanalantworten,
+Szenendateien, relevanten Quellen und nativen Binärdatei.
+
+1000000 Samples sind eine endliche numerische Referenz. Der Befund ist auf
+die vier statischen Links dieser Szene, drei Seeds, Tiefe 3 und die
+dokumentierten aktivierten Mechanismen begrenzt. Ein Plateau belegt weder
+asymptotische Konvergenz noch Vollständigkeit aller physikalischen Pfade.
+Diffuse Reflexion, Diffraktion und andere Szenen werden nicht erfasst.
+Die 256 FFT-Bins einschließlich DC/Guards und gaußsche MI-Effizienz bleiben
+derselbe Kanalvergleich wie in 5.2.1; daraus entsteht keine 2x2-PER- oder
+Wi-Fi-Durchsatzkalibrierung.
+
 ## 6. High-Level-API-Vertrag bis Unterphase 4.8
 
 ### 6.1 Typen, Besitz und Defaults
@@ -3786,8 +3901,144 @@ verwenden standardmäßig die versionierten Referenzen und lassen sich ohne
 externen Server reproduzieren; die vier tatsächlichen Raytracing-Aufrufe
 der Geometrie-/Referenztests benötigen das dokumentierte CPU-Environment.
 Der erste Teil von Phase 5.2 ist damit abgeschlossen. Zusätzliche Winkel,
-getrennte TX-/RX-Abstände, CSI-Alter, Samplekonvergenz und Cache-/IPC-Skalierung
-bleiben weitere Arbeitspakete. Eine 2x2-PER-Kalibrierung wurde nicht abgeleitet.
+getrennte TX-/RX-Abstände, CSI-Alter und Cache-/IPC-Skalierung bleiben weitere
+Arbeitspakete. Die Samplekonvergenz ergänzt Unterphase 5.2.2 in Abschnitt 7.15.
+Eine 2x2-PER-Kalibrierung wurde nicht abgeleitet.
+
+### 7.15 CPU-Samplekonvergenz und Validierung der Unterphase 5.2.2
+
+Der vorab festgelegte Sweep wurde am 29. September 2026 auf derselben
+CPU-/LLVM-Plattform wie 5.2.1 ausgeführt. Die 72 frischen Traces lieferten
+innerhalb jedes Fall-/Seed-/Budgetpaares byteidentische Kanalantworten.
+Zwischen verschiedenen Seeds wird diese Identität nicht verlangt.
+Die Referenz enthält zwölf vollständige Helperkonfigurationen, 72 rohe
+Kanalantworten, 72 Zusammenfassungszeilen, 18432 Tonzeilen und 36
+gepaarte Konvergenzvergleiche. Alle Töne behalten numerischen Rang zwei.
+
+**Konvergenz ist für die geprüfte Matrix bei 100000 Samples je Quelle
+innerhalb der vorab definierten Toleranzen erreicht.** Alle zwölf
+100000/1000000-Fall-/Seedpaare bestehen sämtliche Kriterien. 10000 Samples
+sind für die gesamte Matrix nicht ausreichend: Fall 03 mit Seed 43
+scheitert gegen beide höheren Budgets an Singularwert- und Ton-SINR-Toleranz.
+Insgesamt bestehen 34 von 36 Vergleichen. Die übrigen 10000-Paare bestehen;
+das globale Urteil wird durch den schwachen Kanal bestimmt.
+
+Die folgenden Werte sind die größten Fehler über alle vier Fälle und drei
+gepaarten Seeds. Der Singularwertfehler ist gemäß Abschnitt 5.21 bereits
+durch seine relative/absolute Toleranz geteilt; sein Grenzwert ist eins.
+Bei Rang bedeutet null, dass kein Ton seinen Rang ändert.
+
+| Vergleich b/q | Verlust / dB | Rangänderungen | D_sigma | Ton-SINR / dB | MI-SINR / dB | MI / bit/s/Hz | Bestanden |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 10000/100000 | 0,067268 | 0 | 4,554496 | 1,849055 | 0,276911 | 0,169142 | 11/12 |
+| 100000/1000000 | 0,000574 | 0 | 0,084528 | 0,038117 | 0,007545 | 0,004979 | 12/12 |
+| 10000/1000000 | 0,067264 | 0 | 4,562569 | 1,852972 | 0,276811 | 0,169080 | 11/12 |
+
+Beim fehlschlagenden Fall 03/Seed 43 hat der schwache Singularwert am
+Tonindex 0 (-10 MHz) bei 10000 Samples den Wert 0,02895517 und bei
+1000000 den Wert 0,02357629: 22,8148 Prozent relative Differenz. Der
+numerische Rang bleibt trotzdem zwei. Auch effektive SINR und MI-Effizienz
+liegen innerhalb ihrer Grenzen. Ein Vergleich nur von Wideband-Verlust,
+Rang oder effektiver SINR hätte daher die Ton-/Modeninstabilität übersehen.
+
+Die nächste Tabelle zeigt Mediane der exportierten Laufzusammenfassungen
+über Seeds und Wiederholungen. sigma0/sigma1 sind je Lauf zunächst die
+Mediane über alle Töne; MI-SINR ist in dB angegeben. Die vollständigen
+einzelnen Ton-/Stream-/Seedwerte stehen in `tones.csv` und `summary.csv`.
+
+| Fall | Samples | Verlust / dB | sigma0/sigma1 | MI-SINR 0/1 / dB | MI / bit/s/Hz |
+| --- | --- | --- | --- | --- | --- |
+| 03 | 10000 | 49,948140 | 1,996718/0,060352 | 39,044913/38,469264 | 25,750037 |
+| 03 | 100000 | 49,965776 | 1,995746/0,061211 | 39,188952/38,617453 | 25,847100 |
+| 03 | 1000000 | 49,965775 | 1,995747/0,061213 | 39,189057/38,617575 | 25,847176 |
+| 05 | 10000 | 50,516401 | 1,980547/0,503382 | 56,979714/57,376811 | 37,988421 |
+| 05 | 100000 | 50,490308 | 1,980246/0,510831 | 57,089710/57,459474 | 38,052421 |
+| 05 | 1000000 | 50,490313 | 1,980243/0,510846 | 57,089832/57,459695 | 38,052535 |
+| 06 | 10000 | 55,828542 | 1,712816/0,890614 | 55,245325/56,493283 | 37,118770 |
+| 06 | 100000 | 55,848764 | 1,713904/0,884302 | 55,201884/56,402762 | 37,074269 |
+| 06 | 1000000 | 55,848763 | 1,713903/0,884302 | 55,201889/56,402764 | 37,074271 |
+| 10 | 10000 | 51,711566 | 1,788855/0,872923 | 60,018006/60,095267 | 39,900769 |
+| 10 | 100000 | 51,709226 | 1,789760/0,872812 | 60,024357/60,094553 | 39,902638 |
+| 10 | 1000000 | 51,709224 | 1,789760/0,872813 | 60,024363/60,094549 | 39,902642 |
+
+Zusätzlich beträgt die größte innerhalb eines Falls beobachtete Seedspanne
+der effektiven Stream-SINR 0,464537 dB bei 10000, 0,007693 dB bei 100000
+und 0,000288 dB bei 1000000 Samples. Diese deskriptiven Spannen sind
+keine Konfidenzintervalle aus drei Seeds und kein Ersatz für die gepaarte
+Worst-Tone-Entscheidung.
+
+Die Wanduhrzeiten je Budget über alle 24 zugehörigen Läufe lauten:
+
+| Samples | Init-Median / ms | CFR-Median / s | CFR-Min/Max / s | Native Analyse / ms |
+| --- | --- | --- | --- | --- |
+| 10000 | 3,543 | 0,151796 | 0,122829/2,069792 | 0,725 |
+| 100000 | 2,774 | 0,736202 | 0,698936/1,486344 | 0,661 |
+| 1000000 | 2,670 | 6,530119 | 6,301047/11,274462 | 0,687 |
+
+Der Median des nativen Prozessaufrufs einschließlich CSV-Ausgabe liegt je
+Budget bei etwa 32 ms. Das dokumentierte `sweep_seconds` beträgt 202,463 s,
+ohne Import und Plot-/Manifestausgabe; der gesamte Runnerprozess benötigt
+211,500 s. CFR-Zeiten enthalten Raytracing, CFR-Aufbau und gegebenenfalls
+JIT-Aufwand gemäß Abschnitt 5.20. Reihenfolge, JIT und Systemlast machen
+diese Messung zu einer Laufzeitdiagnose und nicht zu unabhängigen
+Performance-Stichproben. Der etwa 8,9-fache CFR-Median für 1000000 gegenüber
+100000 Samples steht hier einer bereits bestandenen Stabilitätsprüfung
+bei 100000 gegenüber; daraus folgt keine allgemeine Budgetempfehlung für
+andere Szenen oder Solveroptionen.
+
+Der Runner erzeugte die vier lokal geprüften Vergleichsplots
+`channel_comparison.png`, `sinr_comparison.png`, `runtime_comparison.png`
+und `convergence_comparison.png`. Der letzte Plot zeigt pro Fall die
+schlechteste gepaarte Seedabweichung gegen 1000000, geteilt durch die
+jeweilige Toleranz. Die horizontale Linie eins macht die beiden
+verletzten 10000-Kriterien sichtbar. Plotdateien bleiben gemäß den
+bestehenden Ignore-Regeln unversioniert.
+
+Die automatisierten Ergebnisse und Regressionen werden zusammen mit
+Befehlen, Exitcodes, Wanduhrzeiten und Log-Hashes in
+`data/phase5_2_sample_convergence/validation.json` festgehalten.
+`test_benchmark_rt_convergence` enthält zehn Prüfungen: einzelne
+Grenzwertverletzungen einschließlich eines einzelnen schlechten Tons,
+Nullmoden-/SINR-Floor, ungültige Vergleichsmatrizen, vollständige fixe
+Kontrollen, reale Array-/Radio-Geometrie, Exporthashes, byteidentische
+Wiederholungen, unabhängige NumPy-SVD-/MMSE-/MI-/Linkbudgetreferenzen für
+sämtliche 72 Antworten, Neuberechnung des gesamten Urteils und nativen
+Replay der 36 eindeutigen Kanäle. Drei frische Traces in einem separaten
+Testprozess prüfen alle drei Budgets und Seeds. Die vier früheren
+100000/Seed-42-Kanäle stimmen bytegenau mit der 5.2.1-Referenz überein.
+
+Die abschließende sequenzielle Validierung war vollständig erfolgreich:
+
+- Der gezielte Build von `ns3_wifi_sumimo_benchmark` und `sionna-test`
+  bestand. Vier Policyprüfungen wurden bereits vor dem Sweep ausgeführt.
+- `python -m unittest -v test_benchmark_rt_convergence`: zehn Fälle
+  bestanden in 15,952 s (16,601 s einschließlich Prozessstart).
+- Die elf bestehenden `test_benchmark_sumimo`-Fälle bestanden in 8,088 s;
+  damit sind Defaultseed, Defaultbudget und alle früheren Referenzen erhalten.
+- Die sieben nativen Suites `sionna` (38 Fälle),
+  `sionna-mimo-csi-feedback`, `dl-mu-mimo-runtime`, `dl-mu-mimo-ru`,
+  `he-dl-mu-spectrum-ru`, `ul-mu-mimo` und
+  `he-ul-mu-mimo-phy-adapter` bestanden.
+- Alle sechs ExampleAsTest-Suites für SU-Minimal, Helper-Konfiguration,
+  Helper-Laufzeit, SU-Precoding, Precoding-Negativfälle und MU-MIMO bestanden;
+  der MU-Prozess benötigte 240,972 s.
+- Server-Importcheck und alle 19 Python-/CPU-Serverregressionen für
+  Datenvertrag, deterministische Mobilität, Kohärenzzeit und reale
+  1x1-/2x2-CFR bestanden. Die Serversuite benötigte 192,917 s Testzeit
+  (196,161 s einschließlich Prozessstart).
+- Die acht `test_calibrate_eesm`-Regressionen bestanden.
+- Alle 21 gespeicherten Quell-/Szenenhashes stimmen mit der finalen
+  Implementierung überein; alle vier Plotdateien wurden visuell geprüft.
+- `git diff --check` war ohne Befund. Nach der finalen Dokumentationsänderung
+  wurde das Modell-PDF genau einmal erzeugt und durch Seitenzahl,
+  vollständige Textextraktion, neue Ergebnis-/Formelmarker und Sichtprüfung
+  validiert. Die Hashes und Seitennachweise stehen in
+  `data/phase5_2_sample_convergence/pdf_validation.json`.
+
+Der obere Budgetschritt hat damit für diese vorab fixierte Testmatrix ein
+Stabilitätsplateau erreicht. Das größte Budget bleibt eine endliche
+Referenz. Eine 2x2-PER-Kalibrierung oder asymptotische Konvergenzaussage
+wird aus diesen Daten nicht abgeleitet.
 
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 
@@ -3945,6 +4196,24 @@ vollständige Ausgabe überprüft. Ein einzelner eingefrorener realer Kanal
 kann vom ns-3-Verzeichnis aus ohne Raytracing erneut ausgewertet werden:
 
     ./ns3 run 'ns3_wifi_sumimo_benchmark --action=analyze --input=contrib/sionna/data/phase5_2_spacing_orientation/case_00/channel_00.pb --output=/tmp/sumimo-replay.csv'
+
+Reproduzierbare Phase-5.2.2-Samplekonvergenz, wieder vom ns-3-Verzeichnis
+aus mit leerem Ausgabeverzeichnis:
+
+    ./ns3 build ns3_wifi_sumimo_benchmark sionna-test
+    conda run --no-capture-output -n sionna-venv python \
+      contrib/sionna/tools/benchmark_rt_convergence.py \
+      --output=/tmp/sumimo-sample-convergence
+    cd contrib/sionna/tools
+    conda run --no-capture-output -n sionna-venv python \
+      -m unittest -v test_benchmark_rt_convergence
+
+Die neue Testsuite verwendet standardmäßig die versionierte 5.2.2-CPU-Referenz;
+`SUMIMO_CONVERGENCE_RESULTS=/tmp/sumimo-sample-convergence` prüft eine neue
+vollständige Ausgabe. Der Runner exportiert zwei frische Traces pro
+Fall/Seed/Budget, bewertet gepaarte Seeds und erzeugt vier unversionierte
+Vergleichsplots. Der bestehende 5.2.1-Runner bleibt mit seinen Defaultkontrollen
+unverändert nutzbar.
 
 Python-Vertrag und Server vom Verzeichnis contrib/sionna/model/ns3sionna:
 

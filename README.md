@@ -146,6 +146,31 @@ Only channel/MMSE/MI metrics are reported: the documented PER calibration covers
 HE MCS 0/BCC/32 bytes/1×1. See [the model document](./ns3sionna_mimo_model.md)
 for fixed controls, formulas, results, and scope.
 
+Subphase 5.2.2 checks sample convergence for representative cases 03, 05, 06
+and 10 from that benchmark. It pairs seeds 42/43/44 across 10,000, 100,000 and
+1,000,000 samples per source, with two fresh traces for every case/seed/budget.
+The runner exports its convergence policy before tracing, complete configurations,
+replayable channels, per-tone and summary metrics, runtime, and the verdict.
+From the ns-3 directory, using an empty output directory:
+
+```shell
+./ns3 build ns3_wifi_sumimo_benchmark sionna-test
+conda run --no-capture-output -n sionna-venv python contrib/sionna/tools/benchmark_rt_convergence.py \
+  --output=/tmp/sumimo-sample-convergence
+cd contrib/sionna/tools
+conda run --no-capture-output -n sionna-venv python -m unittest -v test_benchmark_rt_convergence
+```
+
+Tests default to the checked-in `data/phase5_2_sample_convergence/` CPU reference;
+set `SUMIMO_CONVERGENCE_RESULTS` to validate a different complete export.
+The four generated PNG comparison plots stay local under the existing ignore
+rules. The [model document](./ns3sionna_mimo_model.md) gives the tolerances,
+paired-seed formulas, measured results and finite-reference limits. The scope
+remains channel/MMSE/MI diagnostics; the 1×1 PER calibration is not applied to 2×2.
+In the checked-in reference, all 12 case/seed pairs pass at 100,000 against
+1,000,000 samples. The 10,000 budget fails for case 03/seed 43 on singular values
+and per-tone SINR, making 100,000 the smallest supported budget for this matrix.
+
 Usage in HPC cluster
 ============
 

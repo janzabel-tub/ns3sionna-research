@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "subphase": "5.2.2",
+  "controls": {
+    "scene": "simple_room/simple_room.xml",
+    "run_ns3": 1,
+    "frequency_mhz": 5180,
+    "bandwidth_hz": 20000000.0,
+    "fft_size": 256,
+    "subcarrier_spacing_hz": 78125,
+    "tx_power_dbm_total": 20.0,
+    "temperature_k": 290.0,
+    "noise_figure_db": 7.0,
+    "nss": 2,
+    "precoding": "open_loop",
+    "normalization": "unit_average_pair_power",
+    "rank_relative_tolerance": 1e-12,
+    "effective_sinr": "MI: exp(mean(log1p(SINR)))-1",
+    "tone_selection": "all_256_fft_bins_including_dc_and_guards",
+    "tx_position_m": [
+      3.0,
+      2.0,
+      2.0
+    ],
+    "rx_position_m": [
+      4.0,
+      3.0,
+      1.0
+    ],
+    "tx_pattern": "tr38901",
+    "rx_pattern": "dipole",
+    "polarization": "V",
+    "array_rows": 1,
+    "array_columns": 2,
+    "vertical_spacing_lambda": 0.5,
+    "fixed_coherence_time_ms": 5,
+    "csi_time_ns": 0,
+    "server_mode": "P2P",
+    "max_depth": 3,
+    "synthetic_array": false,
+    "los": true,
+    "specular_reflection": true,
+    "diffuse_reflection": false,
+    "refraction": true,
+    "diffraction": false,
+    "edge_diffraction": false,
+    "diffraction_lit_region": false,
+    "drjit_threads": 1,
+    "repeatability_rtol": 1e-06,
+    "repeatability_atol": 1e-07,
+    "seed_contract": "each seed sets ns-3, SimInitMessage, NumPy and PathSolver; run=1"
+  },
+  "sweep": {
+    "samples_per_src": [
+      10000,
+      100000,
+      1000000
+    ],
+    "seeds": [
+      42,
+      43,
+      44
+    ],
+    "cases": [
+      [
+        "case_03",
+        0.25,
+        90.0,
+        90.0,
+        "weakest median sigma1/sigma0: 0.030958"
+      ],
+      [
+        "case_05",
+        0.5,
+        0.0,
+        90.0,
+        "mixed orientation; median sigma1/sigma0: 0.256484"
+      ],
+      [
+        "case_06",
+        0.5,
+        90.0,
+        0.0,
+        "best median sigma1/sigma0: 0.515959"
+      ],
+      [
+        "case_10",
+        1.0,
+        90.0,
+        0.0,
+        "highest earlier MI efficiency: 39.902643 bit/s/Hz"
+      ]
+    ],
+    "repetitions": 2
+  },
+  "tolerances": {
+    "wideband_loss_db": 0.5,
+    "rank_changed_tones": 0,
+    "singular_value_rtol": 0.05,
+    "singular_value_atol": 1e-07,
+    "per_tone_sinr_db": 1.0,
+    "effective_sinr_db": 0.5,
+    "spectral_efficiency_bps_hz": 0.2,
+    "sinr_linear_floor_for_db": 1e-12
+  },
+  "decision": "all tones, streams, cases and paired seeds must pass; 100k vs 1M establishes stabilization within the tested range; 10k is supported only if all three budget comparisons pass",
+  "defined_before_tracing_utc": "2026-09-29T09:24:15.097818+00:00"
+}
