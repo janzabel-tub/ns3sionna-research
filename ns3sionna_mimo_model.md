@@ -2,7 +2,7 @@
 
 Stand: 29. September 2026, Phase 4 einschließlich Unterphase 4.8 implementiert;
 Unterphase 5.1 für HE MCS 0/BCC/32 Byte/1x1 anhand von Link-Level-Daten validiert;
-Unterphasen 5.2.1 bis 5.2.4 mit Kanal-, Konvergenz-, Cache-/IPC- und getrennten Arrayabständen implementiert
+Unterphasen 5.2.1 bis 5.2.5 mit Kanal-, Konvergenz-, Cache-/IPC-, Arrayabstands- und CSI-Alterungssensitivität implementiert
 
 Arbeitszweig: feature/su-mimo-minimal
 
@@ -89,6 +89,8 @@ Unterphase 5.2.3 misst den bestehenden Cache und tatsächliche lokale
 Prozess-IPC mit eingefrorenen Kanalantworten, getrennt von Raytracing.
 Unterphase 5.2.4 ergänzt getrennte TX-/RX-Abstände und ausgewählte Azimute
 im bestehenden Benchmark. Neue Messartefakte bleiben lokal und unversioniert.
+Unterphase 5.2.5 vergleicht aktuelles und verzögertes Gleichleistungs-SVD-CSI
+auf denselben explizit entwickelten Sendekanälen zweier repräsentativer Links.
 
 ## 2. Reproduzierbare Ausgangsbasis
 
@@ -854,10 +856,23 @@ Vorhandene Tests werden erweitert; zusätzliche Testsuites, Fixturedateien
 oder Messergebnisse werden nicht eingecheckt. Abschnitt 5.23 beschreibt
 den Messvertrag, Abschnitt 7.17 die Ergebnisse.
 
+#### Unterphase 5.2.5: CSI-Alterungssensitivität (implementiert)
+
+`benchmark_rt_convergence.py --csi-aging` verwendet die bestehenden Fälle
+03/06 mit Seeds 42/43/44, 100000 Samples und gepaarten 1000000-Samplechecks.
+Für vier vorab definierte Alter werden frisches und verzögertes,
+unquantisiertes Gleichleistungs-SVD verglichen. Die explizite analytische
+TX-Basisrotation entwickelt die initiale RT-CFR bei fester Geometrie;
+Zeitstempel allein verändern den Kanal nicht. Die vorhandenen
+MimoCsiAgingModel-/SVD-/MMSE-APIs übernehmen Auswahl und Linkrechnung,
+perfekte RX-CSI gilt für den aktuellen Sendekanal. Abschnitt 5.24 beschreibt
+Formeln und Messvertrag, Abschnitt 7.18 Ergebnisse und Grenzen. Vorhandene
+Tools/Tests werden erweitert; neue Datensätze und Fixtures bleiben lokal.
+
 #### Weitere Phase-5-Arbeitspakete
 
-- Als nächster kleiner Teil von Phase 5.2 bleibt die Untersuchung des
-  CSI-Alters. Weitere Winkel, Szenen und Solveroptionen sind Erweiterungen.
+- Physikalische CSI-Alterung mit dokumentierter Bewegung/Doppler, weiteren
+  Winkeln, Szenen und Solveroptionen untersuchen.
 - Cache-/IPC-Skalierung mit realen Serverberechnungen, weiteren Transporten
   und längeren zeitlichen Snapshotfolgen erweitern.
 - Deterministische Seeds, Ergebnisformate und CI-Matrix für CPU/GPU festlegen.
@@ -3013,6 +3028,132 @@ ausgewählten Fälle und Seeds, nicht die Konvergenz der gesamten Matrix.
 PER und Wi-Fi-Durchsatz bleiben wegen der ausschließlich dokumentierten
 1x1-Kalibrierung außerhalb dieses Messvertrags.
 
+### 5.24 Messvertrag und Formeln der Unterphase 5.2.5
+
+Die Auswahl verwendet ausschließlich die früheren 5.2.1-Ergebnisse:
+Fall 03 hat das schwächste mediane zweite Eigenmodeverhältnis (0,030958),
+Fall 06 das stärkste (0,515959). Die kleine Matrix wurde vor dem ersten
+Trace zusammen mit Toleranzen und UTC-Zeitstempel in `plan.json` fixiert:
+
+| Fall | Gemeinsamer Abstand / lambda | TX/RX-Azimut / Grad | CSI-Alter / ms |
+| --- | --- | --- | --- |
+| 03 | 0,25 | 90/90 | 0; 1; 2,5; 5 |
+| 06 | 0,5 | 90/0 | 0; 1; 2,5; 5 |
+
+Szene, initiale Zentren (3,2,2)/(4,3,1) m, TX-tr38901-/RX-dipole-1x2-Arrays,
+V-Polarisation, 5180 MHz, 256 FFT-Bins, 20 dBm Gesamtleistung, 290 K,
+20 MHz, 7 dB Rauschzahl und Solveroptionen entsprechen Abschnitt 5.20.
+Elevation/Roll sind null. Beide Budgets 100000/1000000 werden für beide
+Fälle und alle Seeds 42/43/44 bei Run 1 mit zwei frischen RT-Wiederholungen
+gerechnet: 24 initiale RT-CFRs. Dieselbe CFR wird anschließend für alle
+Alter und beide CSI-Varianten genutzt; es entstehen 192 Auswertungszeilen
+und 49152 Tonzeilen. Die größeren Budgets prüfen diese repräsentative
+Matrix, keine anderen Geometrien oder Evolutionsmodelle.
+
+Ein RT-Request bei t=0 liefert die normalisierte initiale Matrix H_0[k]
+und den Wideband-Verlust. Explizite Entwicklung für t in Millisekunden:
+
+\[
+  R(\theta)=\begin{pmatrix}\cos\theta&-\sin\theta\\
+                                  \sin\theta&\cos\theta\end{pmatrix},
+  \qquad H[k,t]=H_0[k]R(\omega t),
+  \quad \omega=9\pi/180\ \mathrm{rad/ms}.
+\]
+
+Dies ist eine kontrollierte analytische TX-Basismischung auf realen
+frequenzselektiven RT-Kanälen. Es ist kein aus Bewegung, Pfad-Doppler oder
+gemessener Kohärenzzeit abgeleitetes Modell. Die Geometrie bleibt konstant;
+die serverseitigen 5-ms-Gültigkeitsmetadaten steuern diese analytische
+Entwicklung nicht. Der Sendekanal wird für alle Alter bei t_tx=5 ms
+ausgewertet. Verzögertes CSI stammt exakt aus H[k,5-a], frisches aus
+H[k,5]. Relative Rotationen sind 0/9/22,5/45 Grad. Der CSI-Zeitpunkt
+beträgt 5/4/2,5/0 ms; frisches CSI hat stets Zeitpunkt 5 ms und Alter null.
+`age_ms` bezeichnet die angefragte Vergleichsachse, `csi_age_ns` das
+tatsächliche Alter der jeweiligen frischen/verzögerten Variante.
+
+MimoCsiAgingModel::Select verwendet kontinuierliche Abtastung T_u=0 und
+Feedbackverzögerung d_fb=a (frisch: null), prüft t_csi=t_tx-d_fb und erzeugt
+unquantisiertes Gleichleistungs-SVD-W[k]=V[k,t_csi]. Der Empfänger kennt
+H[k,t_tx] und den gewählten Precoder perfekt. CalculateLink erhält den
+Sendekanal getrennt und berechnet mit dem festen Linkbudget aus 5.20
+
+\[
+  G[k]=H[k,t_{\mathrm{tx}}]W[k],\qquad
+  E[k]=(I+\rho G[k]^H G[k]/2)^{-1},\qquad
+  \gamma_s[k]=1/E_{s,s}[k]-1.
+\]
+
+MI-SINR und Effizienz verwenden dieselben Mittelungen wie Abschnitt 5.20.
+Die Kanalrotation ist unitär. Deshalb bleiben Wideband-Verlust,
+Singularwerte, Rang und mittlere Antennenpaarleistung unverändert.
+Für zwei Streams gilt W^H W=I und ||W||_F^2=2, damit bleibt die gesamte
+TX-Kovarianz P I/2 für frisches und verzögertes CSI gleich. Die gemeinsame
+gaußsche MI
+
+\[
+  C=\frac1{256}\sum_{k,i}\log_2(1+\rho\sigma_i[k]^2/2)
+\]
+
+ist ebenfalls invariant. Frisches SVD liefert eta=C, verzögertes CSI kann
+die Summe der getrennten MMSE-Stream-MI eta verringern. Dies misst den
+Verlust bei separater Streamdetektion, keinen Verlust der gemeinsamen
+MIMO-Kapazität. Stream null folgt der stärksten CSI-Zeitpunkt-Mode;
+Rotation kann Stream eins verbessern. Deshalb werden Differenzen mit
+Vorzeichen exportiert, nicht auf positive Werte begrenzt:
+
+\[
+  D_{\gamma,s}=g(\gamma^{\mathrm{fresh}}_{\mathrm{MI},s})
+                -g(\gamma^{\mathrm{delayed}}_{\mathrm{MI},s}),\qquad
+  D_\eta=\eta^{\mathrm{fresh}}-\eta^{\mathrm{delayed}},
+  \quad g(x)=10\log_{10}(\max(x,10^{-12})).
+\]
+
+Ton-SINR-Differenzen verwenden dieselbe Formel ohne MI-Kompression.
+Zusätzliche Kanaldiagnosen je Ton sind
+
+\[
+  c[k]=\frac{|\operatorname{tr}(H_{\mathrm{csi}}[k]^H H_{\mathrm{tx}}[k])|}
+                 {\|H_{\mathrm{csi}}[k]\|_F\|H_{\mathrm{tx}}[k]\|_F},\qquad
+  e[k]=\frac{\|H_{\mathrm{tx}}[k]-H_{\mathrm{csi}}[k]\|_F}
+                  {\|H_{\mathrm{tx}}[k]\|_F}.
+\]
+
+Bei dieser Rotation sind beide Normen identisch. Der native CSV-Export
+enthält initiale/CSI-/Sendezeiten, tatsächliches Alter, T_u/d_fb,
+Rotationsrate, c/e, Rang, Singularwerte, W-Leistung, Ton-/MI-Stream-SINR,
+Effizienz, Verlust, Referenz-SNR, RX-/Rauschleistung und Analysezeit.
+Der Runner ergänzt Konfiguration, Seed, Samplebudget, Wiederholung,
+MI-/SINR-Verlust, Init-/CFR-/native Prozesszeiten sowie Tonmediane.
+Die initialen CFRs und die dokumentierte Formel ermöglichen natives Replay;
+entwickelte CFRs werden nicht nochmals als Fixtures gespeichert.
+
+Alle 48 gepaarten Fall-/Seed-/Alter-/CSI-Varianten vergleichen 100000 mit
+1000000 Samples anhand sämtlicher sechs Kriterien aus 5.21:
+0,5 dB Verlust, identischer Tonrang, 5 Prozent plus 1e-7 Singularwertfehler,
+1 dB Ton-SINR, 0,5 dB MI-SINR und 0,2 bit/s/Hz Effizienz. Diese Grenzen
+gelten für Budgetstabilität, nicht als Obergrenzen für Alterungsverluste.
+Jeder native Export wird unabhängig mit NumPy-SVD, MMSE-Inversion,
+MI und Linkbudget geprüft: SINR 1e-8 relativ/absolut, Singularwerte 1e-10,
+MI 1e-9 relativ plus 1e-8 absolut. Wiederholungen verlangen byteidentische
+initiale CFRs und die bisherigen deterministischen Feldtoleranzen
+1e-6 relativ/1e-7 absolut. Ein analytischer Diagonalanker prüft frisches
+SVD und 45-Grad-MMSE-Mischung; Rate null bei Alter 5 ms muss die
+statischen frischen Linkmetriken exakt reproduzieren.
+
+Frisches CSI und verzögertes Nullalter teilen dieselbe native Auswertung;
+deren Zeitwerte werden auf der Vergleichsachse wiederverwendet.
+`analysis_seconds` umfasst Lesen, Prüfungen, Entwicklung, SVD-Auswahl,
+MMSE/MI und Singularwertdiagnostik vor CSV-Ausgabe. `native_process_seconds`
+misst auch CSV-Lesen im Runner; Init-/CFR-Zeiten gehören zum geteilten
+initialen Trace und dürfen nicht über die acht Vergleichszeilen aufsummiert
+werden. `trace_and_evaluation_seconds` zählt jeden vollständigen Trace mit
+Auswertungen einmal; `sweep_seconds` umfasst auch Konfigurationsexporte,
+aber keine Imports/Plots/Manifestausgabe. 120 native Analysen einschließlich
+24 statischer Kontrollen erzeugen bei zwei Wiederholungen 192 Exportzeilen.
+Die beiden lokalen Plots zeigen SINR-/MI-Verlust sowie Korrelation und
+native Laufzeit gegen Alter, als Median und Min-/Max-Spanne über Seeds und
+Wiederholungen bei 100000 Samples. Das sind keine Konfidenzintervalle.
+
 ## 6. High-Level-API-Vertrag bis Unterphase 4.8
 
 ### 6.1 Typen, Besitz und Defaults
@@ -3417,7 +3558,7 @@ Simulator-Timer, keine implizite CSI-Abfrage und keinen MAC-Feedbacktransport;
 diese Grenzen verhindern, dass das explizite Forschungsmodell eine
 vollständige 802.11-Soundingprozedur vortäuscht.
 
-## 7. Validierung bis Unterphase 5.2.1
+## 7. Validierung bis Unterphase 5.2.5
 
 Die native Suite sionna enthält die schnellen API-, Numerik- und Adapterfälle:
 
@@ -4504,6 +4645,120 @@ durch Seitenzahl, Textextraktion und Sichtprüfung validiert. Die Hashes
 und Prüfprotokolle bleiben ebenfalls lokale Artefakte. Produktionsmodelle,
 Helper, Server und Protobuf wurden für diese Unterphase nicht geändert.
 
+### 7.18 Ergebnisse und Validierung der Unterphase 5.2.5
+
+Der LLVM-CPU-Lauf vom 29.09.2026 erzeugte alle 24 geplanten initialen
+RT-Traces, 192 Auswertungszeilen und 49152 Tonzeilen. Sämtliche initialen
+CFR-Wiederholungen waren byteidentisch; alle 24 CFRs stimmen außerdem
+bytegenau mit den entsprechenden Fällen/Seeds/Budgets/Wiederholungen aus
+5.2.2 überein. Die tatsächlichen Array-/Radiogeometrien wurden geprüft.
+Alle unabhängigen SVD-/MMSE-/MI-/Linkbudgetprüfungen und alle zwölf
+statischen Kontrollpaare bestanden. Rang zwei bleibt auf jedem Ton
+erhalten, die Precoderleistung beträgt zwei. Nullalter reproduziert
+frisches SVD; positives Alter bei Evolutionsrate null ändert keine
+Linkmetriken. Verlust und Singularwerte bleiben bei der unitären
+Entwicklung innerhalb der numerischen Referenztoleranzen unverändert.
+
+Frische Baselines bei 100000 Samples; Mediane über drei Seeds mit je zwei
+Wiederholungen. Singularwerte sind zunächst Tonmediane je Lauf:
+
+| Fall | Verlust / dB | sigma0/sigma1 | MI-SINR 0/1 / dB | MI / bit/s/Hz |
+| --- | --- | --- | --- | --- |
+| 03 | 49,965776 | 1,995746/0,061211 | 67,005236/35,885346 | 34,179882 |
+| 06 | 55,848764 | 1,713904/0,884302 | 60,053426/53,721877 | 37,795345 |
+
+Verzögerte Auswertung desselben 5-ms-Sendekanals. D_0/D_1/D_eta sind
+Mediane der gepaarten Verluste gegen frisches CSI des jeweiligen Seeds;
+negative SINR-Verluste bedeuten einen Gewinn des betreffenden Streams:
+
+| Fall | Alter / ms | D_0 / dB | D_1 / dB | D_eta / bit/s/Hz | Verzögerte MI / bit/s/Hz |
+| --- | --- | --- | --- | --- | --- |
+| 03 | 0 | 0 | 0 | 0 | 34,179882 |
+| 03 | 1 | 12,701134 | -0,058929 | 4,199649 | 29,980233 |
+| 03 | 2,5 | 20,233071 | -0,365202 | 6,599963 | 27,579919 |
+| 03 | 5 | 25,531033 | -1,398795 | 8,016558 | 26,163324 |
+| 06 | 0 | 0 | 0 | 0 | 37,795345 |
+| 06 | 1 | 0,046198 | -0,011511 | 0,011523 | 37,783823 |
+| 06 | 2,5 | 0,269186 | -0,069421 | 0,066361 | 37,728985 |
+| 06 | 5 | 0,856004 | -0,242579 | 0,203776 | 37,591570 |
+
+In dieser Matrix reagiert die stärkste Mode des schlecht konditionierten
+Falls 03 deutlich empfindlicher auf veraltete Ausrichtung. Stream eins
+gewinnt gleichzeitig SINR; der Gewinn gleicht den Verlust von Stream null
+in der getrennten MMSE-MI nicht aus. Bei 5 ms betragen die medianen
+Korrelationen c 0,850353 für 03 und 0,803003 für 06, obwohl 03 den größeren
+Effizienzverlust hat. Ein skalarer Korrelationswert beschreibt daher diese
+MMSE-Empfindlichkeit nicht allein; Modeverhältnis und Basisorientierung
+sind ebenfalls beteiligt. Die relative CFR-Änderung ist in beiden Fällen
+bei 1/2,5/5 ms 0,156918/0,390181/0,765367. Gemeinsame gaußsche Kapazität,
+Kanalenergie, Rang und Singularwerte bleiben in diesem Experiment konstant.
+
+Alle 48 gepaarten Budgetchecks bestanden. Die Maxima über alle
+Fall-/Seed-/Alter-/CSI-Varianten betragen:
+
+| Kriterium | Maximum | Grenze |
+| --- | --- | --- |
+| Wideband-Verlust / dB | 0,000574092 | 0,5 |
+| Töne mit Rangänderung | 0 | 0 |
+| Skalierter Singularwertfehler D_sigma | 0,084527716 | 1 |
+| Ton-/Stream-SINR / dB | 0,037378018 | 1 |
+| Effektive Stream-SINR / dB | 0,007641967 | 0,5 |
+| MI-Effizienz / bit/s/Hz | 0,004928625 | 0,2 |
+
+Damit sind 100000 Samples für die getestete repräsentative Matrix gegen
+die endliche 1000000-Samplereferenz innerhalb der vorab festgelegten
+Toleranzen stabil. Das zertifiziert weder asymptotische Konvergenz noch
+andere Szenen, Bewegungen, Arrays oder Evolutionsraten. Der Verlust von
+0,203776 bit/s/Hz durch Alter bei 06 ist kein Konvergenzfehler; die
+0,2-Grenze gilt ausschließlich für Unterschiede zwischen Samplebudgets.
+
+Die CFR-Laufzeitmediane betragen 0,690818 s bei 100000 und 6,147503 s bei
+1000000 Samples (je zwölf Traces). Native Analysen benötigen median
+1,332 beziehungsweise 1,338 ms; native Prozessaufrufe einschließlich
+CSV-Lesen rund 46 ms. `sweep_seconds` beträgt 112,055 s. Geteilte
+Frisch-/Tracezeitwerte werden nicht als unabhängige Laufzeitmessungen
+behandelt. Software/Backend entsprechen 5.2.2: Sionna/RT 2.0.1,
+Mitsuba 3.8.0, Dr.Jit 1.3.1, NumPy 2.5.2, PyTorch 2.9.1+cpu,
+LLVM-CPU mit einem Dr.Jit-Thread. Diese Zeiten bleiben host-/JIT-/lastabhängig.
+
+Der gezielte Build von `ns3_wifi_sumimo_benchmark` und `sionna-test` bestand.
+Die vorhandenen Benchmarktests wurden um einen analytischen Vollranganker
+mit frischem SVD, 45-Grad-Mischung, Statik, Wiederholung und ungültigen
+Zeit-/Ratenangaben sowie eine optionale Prüfung des vollständigen lokalen
+Exports ergänzt. Neue Testdateien oder gespeicherte Fixtures sind nicht
+erforderlich. Der Exporttest prüft die komplette Matrix, Kanal-/Config-
+Hashes, Übereinstimmung mit 5.2.2, jede unabhängige Referenzrechnung,
+Wiederholungen, Zusammenfassungen, Zeitfelder, Degradation und die
+erneut berechneten Budgetentscheidungen. Ein anfänglicher Fehler beim
+Vergleich geplanter Validierungsregeln mit gemessenen Manifestverdicts
+wurde ausschließlich im Test korrigiert; die Messimplementierung und
+Messwerte blieben unverändert. Messzeitpunkt-Quellhashes bleiben im
+Manifest erhalten, die finalen Test-/Quellhashes stehen separat lokal.
+
+Die abschließenden 23 Python-Benchmarktests und die nativen Suites
+`sionna`, `sionna-mimo-csi-feedback`, `sionna-example-sumimo-precoding`
+und `sionna-example-sumimo-precoding-negative` wurden erfolgreich ausgeführt.
+Die beiden Altersplots wurden visuell geprüft. Produktionsmodelle, Helper,
+Server und Protobuf wurden nicht verändert; teure unveränderte MU-/
+Serverregressionen wurden nicht erneut ausgeführt.
+
+Raw-CFRs, Messwerte, Konfigurationen, Plots, Manifest, Prüfprotokolle und
+finale Quellhashes liegen lokal unter `data/phase5_2_csi_aging/`, vollständig
+von Git ignoriert. Der Commit enthält keine neuen Datensätze oder Fixtures.
+Nach den finalen Dokumentationsänderungen wurde das PDF genau einmal
+erzeugt und über Seitenzahl, Textextraktion, vollständige Seitenfußzeilen
+und Sichtprüfung validiert; der Nachweis bleibt ebenfalls lokal.
+
+Die Unterphase ist ein kontrollierter Empfindlichkeitsvergleich mit
+perfekter RX-CSI und exaktem, lediglich verzögertem TX-CSI. Quantisierung,
+Schätzfehler, physikalischer Doppler, bewegte Geometrie, Sounding-/MAC-
+Overhead und automatische Updateereignisse fehlen. Die periodische
+analytische Rotation rechtfertigt keine extrapolierte, für beliebige Alter
+monotone Verlustkurve. Hohe gaußsche MI-Werte und alle 256 FFT-Bins
+einschließlich DC/Guards sind Kanaldiagnostik, keine Wi-Fi-Payloadraten.
+PER wird nicht berechnet: Die dokumentierte Kalibrierung gilt nur für
+HE MCS 0/BCC/32 Byte/1x1 und wird nicht auf diese 2x2-Fälle übertragen.
+
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 
 - SionnaMimoHelper überträgt eine gemeinsame TX- und RX-Geometrie für die
@@ -4571,6 +4826,10 @@ Helper, Server und Protobuf wurden für diese Unterphase nicht geändert.
   zum Sendezeitpunkt und weist Alter, Aktualisierungsintervall und
   Rückmeldedauer aus; eine automatische Kanalschätzung oder Ablaufsteuerung im
   Helper existiert noch nicht.
+  Der 5.2.5-Benchmark entwickelt eingefrorene reale CFRs durch eine
+  analytische unitäre TX-Basisrotation bei fester Geometrie. Seine Alters-
+  und MMSE-/MI-Verluste sind keine physikalisch kalibrierte Doppler- oder
+  Mobilitätsvorhersage; gemeinsame Kapazität bleibt hier invariant.
 - Ohne W[k] gilt weiterhin genau ein Stream je TX-Antenne. Mit festem W[k]
   sind kontrollierte Streamauswahl und
   \(1\leq N_s\leq\min(N_\mathrm{tx},N_\mathrm{rx})\) für SU implementiert.
@@ -4710,6 +4969,26 @@ Ein leerer Ausgabeordner ist erforderlich. Die vorhandenen Tests werden mit
 im Tools-Verzeichnis ausgeführt. Der Runner prüft jede neue CFR gegen die
 unabhängigen Referenzformeln und jeden höheren Budgetlauf gegen die vorab
 festgelegten Toleranzen. Neue Messergebnisse und Fixtures bleiben lokal.
+
+Phase 5.2.5 verwendet denselben Runner für aktuelles/verzögertes SVD-CSI:
+
+    ./ns3 build ns3_wifi_sumimo_benchmark sionna-test
+    conda run --no-capture-output -n sionna-venv python \
+      contrib/sionna/tools/benchmark_rt_convergence.py \
+      --csi-aging --output=/tmp/sumimo-csi-aging
+    cd contrib/sionna/tools
+    SUMIMO_AGING_RESULTS=/tmp/sumimo-csi-aging \
+      conda run --no-capture-output -n sionna-venv python \
+      -m unittest -v test_benchmark_sumimo test_benchmark_rt_convergence
+
+Ein leerer Ausgabeordner ist erforderlich. Ohne `SUMIMO_AGING_RESULTS` wird
+nur der optionale lokale Exporttest übersprungen; der neue analytische
+Alterungstest läuft weiterhin. Natives Replay einer initialen CFR:
+
+    ./ns3 run 'ns3_wifi_sumimo_benchmark --action=aging --input=/tmp/sumimo-csi-aging/case_03/seed_42/samples_100000/channel_00.pb --output=/tmp/aging-replay.csv --csiAgeMs=5 --transmissionMs=5 --rotationRateDegPerMs=9'
+
+Zeitstempel beziehen sich auf die initiale CFR bei t=0. Rate null hält den
+Kanal statisch; die ältere Open-Loop-Aktion `analyze` bleibt unverändert.
 
 Python-Vertrag und Server vom Verzeichnis contrib/sionna/model/ns3sionna:
 

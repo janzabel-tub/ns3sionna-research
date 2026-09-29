@@ -194,7 +194,8 @@ def read_metrics(path: Path) -> list[dict]:
     return rows
 
 
-def validate_reference_metrics(response, rows) -> None:
+def validate_reference_metrics(response, rows, csi_age_ms=None,
+                               transmission_ms=5.0, rotation_rate=9.0) -> None:
     """Independent NumPy SVD/MMSE/MI and link-budget check, shared with tests."""
     h = channel_array(response)
     rx = response.csi[0].rx_nodes[0]
@@ -204,7 +205,33 @@ def validate_reference_metrics(response, rows) -> None:
     noise = 1.3803e-23 * 290 * 20e6 * 10 ** 0.7
     power = 10 ** ((20 - rx.wb_loss - 30) / 10)
     rho = power / noise
-    error = np.linalg.inv(np.eye(2) + rho / 2 * (h.conj().transpose(0, 2, 1) @ h))
+    effective_channel = h
+    if csi_age_ms is not None:
+        def rotated(timestamp_ms):
+            angle = np.deg2rad(rotation_rate * timestamp_ms)
+            rotation = np.array([[np.cos(angle), -np.sin(angle)],
+                                 [np.sin(angle), np.cos(angle)]])
+            return h @ rotation
+        current = rotated(transmission_ms)
+        estimate = rotated(transmission_ms - csi_age_ms)
+        _, _, vh = np.linalg.svd(estimate)
+        w = vh.conj().transpose(0, 2, 1)
+        effective_channel = current @ w
+        norm = np.sum(abs(current) ** 2, axis=(1, 2))
+        correlation = abs(np.sum(estimate.conj() * current, axis=(1, 2))) / norm
+        change = np.sqrt(np.sum(abs(current - estimate) ** 2, axis=(1, 2)) / norm)
+        np.testing.assert_allclose([row["channel_correlation"] for row in rows], correlation,
+                                   rtol=1e-10, atol=1e-10)
+        np.testing.assert_allclose([row["channel_relative_change"] for row in rows], change,
+                                   rtol=1e-10, atol=1e-10)
+        for row in rows:
+            np.testing.assert_allclose([row[key] for key in ("initial_time_ns", "csi_time_ns",
+                "transmission_time_ns", "csi_age_ns", "update_interval_ns", "feedback_delay_ns",
+                "rotation_rate_deg_per_ms", "precoder_power")],
+                [0, (transmission_ms - csi_age_ms) * 1e6, transmission_ms * 1e6,
+                 csi_age_ms * 1e6, 0, csi_age_ms * 1e6, rotation_rate, 2], rtol=0, atol=1e-10)
+    error = np.linalg.inv(np.eye(2) + rho / 2 * (
+        effective_channel.conj().transpose(0, 2, 1) @ effective_channel))
     sinr = 1 / np.diagonal(error, axis1=1, axis2=2).real - 1
     singular = np.linalg.svd(h, compute_uv=False)
     np.testing.assert_allclose([[row["sinr0_linear"], row["sinr1_linear"]] for row in rows],

@@ -218,6 +218,35 @@ plots remain local; `data/phase5_2_independent_spacing/` is ignored by Git.
 The native example accepts `txSpacingLambda` and `rxSpacingLambda` overrides;
 the existing shared `spacingLambda` option remains the default for both arrays.
 
+Subphase 5.2.5 compares fresh and delayed equal-power, unquantized SVD CSI for
+representative cases 03/06 at ages 0/1/2.5/5 ms, with perfect RX CSI. It uses
+explicit analytic evolution `H(t)=H(0) R(9 deg/ms * t)` at fixed geometry;
+timestamps alone do not change the channel. Transmission time stays at 5 ms.
+This controlled TX-basis rotation measures separate-stream MMSE sensitivity;
+it is not a calibrated mobility/Doppler model. From the ns-3 directory:
+
+```shell
+./ns3 build ns3_wifi_sumimo_benchmark sionna-test
+conda run --no-capture-output -n sionna-venv python contrib/sionna/tools/benchmark_rt_convergence.py \
+  --csi-aging --output=/tmp/sumimo-csi-aging
+cd contrib/sionna/tools
+SUMIMO_AGING_RESULTS=/tmp/sumimo-csi-aging conda run --no-capture-output -n sionna-venv \
+  python -m unittest -v test_benchmark_sumimo test_benchmark_rt_convergence
+```
+
+Use an empty output directory. The plan exports the matrix and established
+convergence tolerances before tracing. Both configurations use seeds 42/43/44,
+100,000 samples and paired 1,000,000-sample checks, with two fresh repetitions.
+CSV exports include CSI/transmission times, channel metrics, per-tone/effective
+MMSE SINR, MI efficiency, signed degradation and runtime. Two local plots show
+degradation and channel/runtime diagnostics against age. Raw measurements and
+fixtures stay local; `data/phase5_2_csi_aging/` is ignored. The optional export
+test uses `SUMIMO_AGING_RESULTS`; no aging dataset is required by default tests.
+The native `--action=aging --csiAgeMs=5` replays an initial channel from `--input`;
+`--rotationRateDegPerMs=0` provides the static-channel control. See the model
+document for formulas, measured results and limits. PER remains outside this
+2×2 benchmark because calibration covers only HE MCS 0/BCC/32 bytes/1×1.
+
 Usage in HPC cluster
 ============
 

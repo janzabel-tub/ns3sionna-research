@@ -5,6 +5,7 @@ All channel/link metrics come from the existing server and native ns-3 analyzer.
 The policy is exported before importing the ray tracer or starting any trace.
 The largest sampled budget is a numerical reference, not a truth channel.
 --independent-spacing runs the small Phase 5.2.4 matrix with selected spot checks.
+--csi-aging runs Phase 5.2.5 with explicit analytic channel evolution and SVD.
 """
 
 from __future__ import annotations
@@ -41,6 +42,10 @@ SPACING_CASES = (
     ("case_04", 0.25, 1.0, 45.0, -45.0, "wide RX with new azimuths"),
 )
 SPACING_SPOT_CHECKS = ("case_03", "case_04")
+AGING_CASES = (CASES[0], CASES[2])
+AGES_MS = (0.0, 1.0, 2.5, 5.0)
+TRANSMISSION_MS = 5.0
+ROTATION_RATE = 9.0
 TOLERANCES = {
     "wideband_loss_db": 0.5,
     "rank_changed_tones": 0,
@@ -58,7 +63,28 @@ IDENTITY_FIELDS = ("case_id", "seed", "samples_per_src", "repetition", "spacing_
                    "tx_azimuth_deg", "rx_azimuth_deg")
 
 
-def plan(repetitions=2, independent_spacing=False) -> dict:
+def plan(repetitions=2, independent_spacing=False, csi_aging=False) -> dict:
+    if csi_aging:
+        return {"schema_version": 1, "subphase": "5.2.5",
+            "controls": {**CONTROLS, "precoding": "SVD_equal_power_unquantized",
+                         "perfect_rx_csi": True, "csi_time_ns": "exported per evaluation"},
+            "sweep": {"samples_per_src": (100000, 1000000), "seeds": SEEDS,
+                      "cases": AGING_CASES, "ages_ms": AGES_MS,
+                      "csi_kinds": ("fresh", "delayed"), "repetitions": repetitions},
+            "evolution": {"formula": "H(t)=H(0) R(omega*t); R=[[cos,-sin],[sin,cos]]",
+                "rotation_rate_deg_per_ms": ROTATION_RATE, "transmission_ms": TRANSMISSION_MS,
+                "initial_channel_time_ns": 0, "update_interval_ns": 0,
+                "feedback_delay": "requested age for delayed CSI; zero for fresh CSI",
+                "scope": "analytic TX-basis mixing, not motion or calibrated Doppler; "
+                         "one frozen RT channel per case/seed/budget/repetition"},
+            "tolerances": TOLERANCES,
+            "validation": "byte-identical RT repetitions; independent NumPy SVD/MMSE/MI; "
+                          "zero age equals fresh CSI; zero-rate static control; unitary power",
+            "reference_tolerances": {"sinr_rtol": 1e-8, "sinr_atol": 1e-8,
+                "singular_value_rtol": 1e-10, "singular_value_atol": 1e-10,
+                "mi_rtol": 1e-9, "mi_atol": 1e-8},
+            "decision": "paired 100k/1M checks for both representative cases, all seeds, "
+                        "ages and CSI kinds; no claim for untested geometry or evolution rates"}
     if independent_spacing:
         return {"schema_version": 1, "subphase": "5.2.4", "controls": CONTROLS,
             "sweep": {"samples_per_src": 100000, "seeds": SEEDS, "cases": SPACING_CASES,
@@ -203,16 +229,20 @@ def plots(output: Path, summaries: list[dict], errors: list[dict]) -> None:
     plt.close(fig)
 
 
-def run(output: Path, binary: Path, repetitions=2, independent_spacing=False) -> dict:
+def run(output: Path, binary: Path, repetitions=2, independent_spacing=False, csi_aging=False) -> dict:
+    if independent_spacing and csi_aging:
+        raise ValueError("Select one benchmark matrix")
     if repetitions < 2:
         raise ValueError("At least two fresh repetitions are required")
     if output.exists() and any(output.iterdir()):
         raise ValueError("Use an empty output directory to preserve results")
     output.mkdir(parents=True, exist_ok=True)
-    policy = {**plan(repetitions, independent_spacing),
+    policy = {**plan(repetitions, independent_spacing, csi_aging),
               "defined_before_tracing_utc": datetime.now(timezone.utc).isoformat()}
     (output / "plan.json").write_text(json.dumps(policy, indent=2) + "\n")
     env_class, mi = base.runtime()
+    if csi_aging:
+        return run_aging(output, binary, repetitions, policy, env_class, mi)
     started = time.perf_counter()
     summaries, tones, configurations, paired_metrics = [], [], [], {}
     cases = SPACING_CASES if independent_spacing else [
@@ -300,22 +330,8 @@ def run(output: Path, binary: Path, repetitions=2, independent_spacing=False) ->
                    independent_spacing=True)
     else:
         plots(output, summaries, errors)
-    source_paths = [Path(__file__), Path(base.__file__),
-                    Path(__file__).with_name("test_benchmark_rt_convergence.py"),
-                    base.MODULE / "examples/ns3_wifi_sumimo_benchmark.cc",
-                    base.SERVER / "ns3sionna_server.py", base.SERVER / "mimo_data_contract.py",
-                    base.MODULE / "model/message.proto", base.MODULE / "model/su-mimo-link-model.cc",
-                    base.MODULE / "model/mimo-channel-matrix.cc", base.MODULE / "model/wifi-link-budget.cc",
-                    base.MODULE / "model/sionna-propagation-cache.cc",
-                    base.MODULE / "helper/sionna-mimo-helper.cc", base.MODULE / "helper/sionna-helper.cc"]
-    source_paths.extend(sorted(path for path in (base.SERVER / "models/simple_room").rglob("*")
-                               if path.suffix in (".xml", ".obj", ".mtl")))
     manifest = {**policy, "plan_sha256": base.sha256(output / "plan.json"),
-        "provenance": {"platform": platform.platform(), "python": platform.python_version(),
-            "backend": mi.variant(), "versions": {name: importlib.metadata.version(name)
-                for name in ("sionna", "sionna-rt", "mitsuba", "drjit", "numpy", "torch")},
-            "native_executable_sha256": base.sha256(binary),
-            "source_sha256": {str(path.relative_to(base.MODULE)): base.sha256(path) for path in source_paths}},
+        "provenance": provenance(binary, mi),
         "validation": {"repeatability": "passed", "geometry_orientation": "passed",
                        "channel_responses_byte_identical_within_seed_budget": True,
                        **({"independent_numpy_reference": "passed", "cases": len(cases)}
@@ -326,15 +342,180 @@ def run(output: Path, binary: Path, repetitions=2, independent_spacing=False) ->
     return manifest
 
 
+def provenance(binary, mi):
+    source_paths = [Path(__file__), Path(base.__file__),
+                    Path(__file__).with_name("test_benchmark_rt_convergence.py"),
+                    base.MODULE / "examples/ns3_wifi_sumimo_benchmark.cc",
+                    base.SERVER / "ns3sionna_server.py", base.SERVER / "mimo_data_contract.py",
+                    base.MODULE / "model/message.proto", base.MODULE / "model/su-mimo-link-model.cc",
+                    base.MODULE / "model/mimo-channel-matrix.cc", base.MODULE / "model/wifi-link-budget.cc",
+                    base.MODULE / "model/mimo-csi-feedback.cc",
+                    base.MODULE / "model/mimo-precoding-matrix.cc",
+                    base.MODULE / "model/sionna-propagation-cache.cc",
+                    base.MODULE / "helper/sionna-mimo-helper.cc", base.MODULE / "helper/sionna-helper.cc"]
+    source_paths.extend(sorted(path for path in (base.SERVER / "models/simple_room").rglob("*")
+                               if path.suffix in (".xml", ".obj", ".mtl")))
+    return {"platform": platform.platform(), "python": platform.python_version(),
+            "backend": mi.variant(), "versions": {name: importlib.metadata.version(name)
+                for name in ("sionna", "sionna-rt", "mitsuba", "drjit", "numpy", "torch")},
+            "native_executable_sha256": base.sha256(binary),
+            "source_sha256": {str(path.relative_to(base.MODULE)): base.sha256(path) for path in source_paths}}
+
+
+def aging_analysis(binary, channel_path, age_ms, rotation_rate=ROTATION_RATE):
+    with tempfile.TemporaryDirectory(prefix="sumimo-aging-") as temporary:
+        path = Path(temporary) / "metrics.csv"
+        started = time.perf_counter()
+        base.native(binary, action="aging", input=channel_path, output=path,
+                    csiAgeMs=age_ms, transmissionMs=TRANSMISSION_MS,
+                    rotationRateDegPerMs=rotation_rate)
+        return base.read_metrics(path), time.perf_counter() - started
+
+
+def aging_degradation(rows, fresh):
+    """Signed loss against fresh SVD on the SAME transmission-time channel."""
+    return {**{f"effective_sinr{s}_degradation_db": float(
+        db(fresh[0][f"effective_sinr{s}_linear"]) - db(rows[0][f"effective_sinr{s}_linear"]))
+        for s in range(2)}, "mi_degradation_bps_hz":
+        fresh[0]["spectral_efficiency_bps_hz"] - rows[0]["spectral_efficiency_bps_hz"]}
+
+
+def run_aging(output, binary, repetitions, policy, env_class, mi):
+    started = time.perf_counter()
+    summaries, tones, records, paired = [], [], [], {}
+    for case_id, spacing, tx_yaw, rx_yaw, reason in AGING_CASES:
+        for seed in SEEDS:
+            directory = output / case_id / f"seed_{seed}"
+            directory.mkdir(parents=True)
+            config_path = directory / "configuration.pb"
+            config = base.export_configuration(binary, config_path, spacing,
+                (tx_yaw, 0, 0), (rx_yaw, 0, 0), seed=seed)
+            record = {"case_id": case_id, "seed": seed, "selection_reason": reason,
+                "configuration_sha256": base.sha256(config_path), "traces": []}
+            for budget in (100000, 1000000):
+                trace_dir = directory / f"samples_{budget}"
+                trace_dir.mkdir()
+                first_response, first_metrics = None, {}
+                for repetition in range(repetitions):
+                    trace_started = time.perf_counter()
+                    response, observed, init_seconds, cfr_seconds = base.trace(config, env_class, budget)
+                    path = trace_dir / f"channel_{repetition:02d}.pb"
+                    path.write_bytes(response.SerializeToString(deterministic=True))
+                    fresh, fresh_seconds = aging_analysis(binary, path, 0)
+                    for age in AGES_MS:
+                        for kind in ("fresh", "delayed"):
+                            actual_age = 0 if kind == "fresh" else age
+                            rows, native_seconds = ((fresh, fresh_seconds) if actual_age == 0
+                                                    else aging_analysis(binary, path, actual_age))
+                            base.validate_reference_metrics(response, rows, actual_age)
+                            key = (case_id, seed, budget, age, kind)
+                            if first_response is None:
+                                first_metrics[age, kind] = rows
+                                paired[key] = rows
+                            else:
+                                base.compare_repetitions(first_response, response,
+                                                         first_metrics[age, kind], rows)
+                            common = {"case_id": case_id, "seed": seed, "samples_per_src": budget,
+                                "repetition": repetition, "spacing_lambda": spacing,
+                                "tx_azimuth_deg": tx_yaw, "rx_azimuth_deg": rx_yaw,
+                                "age_ms": age, "csi_kind": kind}
+                            degradation = aging_degradation(rows, fresh)
+                            summaries.append({**common, **{key: value for key, value in rows[0].items()
+                                if key not in ("subcarrier", "frequency_offset_hz", "rank", "sigma0",
+                                               "sigma1", "sinr0_linear", "sinr1_linear",
+                                               "channel_correlation", "channel_relative_change")},
+                                "minimum_rank": min(row["rank"] for row in rows),
+                                **{f"median_sigma{s}": float(np.median([row[f"sigma{s}"] for row in rows]))
+                                   for s in range(2)},
+                                "median_channel_correlation": float(np.median([
+                                    row["channel_correlation"] for row in rows])),
+                                "median_channel_relative_change": float(np.median([
+                                    row["channel_relative_change"] for row in rows])),
+                                **{f"effective_sinr{s}_db": float(db(rows[0][f"effective_sinr{s}_linear"]))
+                                   for s in range(2)}, **degradation,
+                                "init_seconds": init_seconds, "cfr_seconds": cfr_seconds,
+                                "native_process_seconds": native_seconds})
+                            tones.extend({**common, **row, **degradation,
+                                **{f"sinr{s}_degradation_db": float(
+                                    db(ref[f"sinr{s}_linear"]) - db(row[f"sinr{s}_linear"]))
+                                   for s in range(2)}} for row, ref in zip(rows, fresh))
+                    if first_response is None:
+                        # Positive timestamps alone must leave a static channel unchanged.
+                        static, _ = aging_analysis(binary, path, AGES_MS[-1], rotation_rate=0)
+                        static_fresh, _ = aging_analysis(binary, path, 0, rotation_rate=0)
+                        base.validate_reference_metrics(response, static, AGES_MS[-1], rotation_rate=0)
+                        for field in ("sinr0_linear", "sinr1_linear", "spectral_efficiency_bps_hz"):
+                            np.testing.assert_array_equal([row[field] for row in static],
+                                                          [row[field] for row in static_fresh])
+                        first_response = response
+                    record["traces"].append({"samples_per_src": budget, "repetition": repetition,
+                        "channel_sha256": base.sha256(path), "observed_geometry": observed,
+                        "trace_and_evaluation_seconds": time.perf_counter() - trace_started})
+                print(f"{case_id} seed={seed} samples={budget} aging/reference/repeatability=passed",
+                      flush=True)
+            records.append(record)
+    sweep_seconds = time.perf_counter() - started
+    errors = [{"case_id": case, "seed": seed, "age_ms": age, "csi_kind": kind,
+        "samples_per_src": 100000, "reference_samples_per_src": 1000000,
+        **compare(paired[case, seed, 100000, age, kind], paired[case, seed, 1000000, age, kind])}
+        for case, *_ in AGING_CASES for seed in SEEDS for age in AGES_MS
+        for kind in ("fresh", "delayed")]
+    decision = {"spot_checks_passed": all(row["passed"] for row in errors),
+                "checked_case_seed_age_kind_pairs": len(errors), "scope": policy["decision"]}
+    for name, rows in (("summary", summaries), ("tones", tones), ("convergence", errors)):
+        base.write_csv(output / (name + ".csv"), rows)
+    (output / "convergence.json").write_text(json.dumps(decision, indent=2) + "\n")
+    aging_plots(output, summaries)
+    manifest = {**policy, "plan_sha256": base.sha256(output / "plan.json"),
+        "provenance": provenance(binary, mi), "configurations": records,
+        "validation": {"fresh_traces": sum(len(record["traces"]) for record in records),
+            "evaluations": len(summaries), "native_analysis_calls": 12 * repetitions * 4 + 24,
+            "repeatability": "passed",
+            "independent_numpy_reference": "passed", "static_control": "passed",
+            "geometry_orientation": "passed"},
+        "sweep_seconds": sweep_seconds, "convergence": decision}
+    (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    return manifest
+
+
+def aging_plots(output, summaries):
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    for filename, keys in (("aging_degradation.png", ("effective_sinr0_degradation_db",
+            "effective_sinr1_degradation_db", "mi_degradation_bps_hz")),
+            ("aging_channel_runtime.png", ("median_channel_correlation", "analysis_seconds",
+                                          "native_process_seconds"))):
+        fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+        for axis, key in zip(axes, keys):
+            for case, *_ in AGING_CASES:
+                groups = [[row[key] for row in summaries if row["case_id"] == case
+                    and row["age_ms"] == age and row["samples_per_src"] == 100000
+                    and row["csi_kind"] == "delayed"] for age in AGES_MS]
+                line, = axis.plot(AGES_MS, [np.median(group) for group in groups], marker="o", label=case)
+                axis.fill_between(AGES_MS, [min(group) for group in groups], [max(group) for group in groups],
+                                  color=line.get_color(), alpha=0.15)
+            axis.set(xlabel="CSI age (ms)", ylabel=key)
+            axis.grid(alpha=0.25)
+        axes[0].legend()
+        fig.suptitle("Explicit TX-basis rotation: median and range over seeds/repetitions (100k)")
+        fig.tight_layout()
+        fig.savefig(output / filename, dpi=150)
+        plt.close(fig)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--executable", type=Path, default=None)
-    parser.add_argument("--independent-spacing", action="store_true",
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--independent-spacing", action="store_true",
                         help="Phase 5.2.4 independent TX/RX spacing with selected 100k/1M checks")
+    modes.add_argument("--csi-aging", action="store_true",
+                       help="Phase 5.2.5 fresh/delayed SVD with explicit TX-basis rotation")
     args = parser.parse_args()
     result = run(args.output.resolve(), (args.executable or base.executable()).resolve(),
-                 independent_spacing=args.independent_spacing)
+                 independent_spacing=args.independent_spacing, csi_aging=args.csi_aging)
     print(json.dumps(result["convergence"], indent=2))
 
 

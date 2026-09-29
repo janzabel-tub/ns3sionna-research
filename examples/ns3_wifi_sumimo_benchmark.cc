@@ -5,6 +5,7 @@
  */
 
 #include "ns3/core-module.h"
+#include "ns3/mimo-csi-feedback.h"
 #include "ns3/sionna-helper.h"
 #include "ns3/sionna-mimo-helper.h"
 #include "ns3/sionna-propagation-cache.h"
@@ -24,6 +25,7 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -122,7 +124,8 @@ WriteConfiguration(const std::string& output,
 }
 
 void
-Analyze(const std::string& input, const std::string& output)
+Analyze(const std::string& input, const std::string& output,
+        bool aging, double ageMs, double transmissionMs, double rotationRate)
 {
     std::ifstream stream(input, std::ios::binary);
     Require(stream.is_open(), "Cannot open channel input: " + input);
@@ -132,6 +135,8 @@ Analyze(const std::string& input, const std::string& output)
             "Cannot deserialize raw ChannelStateResponse");
     Require(response.csi_size() == 1, "Expected exactly one channel snapshot");
     const auto& snapshot = response.csi(0);
+    Require(!aging || snapshot.start_time() == 0,
+            "Aging evolution requires an initial channel at time zero");
     Require(snapshot.has_tx_node() && snapshot.tx_node().id() == 0 &&
                 snapshot.tx_node().has_position() &&
                 MatchesPosition(snapshot.tx_node().position(), TX_POSITION),
@@ -169,7 +174,31 @@ Analyze(const std::string& input, const std::string& output)
                 "CFR coefficients exceed the supported MMSE range");
     }
 
-    const auto channel = SionnaPropagationCache::DeserializeChannelMatrix(receiver);
+    const auto initialChannel = SionnaPropagationCache::DeserializeChannelMatrix(receiver);
+    // Explicit analytic evolution of a frozen RT channel, NOT a timestamp-driven
+    // server channel or a calibrated mobility model. Right-unitary rotation keeps
+    // loss, singular values and total equal-power TX covariance fixed.
+    const auto evolve = [&](Time timestamp) {
+        auto evolved = initialChannel;
+        const double angle = rotationRate * timestamp.GetSeconds() * 1000.0 *
+                             std::acos(-1.0) / 180.0;
+        for (uint32_t sc = 0; sc < evolved.GetNumSubcarriers(); ++sc)
+        {
+            for (uint32_t rx = 0; rx < 2; ++rx)
+            {
+                const auto h0 = initialChannel.Get(sc, rx, 0);
+                const auto h1 = initialChannel.Get(sc, rx, 1);
+                evolved.Set(sc, rx, 0, h0 * std::cos(angle) + h1 * std::sin(angle));
+                evolved.Set(sc, rx, 1, -h0 * std::sin(angle) + h1 * std::cos(angle));
+            }
+        }
+        return evolved;
+    };
+    const Time transmissionTime = NanoSeconds(std::llround(transmissionMs * 1e6));
+    const Time age = NanoSeconds(std::llround(ageMs * 1e6));
+    const Time csiTime = transmissionTime - age;
+    const auto channel = aging ? evolve(transmissionTime) : initialChannel;
+    const auto estimate = aging ? evolve(csiTime) : initialChannel;
     // L_wb supplies absolute received power; normalized H[k] retains the spatial
     // and frequency variation. The MMSE model splits reference SNR over two streams.
     const auto budget = WifiLinkBudget::Calculate(TX_POWER_DBM,
@@ -177,12 +206,27 @@ Analyze(const std::string& input, const std::string& output)
                                                   BANDWIDTH_HZ,
                                                   TEMPERATURE_K,
                                                   NOISE_FIGURE_DB);
-    const auto link = SuMimoLinkModel::Calculate(channel, budget.GetReferenceSnrLinear());
+    MimoCsiSelectionConfiguration selectionConfiguration;
+    selectionConfiguration.numStreams = 2;
+    selectionConfiguration.rxNodeId = 1;
+    selectionConfiguration.txArray.numColumns = 2;
+    selectionConfiguration.rxArray.numColumns = 2;
+    selectionConfiguration.feedback.codebook = MimoFeedbackCodebook::UNQUANTIZED;
+    selectionConfiguration.timing.feedbackDelay = age;
+    // Continuous sampling (Tu=0) makes feedbackDelay equal the requested age.
+    // The existing API resolves and validates the timestamps, then evaluates
+    // the selected W against the separately supplied, perfectly known RX CFR.
+    const auto selection = aging ? std::make_optional(MimoCsiAgingModel::Select(
+        estimate, csiTime, transmissionTime, selectionConfiguration)) : std::nullopt;
+    const auto link = selection ? selection->CalculateLink(channel, budget.GetReferenceSnrLinear())
+                               : SuMimoLinkModel::Calculate(channel, budget.GetReferenceSnrLinear());
     struct Diagnostic
     {
         uint32_t rank;
         double sigma0;
         double sigma1;
+        double correlation;
+        double relativeChange;
     };
     std::vector<Diagnostic> diagnostics;
     diagnostics.reserve(numSubcarriers);
@@ -205,7 +249,22 @@ Analyze(const std::string& input, const std::string& output)
         // Relative SVD rank is diagnostic only: rank-one and zero channels remain valid.
         const double threshold = 1e-12 * sigma0;
         const uint32_t rank = (sigma0 > threshold ? 1 : 0) + (sigma1 > threshold ? 1 : 0);
-        diagnostics.push_back({rank, sigma0, sigma1});
+        double norm = 0.0, change = 0.0;
+        std::complex<double> inner{0.0, 0.0};
+        for (uint32_t rx = 0; rx < 2; ++rx)
+        {
+            for (uint32_t tx = 0; tx < 2; ++tx)
+            {
+                const auto current = channel.Get(sc, rx, tx);
+                const auto old = estimate.Get(sc, rx, tx);
+                norm += std::norm(current);
+                change += std::norm(current - old);
+                inner += std::conj(old) * current;
+            }
+        }
+        diagnostics.push_back({rank, sigma0, sigma1,
+                               norm > 0.0 ? std::abs(inner) / norm : 1.0,
+                               norm > 0.0 ? std::sqrt(change / norm) : 0.0});
         Require(std::isfinite(link.GetSinrLinear(sc, 0)) &&
                     std::isfinite(link.GetSinrLinear(sc, 1)),
                 "Post-MMSE SINRs must be finite");
@@ -221,8 +280,14 @@ Analyze(const std::string& input, const std::string& output)
     Require(csv.is_open(), "Cannot open analysis output: " + output);
     csv << "subcarrier,frequency_offset_hz,rank,sigma0,sigma1,sinr0_linear,sinr1_linear,"
            "effective_sinr0_linear,effective_sinr1_linear,spectral_efficiency_bps_hz,"
-           "wideband_loss_db,reference_snr_linear,received_power_w,noise_power_w,analysis_seconds\n"
-        << std::setprecision(17);
+           "wideband_loss_db,reference_snr_linear,received_power_w,noise_power_w,analysis_seconds";
+    if (selection)
+    {
+        csv << ",initial_time_ns,csi_time_ns,transmission_time_ns,csi_age_ns,"
+               "update_interval_ns,feedback_delay_ns,rotation_rate_deg_per_ms,"
+               "channel_correlation,channel_relative_change,precoder_power";
+    }
+    csv << '\n' << std::setprecision(17);
     for (uint32_t sc = 0; sc < channel.GetNumSubcarriers(); ++sc)
     {
         const auto& diagnostic = diagnostics[sc];
@@ -234,7 +299,18 @@ Analyze(const std::string& input, const std::string& output)
             << link.GetEffectiveSinrLinear(0) << ',' << link.GetEffectiveSinrLinear(1) << ','
             << link.GetSpectralEfficiency() << ',' << receiver.wb_loss() << ','
             << budget.GetReferenceSnrLinear() << ',' << budget.GetReceivedPowerW() << ','
-            << budget.GetReceiverNoisePowerW() << ',' << analysisSeconds << '\n';
+            << budget.GetReceiverNoisePowerW() << ',' << analysisSeconds;
+        if (selection)
+        {
+            csv << ",0," << selection->GetCsiTimestamp().GetNanoSeconds() << ','
+                << selection->GetTransmissionTimestamp().GetNanoSeconds() << ','
+                << selection->GetCsiAge().GetNanoSeconds() << ','
+                << selection->GetUpdateInterval().GetNanoSeconds() << ','
+                << selection->GetFeedbackDelay().GetNanoSeconds() << ',' << rotationRate << ','
+                << diagnostic.correlation << ',' << diagnostic.relativeChange << ','
+                << selection->GetReconstruction().GetPrecodingMatrix().GetPower(sc);
+        }
+        csv << '\n';
     }
     csv.close();
     Require(!csv.fail(), "Cannot write analysis output: " + output);
@@ -251,10 +327,14 @@ main(int argc, char* argv[])
     double spacingLambda = 0.5;
     std::string txSpacingOverride, rxSpacingOverride;
     uint32_t seed = 42;
+    double csiAgeMs = 0.0, transmissionMs = 5.0, rotationRate = 9.0;
     SionnaMimoOrientation txOrientation;
     SionnaMimoOrientation rxOrientation;
     CommandLine cmd(__FILE__);
-    cmd.AddValue("action", "config or analyze", action);
+    cmd.AddValue("action", "config, analyze (open loop), or aging (equal-power SVD)", action);
+    cmd.AddValue("csiAgeMs", "CSI age for aging; continuous sampling with this feedback delay", csiAgeMs);
+    cmd.AddValue("transmissionMs", "Transmission time relative to frozen initial channel", transmissionMs);
+    cmd.AddValue("rotationRateDegPerMs", "Explicit TX-basis rotation rate; zero is static", rotationRate);
     cmd.AddValue("input", "Raw ChannelStateResponse protobuf file for analyze", input);
     cmd.AddValue("output", "Raw SimInitMessage file (config) or diagnostic CSV (analyze)", output);
     cmd.AddValue("spacingLambda", "TX/RX horizontal antenna spacing in wavelengths", spacingLambda);
@@ -290,11 +370,16 @@ main(int argc, char* argv[])
             WriteConfiguration(output, spacing(txSpacingOverride), spacing(rxSpacingOverride),
                                txOrientation, rxOrientation);
         }
-        else if (action == "analyze")
+        else if (action == "analyze" || action == "aging")
         {
             Require(!input.empty(), "Provide --input=<path> for analyze");
             Require(input != output, "Input and output paths must differ");
-            Analyze(input, output);
+            Require(std::isfinite(csiAgeMs) && std::isfinite(transmissionMs) &&
+                        std::isfinite(rotationRate) && csiAgeMs >= 0.0 &&
+                        transmissionMs >= csiAgeMs && transmissionMs <= 1e6 &&
+                        std::abs(rotationRate) <= 360.0,
+                    "Invalid CSI timing or rotation rate");
+            Analyze(input, output, action == "aging", csiAgeMs, transmissionMs, rotationRate);
         }
         else
         {

@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+import subprocess
 
 import numpy as np
 import benchmark_rt_convergence as convergence
@@ -99,6 +100,125 @@ class TestConvergencePolicy(unittest.TestCase):
                     base.trace(config, None, budget)
             with self.assertRaises(ValueError):
                 convergence.run(path, base.executable(), repetitions=1)
+
+    def test_aging_reference_limits_and_repeatability(self):
+        # In-memory analytic full-rank channels; no new recorded fixture.
+        from test_benchmark_sumimo import frozen_response
+        response, _ = frozen_response()
+        rx = response.csi[0].rx_nodes[0]
+        h = np.array([[[2, 0], [0, 0.2]], [[1, 0.2j], [0.3 + 0.1j, 1.5]]])
+        del rx.csi_real[:], rx.csi_imag[:], rx.frequencies[:]
+        rx.csi_real.extend(h.real.reshape(-1))
+        rx.csi_imag.extend(h.imag.reshape(-1))
+        rx.frequencies.extend((0, 78125))
+        policy = convergence.plan(csi_aging=True)
+        self.assertEqual(policy["subphase"], "5.2.5")
+        self.assertEqual(policy["sweep"]["ages_ms"], (0, 1, 2.5, 5))
+        self.assertEqual([case[0] for case in policy["sweep"]["cases"]], ["case_03", "case_06"])
+        self.assertEqual(policy["tolerances"], convergence.TOLERANCES)
+        with tempfile.TemporaryDirectory(prefix="sumimo-aging-test-") as temporary:
+            path = Path(temporary) / "channel.pb"
+            path.write_bytes(response.SerializeToString(deterministic=True))
+            fresh, _ = convergence.aging_analysis(base.executable(), path, 0)
+            alpha = fresh[0]["reference_snr_linear"] / 2
+            np.testing.assert_allclose([fresh[0][f"sinr{s}_linear"] for s in range(2)],
+                                       alpha * np.array([4, 0.04]), rtol=1e-10)
+            for age in convergence.AGES_MS:
+                rows, _ = convergence.aging_analysis(base.executable(), path, age)
+                base.validate_reference_metrics(response, rows, age)
+                repeat, _ = convergence.aging_analysis(base.executable(), path, age)
+                base.compare_repetitions(response, response, rows, repeat)
+                # Fresh SVD attains the logdet MI bound; delayed per-stream
+                # MMSE may trade SINR between streams, but cannot exceed it.
+                self.assertLessEqual(rows[0]["spectral_efficiency_bps_hz"],
+                                     fresh[0]["spectral_efficiency_bps_hz"] + 1e-8)
+            self.assertGreater(convergence.aging_degradation(rows, fresh)["mi_degradation_bps_hz"], 1)
+            # At age 5 ms the diagonal anchor sees 45-degree mixing; both
+            # inverse-error diagonals are the mean of the two mode errors.
+            expected = 2 / (1 / (1 + 4 * alpha) + 1 / (1 + 0.04 * alpha)) - 1
+            np.testing.assert_allclose([rows[0][f"sinr{s}_linear"] for s in range(2)],
+                                       expected, rtol=1e-10)
+            static, _ = convergence.aging_analysis(base.executable(), path, 5, rotation_rate=0)
+            static_fresh, _ = convergence.aging_analysis(base.executable(), path, 0, rotation_rate=0)
+            base.validate_reference_metrics(response, static, 5, rotation_rate=0)
+            for key in ("sinr0_linear", "sinr1_linear", "spectral_efficiency_bps_hz"):
+                self.assertEqual([row[key] for row in static], [row[key] for row in static_fresh])
+            for options in ({"csiAgeMs": -1}, {"csiAgeMs": 6}, {"csiAgeMs": "nan"},
+                            {"transmissionMs": -1}, {"rotationRateDegPerMs": "inf"}):
+                with self.subTest(options=options), self.assertRaises(subprocess.CalledProcessError):
+                    base.native(base.executable(), action="aging", input=path,
+                                output=Path(temporary) / "bad.csv", **options)
+            with self.assertRaises(ValueError):
+                convergence.run(Path(temporary), base.executable(), csi_aging=True)
+
+    @unittest.skipUnless(os.environ.get("SUMIMO_AGING_RESULTS"), "optional local aging export")
+    def test_local_aging_export(self):
+        output = Path(os.environ["SUMIMO_AGING_RESULTS"])
+        manifest = json.loads((output / "manifest.json").read_text())
+        policy = json.loads((output / "plan.json").read_text())
+        for key, value in json.loads(json.dumps(convergence.plan(csi_aging=True))).items():
+            self.assertEqual(policy[key], value)
+            if key != "validation":  # Plan policy becomes measured verdicts in the manifest.
+                self.assertEqual(manifest[key], value)
+        self.assertEqual(base.sha256(output / "plan.json"), manifest["plan_sha256"])
+        with (output / "tones.csv").open() as stream:
+            metrics = {}
+            for row in csv.DictReader(stream):
+                key = (row["case_id"], int(row["seed"]), int(row["samples_per_src"]),
+                       int(row["repetition"]), float(row["age_ms"]), row["csi_kind"])
+                metrics.setdefault(key, []).append({field: float(value) for field, value in row.items()
+                    if field not in (*convergence.IDENTITY_FIELDS, "age_ms", "csi_kind")})
+        expected = set(itertools.product([case[0] for case in convergence.AGING_CASES],
+            convergence.SEEDS, (100000, 1000000), range(2), convergence.AGES_MS, ("fresh", "delayed")))
+        self.assertEqual(set(metrics), expected)
+        self.assertEqual(manifest["validation"]["fresh_traces"], 24)
+        self.assertEqual(manifest["validation"]["evaluations"], 192)
+        with (output / "summary.csv").open() as stream:
+            summaries = list(csv.DictReader(stream))
+        self.assertEqual(len(summaries), len(expected))
+        for summary in summaries:
+            key = (summary["case_id"], int(summary["seed"]), int(summary["samples_per_src"]),
+                   int(summary["repetition"]), float(summary["age_ms"]), summary["csi_kind"])
+            rows = metrics[key]
+            self.assertEqual(len(rows), 256)
+            for field in ("effective_sinr0_linear", "effective_sinr1_linear", "wideband_loss_db",
+                          "spectral_efficiency_bps_hz", "csi_time_ns", "transmission_time_ns",
+                          "csi_age_ns", "mi_degradation_bps_hz"):
+                self.assertEqual(float(summary[field]), rows[0][field])
+            for field in ("init_seconds", "cfr_seconds", "analysis_seconds", "native_process_seconds"):
+                self.assertGreater(float(summary[field]), 0)
+        for record in manifest["configurations"]:
+            directory = output / record["case_id"] / f"seed_{record['seed']}"
+            self.assertEqual(base.sha256(directory / "configuration.pb"), record["configuration_sha256"])
+            for trace in record["traces"]:
+                path = directory / f"samples_{trace['samples_per_src']}" / f"channel_{trace['repetition']:02d}.pb"
+                self.assertEqual(base.sha256(path), trace["channel_sha256"])
+                # Initial RT channel must match the established 5.2.2 control.
+                old = base.MODULE / "data/phase5_2_sample_convergence" / path.relative_to(output)
+                self.assertEqual(path.read_bytes(), old.read_bytes())
+        for (case, seed, budget, repetition, age, kind), rows in metrics.items():
+            path = output / case / f"seed_{seed}" / f"samples_{budget}" / f"channel_{repetition:02d}.pb"
+            response = base.message_pb2.ChannelStateResponse.FromString(path.read_bytes())
+            base.validate_reference_metrics(response, rows, 0 if kind == "fresh" else age)
+            first = metrics[case, seed, budget, 0, age, kind]
+            base.compare_repetitions(response, response, first, rows)
+            fresh = metrics[case, seed, budget, repetition, 0, "fresh"]
+            for key, value in convergence.aging_degradation(rows, fresh).items():
+                self.assertEqual(rows[0][key], value)
+        with (output / "convergence.csv").open() as stream:
+            errors = list(csv.DictReader(stream))
+        self.assertEqual(len(errors), 48)
+        for row in errors:
+            case, seed, age, kind = row["case_id"], int(row["seed"]), float(row["age_ms"]), row["csi_kind"]
+            result = convergence.compare(metrics[case, seed, 100000, 0, age, kind],
+                                         metrics[case, seed, 1000000, 0, age, kind])
+            for key, value in result.items():
+                if isinstance(value, bool):
+                    self.assertEqual(row[key], str(value))
+                else:
+                    self.assertEqual(float(row[key]), value)
+        self.assertEqual(manifest["convergence"]["spot_checks_passed"],
+                         all(row["passed"] == "True" for row in errors))
 
 
 class TestConvergenceExport(unittest.TestCase):
