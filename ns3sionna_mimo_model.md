@@ -1,8 +1,9 @@
 # ns3sionna: MIMO-Abstraktionsmodell für IEEE 802.11ax/be
 
-Stand: 29. September 2026, Phase 4 einschließlich Unterphase 4.8 implementiert;
+Stand: 1. Oktober 2026, Phase 4 einschließlich Unterphase 4.8 implementiert;
 Unterphase 5.1 für HE MCS 0/BCC/32 Byte/1x1 anhand von Link-Level-Daten validiert;
-Unterphasen 5.2.1 bis 5.2.5 mit Kanal-, Konvergenz-, Cache-/IPC-, Arrayabstands- und CSI-Alterungssensitivität implementiert
+Unterphasen 5.2.1 bis 5.2.5 mit Kanal-, Konvergenz-, Cache-/IPC-, Arrayabstands- und CSI-Alterungssensitivität implementiert;
+verbleibender Phase-5-Implementierungsplan R1 bis R6 ergänzt
 
 Arbeitszweig: feature/su-mimo-minimal
 
@@ -871,11 +872,289 @@ Tools/Tests werden erweitert; neue Datensätze und Fixtures bleiben lokal.
 
 #### Weitere Phase-5-Arbeitspakete
 
-- Physikalische CSI-Alterung mit dokumentierter Bewegung/Doppler, weiteren
-  Winkeln, Szenen und Solveroptionen untersuchen.
-- Cache-/IPC-Skalierung mit realen Serverberechnungen, weiteren Transporten
-  und längeren zeitlichen Snapshotfolgen erweitern.
-- Deterministische Seeds, Ergebnisformate und CI-Matrix für CPU/GPU festlegen.
+Der folgende Restplan basiert auf dem Implementierungsstand `2425c7c` und
+dem Vergleich vom 1. Oktober 2026. R1 bis R6 bezeichnen offene Arbeitspakete,
+keine neuen abgeschlossenen Unterphasen. Der ausführliche Vergleich mit dem
+ursprünglichen Plan und seine Prüfnachweise stehen im
+[Phase-5-Implementierungsplan](doc/phase-5-implementation-plan.md).
+
+Die korrigierte HE-DL-MU-Rezeption, Laufzeit-/Helperintegration, Uplinkkern,
+HE-TB-/Triggeradapter und Kohärenzzeitumrechnung sind bereits implementiert
+und historisch auf CPU validiert; sie werden nicht erneut als offene
+Phase-4-Voraussetzungen eingeplant. Die bestehenden Grenzen bei perfekter
+RX-CSI, Synchronisation, Nutzerstreams und automatischer Ablaufsteuerung
+bleiben Bestandteil des jeweiligen Messvertrags.
+
+Die abgeschlossenen Phase-5-Studien werden innerhalb ihrer belegten Grenzen
+weiterverwendet. Die Kalibrierung gilt ausschließlich für HE MCS 0/BCC/32
+Byte/1x1. Der selektive Validierungsfehler 0,054886 erfüllt die implementierte
+Grenze 0,10, aber nicht die ursprünglich vorgeschlagene Grenze 0,05. Eine
+strengere oder breitere Freigabe benötigt neue, vorab festgelegte Kriterien
+und unabhängige Testdaten. Die 2x2-Studien liefern MMSE-/SVD-/MI-Diagnostik;
+die analytische CSI-Rotation ist keine physikalische Dopplerreferenz.
+Der Cache-/IPC-Benchmark liefert eine eingefrorene lokale Prozessreferenz,
+keine Live-RT- oder Langzeit-Speicherfreigabe.
+
+Die bestehenden Werkzeuge `calibrate_eesm.py`, `benchmark_sumimo.py`,
+`benchmark_rt_convergence.py` und `benchmark_cache_ipc.py` werden erweitert.
+Gemeinsame kleine Hilfsfunktionen sollen doppelte Manifest-/Prozesslogik
+reduzieren; ein zweites Benchmarkframework ist nicht erforderlich.
+
+##### R1: Provenienz, portable Reproduzierbarkeit und CPU-CI
+
+Priorität: zuerst; vorhandene Exporte und Referenzen bilden die Basis.
+
+- Einen gemeinsamen versionierten Manifestvertrag für Fall-ID,
+  Konfiguration, Quellrevision und lokale Änderungen, Seeds/Run/Streams,
+  tatsächliches Backend, Hardware-, Build- und Paketversionen, Befehle,
+  Eingangshashes und Laufstatus festlegen. Bestehende Exporte über eine
+  dokumentierte Schemamigration erhalten.
+- Erfolgreiche, fehlgeschlagene und unvollständige Läufe eindeutig markieren,
+  Abschlussmarker atomar schreiben und Fehlerlogs erhalten. Wiederaufnahme
+  nur bei passenden Konfigurations-/Eingangshashes erlauben; der bestehende
+  Schutz nichtleerer Ausgabeverzeichnisse bleibt erhalten.
+- Einen expliziten Hashvertrag für Textdateien festlegen: LF über
+  `.gitattributes` sichern oder einen versionierten kanonischen Textdigest
+  neben dem Rohbytedigest speichern. Binäre Protobufs bleiben rohbytegeprüft.
+  Der aktuelle Windows-Checkout verändert vier geprüfte CSV-/JSON-Hashes
+  ausschließlich durch CRLF; nach LF-Normalisierung stimmen sie mit den
+  Messhashes überein. Andere Änderungen dürfen nicht dadurch verdeckt werden.
+- Die lokal gehaltenen Exporte von 5.2.4/5.2.5 vom ursprünglichen Host
+  sichern oder reproduzieren. Einen versionierten Artefaktindex mit
+  Prüfsummen und einem kleinen verteilbaren Prüfsatz bereitstellen; die
+  vorhandene Entscheidung, diese Rohdatensätze nicht in Git abzulegen,
+  wird durch reproduzierbaren externen Zugriff ergänzt.
+- CPU-Abhängigkeiten einschließlich transitiver Pakete exakt sperren.
+  Docker/Singularity den aktuellen Checkout oder eine explizite Revision
+  mit Tests bauen lassen; derzeit klonen sie Upstream und mehrere
+  Requirements bleiben offen. CPU-CI mit frisch generierten Bindings,
+  nativen SU-/DL-/UL-Suites, Kalibrier-, Vertrags-, Policy- und eingefrorenen
+  Benchmarkprüfungen einrichten. Teure vollständige RT-Läufe separat planen.
+- Seed und Run tatsächlich übertragen beziehungsweise versioniert ableiten.
+  Gegenwärtig verwenden die Benchmarks Run 1; `SionnaHelper` sendet nur
+  `GetSeed()`. Getrennte Mobilitäts-, RT- und Paketstreams sowie unveränderte
+  Fallidentitäten bei vertauschter Reihenfolge/paralleler Ausführung prüfen.
+  Den vorhandenen knotenbezogenen Mobilitätsgenerator weiterverwenden und
+  globale NumPy-Ziehungen vor der Serverinitialisierung auditieren.
+- Unveränderliche Quellhashes zum Messzeitpunkt von den Identitäten späterer
+  Test-/Replayversionen unterscheiden. Historische Messungen dürfen weder
+  ihre Provenienz verlieren noch als Ergebnisse neuer Quellen erscheinen.
+
+Abnahmekriterium: Eine saubere gesperrte Linux-Umgebung prüft den bestehenden
+Referenzsatz; Text-/Binärhashes sind portabel dokumentiert, lokale Studien
+wieder zugänglich und jeder Lauf besitzt einen nachvollziehbaren Endstatus.
+Fehlgeschlagene CI-Läufe liefern verwertbare Logs.
+
+##### R2: Vollständiger Kalibrierprofilvertrag und erweiterte PER-Validierung
+
+Abhängigkeit: R1-Identitäten und geeignete unabhängige Referenzdaten.
+
+- Die MCS-0/BCC-Pilotkalibrierung und ihre historischen Grenzen 0,05/0,10
+  erhalten. Den nächsten Profilumfang anhand verfügbarer Referenzen
+  auswählen. LDPC, 1458 Byte, weitere MCS, 2x2 und MU sind Erweiterungen,
+  keine bereits validierten Kombinationen.
+- Die Bedeutung von `packet_size_bytes` eindeutig festlegen. MATLAB verwendet
+  `APEPLength`/`getPSDULength`, der AWGN-Exporter `8*packetSizeBytes`, der
+  Empfang PSDU-/Chunkgrößen. Anwendungs-, MPDU-, PSDU- und Aggregatlängen
+  sowie Fehlerzählung vor einem Paketvergleich konsistent zuordnen.
+- Ein explizites typisiertes Profil für Beta, optionale AWGN-Korrektur,
+  PHY-Kontext, Fehlermodellklasse/-attribute, Detektor-/CSI-Annahme,
+  Ton-/RU-Vertrag und Profil-/Provenienzidentität ergänzen. Derzeit ist Beta
+  nur MCS-bezogen, während der Offset einen engeren Kontext besitzt.
+  Manuelle Setter bleiben als unvalidierte Experimente nutzbar.
+- Das bestehende JSON-Ergebnis oder ein kleines versioniertes Laufzeitformat
+  außerhalb der Mathematikklassen einlesen. Fehlerhafte, abgelehnte,
+  synthetische, unvollständige oder inkompatible Profile und widersprüchliche
+  manuelle Werte vor Zustandsänderungen zurückweisen.
+- Anwendbarkeit sowohl bei Helperkonfiguration als auch für jeden tatsächlichen
+  PPDU/Nutzer, `WifiTxVector`, Codeart, NSS, Bandbreite/RU und Paketlänge
+  prüfen. Fehlermodellattribute und Fallbackzweig gehören zum Profil.
+  Ein Lauf darf nach einem Teilfallback nicht weiterhin als vollständig
+  kalibriert erscheinen.
+- Den skalaren 1x1-Kompatibilitätspfad getrennt prüfen: Er umgeht die
+  MIMO-Abstraktion. Ein Offline-/Numerikfit belegt daher nicht automatisch
+  dessen Anwendung bei realem 1x1-Netzwerkempfang. Den vorgesehenen
+  kalibrierten Empfangspfad explizit festlegen und Ende-zu-Ende validieren.
+- Einen nativen Batchauswerter für gespeicherte CFRs, Precoder, Tonmasken,
+  Linkbudget und PHY-Kontext ergänzen, der die Produktionsrechnung
+  MMSE/EESM/Fehlermodell benutzt. Der vorhandene Benchmark prüft MMSE/MI;
+  der AWGN-Exporter prüft nur das Fehlermodell.
+- Unberührte finale Testdaten von Training/Modellauswahl trennen; sämtliche
+  Punkte einer Kanalrealisation gehören in dieselbe Partition.
+  Binomialintervalle pro festem Kanal und Unsicherheit über unabhängige
+  Realisationen berichten. Paketanzahlen anhand eines Piloten vorab
+  festlegen; 1000 Pakete garantieren keine 95-Prozent-Intervallhalbbreite
+  von höchstens 0,02. Unzureichende Präzision ausdrücklich kennzeichnen.
+
+Abnahmekriterium: Vollständige Profile werden explizit gewählt und beim
+tatsächlichen Einsatz geprüft; Fit, native Rechnung und PHY-Empfang stimmen
+für ihren belegten Bereich überein. Für neue Daten gelten als vorgeschlagene
+Ziele selektive PER-MAE höchstens 0,05 und SNR-Verschiebung höchstens 1 dB
+bei PER 0,1/0,5, sofern die Kurven diese Übergänge einschließen. Abweichende
+Kriterien müssen vor Einsicht in neue finale Testdaten begründet werden.
+Das vorhandene Ergebnis 0,054886 wird nicht nachträglich als Bestehen von
+0,05 ausgegeben; Nullfehlerpunkte werden als obere Schranke behandelt.
+
+##### R3: Cachekorrektheit und langfristig begrenzte Speicherung
+
+Priorität: hoch; Voraussetzung eines aussagekräftigen Vergleichs ohne Cache.
+
+- Regressionen für wiederholte Anfragen bei deaktiviertem Cache mit
+  unterschiedlichen noch gültigen Antworten, Gültigkeitsränder,
+  überlappende Snapshots, Richtung, kalte Linkeinträge und atomare
+  Ablehnung fehlerhafter Batches ergänzen.
+- Bei deaktiviertem Cache die neue dekodierte Antwort direkt verwenden.
+  Der aktuelle Pfad überspringt nur die Suche vor der Anfrage, speichert
+  anschließend dennoch Antworten und durchsucht ältere Einträge.
+  Akkumulation und Wiederverwendung einer älteren Antwort beseitigen.
+- Günstige Belegungs-, logische Speicher-/Kapazitäts- und Spitzenzähler
+  ergänzen; `GetStats()` für null Zugriffe definieren. Abgelaufene Einträge
+  in inaktiven Links deterministisch bereinigen und leere Buckets entfernen.
+  Mobilitätshistorien und Allokatorpools gesondert messen.
+- Dimensionen, Antwortgrößen und Speicherbudgets vor gefährlichen
+  Allokationen mit überlaufgeprüfter Multiplikation validieren.
+  Benötigte gültige oder zukünftige Look-ahead-Snapshots nur verwerfen,
+  wenn exaktes Replay gesichert ist: Der zustandsbehaftete Server kann
+  ihre Zeit bereits überschritten haben. Zu große Batches vor dem
+  Raytracing klar ablehnen.
+- Nach Messnachweis unnötige CFR-Kopien in Suche/Gettern reduzieren und
+  vollständig validierte MU-Snapshots wiederverwenden, statt sie zweimal
+  zu dekodieren. Lebensdauer, Richtung und atomare Übernahme erhalten.
+- Den vorhandenen IPC-Runner um Cache an/aus, fortschreitende Zeit,
+  wechselnde aktive Links und Look-ahead-Tiefen 1/4/16 erweitern.
+  Die tatsächlich erzeugte Tiefe `floor(sub_mode/receiver_count)`
+  dokumentieren und Nulltiefen zurückweisen.
+
+Abnahmekriterium: Ungecachte Anfragen liefern die neue Antwort; gespeicherte
+Nutzbytes bleiben in langen Läufen mit begrenzter Arbeitsmenge innerhalb
+eines erklärten Budgets. Richtung, Zeitwahl und atomare Validierung bleiben
+korrekt. Allokator-/RSS-Verhalten wird separat ausgewiesen; freigegebene
+logische Bytes müssen nicht sofort an das Betriebssystem zurückkehren.
+
+##### R4: Live-Server-/PHY-Skalierung und gemessene Optimierungen
+
+Abhängigkeit: R3 für belastbare Cachevergleiche; 5.2.3 liefert die Basis.
+
+- Bestehende Matrizen und Requestprüfungen für echte Sionna-Serverberechnung
+  in P2P/P2MP/Look-ahead und unterstützte PHY-/Verkehrsfälle erweitern.
+  Den abgebrochenen `performance-sionna-mimo.sh` reparieren, Seeds/Run
+  weiterreichen und getrennte Ausgabeverzeichnisse verwenden.
+- PathSolver, CIR/CFR, NumPy-Konvertierung/Normalisierung, Protobufaufbau,
+  Serialisierung, Transport, C++-Parsing/Validierung, Cacheübernahme und
+  Linkrechnung getrennt messen. Ereignisse über Anfrageidentität verbinden;
+  keine Differenz unsynchronisierter Prozessuhren als Laufzeit ausgeben.
+- Import-/JIT-Kosten von warmen Messungen trennen. RSS/Spitzen-RSS und
+  backendbezogenen GPU-Speicher messen; Torch-Allokatorwerte erfassen nicht
+  den gesamten Mitsuba-/Dr.Jit-Bedarf. Validierte Live-RT-Optionen für Samples,
+  Tiefe und Solverflags ergänzen; bisher setzt der Runner sie direkt im
+  Prozess.
+- Transportstress um ausgewählte 4096-Ton-/Eckfälle und zeitliche Batches
+  innerhalb eines vorab geprüften Budgets ergänzen. Synthetische Tensorgrößen
+  bleiben von unterstützten HE-Ressourcengittern getrennt.
+- MU-Gruppenrechnungen pro Empfänger/PPDU zählen und erst dann reduzieren.
+  Wiederverwendung erfordert vollständige CSI-/Gruppen-/RU-/Precoder-/
+  Rausch-/TX-Vector-Identität und korrekten empfängerbezogenen Zustand.
+- Baseline auf einem benannten Host mit vielen Anfragestichproben und
+  unabhängigen Prozessen messen. Median/p95 und Schwankungen zwischen
+  Läufen berichten; Leistungsgrenzen vor Kandidatenvergleich festlegen.
+  Eine höchstens zehnprozentige Regression auf unbetroffenen Fällen ist
+  ein vorgeschlagenes Prüfziel, keine bestehende Garantie.
+
+Abnahmekriterium: Live-CPU und später GPU besitzen belegte Grenzen für
+Speicherverstärkung, Latenz und simulierte Sekunden pro Wandzeitsekunde.
+Ressourcenüberschreitungen werden mitberichtet; Optimierungen besitzen
+gemessenen Nutzen oder eine belegte Korrektheits-/Speichergrenzenwirkung.
+
+##### R5: Physikalische CSI-Alterung und breitere Sensitivität
+
+Abhängigkeit: R1; kalibrierte PER-Ausgaben zusätzlich R2.
+
+- Vorhandene Abstands-/Winkel-/Konvergenzmatrizen wiederverwenden.
+  Gezielte 0,75-Lambda-, Elevations-/Rollfälle und eine weitere
+  Multipath-/NLOS-Szene mit konkreter Untersuchungsfrage ergänzen.
+  Gesamtleistung, Rauschen und Solveroptionen kontrollieren sowie
+  tatsächliche Geometrie und Apertur ausgeben.
+- Einen physikalischen Bewegungs-/Dopplervertrag mit getrennten Sounding-
+  und Sendekanälen festlegen. Frisches und verzögertes CSI gegen denselben
+  tatsächlichen Sendekanal auswerten; Updateintervall, Feedbackdauer und
+  Zeitstempel von der Propagationcache-Gültigkeit unterscheiden.
+- Die bestehende analytische Rotation als Kontrolle erhalten. Ihre
+  Energie-/Singularwertinvarianz prüft Numerik, nicht Doppler.
+  Gleichleistungs-SVD unterstützt Alterung; MRT benötigt aktuelles
+  perfektes CSI, Wasserfüllung schließt Alterung/Quantisierung aus.
+- Unsicherheit über Seeds/Geometrien ergänzen. Die finale Anzahl unabhängiger
+  Realisationen anhand eines Piloten bestimmen; ein Start mit zehn gepaarten
+  Seeds ist ein Planungswert. Deterministische Wiederholungen zählen nicht
+  als unabhängige statistische Stichproben.
+- Historische Toleranzen erhalten: 0,5 dB Verlust/effektive SINR, 1 dB
+  Ton-SINR, die Rang-/Singularwertkriterien und 0,2 bit/s/Hz MI-Effizienz.
+  Neue Szenen oder strengere Ziele benötigen vorab festgelegte Kriterien.
+  Nach R2 kalibrierte Nutzdaten-PER und beobachtete PHY-Ergebnisse ergänzen;
+  MI, vorhergesagte PER, Präambelfehler, Payloadfehler, Retries und Goodput
+  getrennt berichten.
+
+Abnahmekriterium: Physikalische Alterung besitzt reproduzierbare Bewegung,
+CSI-Zeiten, unabhängige Kontrollen, Unsicherheit und erklärten Gültigkeitsbereich.
+Eine 1x1-Kalibrierung wird nicht ungeprüft auf 2x2 oder MU übertragen.
+
+##### R6: CUDA-CI, Backendvergleich und Phase-5-Abschluss
+
+GPU-Zugang früh konfigurieren; finale Evidenz folgt den benötigten R1-R5-Paketen.
+
+- Einen unterstützten GPU-Runner mit exakten Abhängigkeiten, GPU-/
+  Treiberdaten und tatsächlicher CUDA-Mitsuba-Variante einrichten.
+  Torch-Gerätewahl und RT-Backend unabhängig prüfen.
+- Backendinterne Wiederholung und CPU-/GPU-Vergleich für analytische
+  Kontrollen sowie repräsentative RT-/Serverfälle automatisieren.
+  Physikalische Invarianten und vorab definierte numerische/statistische
+  Äquivalenzgrenzen verwenden. Fehlender GPU-Zugang ist ein offener Nachweis,
+  kein erfolgreicher CPU-Fallback eines GPU-Jobs.
+- PR-Prüfungen auf native, Vertrags-, Profil-, Policy- und eingefrorene
+  Daten beschränken; vollständige RT-/Referenz-/Live-Skalierungs-/Langläufe
+  bei relevanten Änderungen oder Freigabekandidaten ausführen.
+- Unabhängige Referenzdeckung zuerst für das gewählte SU-Profil, danach
+  für festes/ZF/RZF-DL-MU und ideales synchronisiertes UL-MU erweitern.
+  Automatisches Sounding, Triggersteuerung und Synchronisationsfehler sind
+  getrennte Erweiterungen der bestehenden Phase-4-Annahmen.
+- Ein Reproduktionspaket für eine saubere Maschine mit Manifesten, Befehlen,
+  gesperrten Versionen, Artefaktindex, Profilen, Rohdaten und Genauigkeits-/
+  Ressourcenberichten veröffentlichen. README, Modell und PDF nach
+  tatsächlichen Abnahmen konsistent aktualisieren.
+
+Abnahmekriterium: Für beide gewählten Backends liegen Nachweise derselben
+Freigaberevision vor. Alle kalibrierten Aussagen gehören zu bestandenen
+Profilen; offene Hardware-, Daten- oder Featuregrenzen bleiben benannt.
+
+##### Reihenfolge, Aufwand und nächstes Inkrement
+
+| Paket | Hauptabhängigkeit | Geschätzte Entwicklertage |
+| --- | --- | --- |
+| R1: Provenienz und CPU-CI | vorhandene Exporte | 3-5 |
+| R2: Profile und eine Erweiterung | R1-Identitäten, unabhängige Referenz | 5-9 |
+| R3: Cachekorrektheit und Speicherung | bestehender Cachebenchmark | 3-5 |
+| R4: Live-Skalierung und Optimierung | R3 für Cachevergleiche | 3-6 |
+| R5: Physikalische Alterung/Sensitivität | R1, für kalibrierte PER zusätzlich R2 | 4-7 |
+| R6: CUDA und Reproduktionsabschluss | GPU-Zugang, benötigte R1-R5-Pakete | 3-5 |
+
+Der geschätzte Restaufwand beträgt 21-37 Entwicklertage. Referenzbeschaffung/
+Lizenzen, unbeaufsichtigte Experiment-/Runnerwartezeit und vollständige
+Kalibrierung sämtlicher MCS-/FEC-/Längen-/SU-/MU-Kombinationen sind nicht
+enthalten. Die Schätzung ersetzt den früheren Gesamtphasenansatz 27-47 Tage;
+bereits geleistete Arbeit wird damit nicht rückwirkend bewertet.
+
+**Nächstes Inkrement:** portable Provenienz und erste CPU-CI aus R1 sowie
+Regression und Korrektur des deaktivierten Caches aus R3. R1/R3 können
+unabhängig entwickelt werden; anschließend R2 parallel zu R4 und R5 zunächst
+als Kanaldiagnostik. Korrektheit, Provenienz, Kalibrierung und Optimierung
+bleiben getrennt prüfbare Änderungen.
+
+Die Prüfung vom 1. Oktober bestätigte acht Kalibrier-Unit-Tests sowie alle
+135 referenzierten binären Konfigurations-/Kanal-/Templatehashes der drei
+versionierten Studien. Native, RT-, GPU- und MATLAB-Läufe wurden dabei nicht
+erneut ausgeführt. Die alten Abnahmen in Abschnitt 7 bleiben historische
+Nachweise; die lokal gehaltenen Rohdaten von 5.2.4/5.2.5 waren in diesem
+Checkout nicht vorhanden. Der Restplan ist daher kein neuer wissenschaftlicher
+Abschlussnachweis.
 
 ## 4. Datenmodell und IPC-Vertrag der Unterphasen 1.1/1.2
 
