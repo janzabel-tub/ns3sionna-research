@@ -1,53 +1,19 @@
 # Sionna-to-ns-3 Channel Abstraction
 
-This document explains the complete path from Sionna RT's channel-frequency-response tensor to ns-3's packet-level Wi-Fi reception model.
+Sionna RT supplies the physical channel; ns-3 computes MIMO reception and packet outcomes.
 
-The central idea is:
-
-> ns-3 does not simulate the received complex waveform sample by sample. It transforms Sionna's channel tensor into path loss, propagation delay, per-stream SINRs, an effective SINR, and ultimately packet-error behavior.
+- **Sionna:** ray traces the scene and antenna arrays, then exports wideband path loss, propagation delay and normalized complex matrices $H[k]$ with antenna dimensions and validity times.
+- **Interface:** Protobuf/ZMQ transfers channel snapshots. ns-3 validates whole replies before caching them, preserves directed MU identities and future snapshots, and removes expired entries on cache access. With caching disabled, each request uses its fresh reply.
+- **ns-3:** selects/applies precoding, computes stream SINRs (SU MMSE, DL-MU with inter-user interference, UL-MU ZF/MMSE), and maps them through EESM and the configured error model to packet reception in `SpectrumWifiPhy`. CSI feedback and aging also belong to ns-3; UL integration uses explicit simultaneous-user channel state.
 
 ```text
-ns-3 channel request at time t
-        |
-        v
-Sionna mobility update and ray tracing
-        |
-        v
-raw six-dimensional CFR tensor
-        |
-        v
-select one link and one time step
-        |
-        v
-separate wideband loss and normalized H[k]
-        |
-        v
-flatten and transmit through Protobuf/ZMQ
-        |
-        v
-reconstruct and cache H[k] in ns-3
-        |
-        +----------------------------+
-        |                            |
-        v                            v
-SISO/control frame             HE SU-MIMO frame
-PSD[k] *= |H[k]|^2             optional H[k]W[k]
-                                     |
-                                     v
-                              per-subcarrier MMSE SINR
-                                     |
-                                     v
-                              EESM effective SINR
-                                     |
-                                     v
-                              ns-3 error model / PER
-                                     |
-                                     v
-                              equivalent scalar PSD
-                                     |
-                                     v
-                              native SpectrumWifiPhy
+Sionna RT → path loss + delay + normalized H[k]
+          → Protobuf/ZMQ → validated ns-3 cache
+          → ns-3 precoding/detection → stream SINRs
+          → EESM → error model / PER → SpectrumWifiPhy
 ```
+
+This is a packet-level abstraction, without waveform demodulation. PER calibration is validated only for HE MCS 0/BCC/32-byte/1x1; EHT PER and broader profiles remain open. The sections below detail the SU path; current MU behavior and validation are documented in [the model](../ns3sionna_mimo_model.md).
 
 ## 1. Meaning of the tensor dimensions
 
