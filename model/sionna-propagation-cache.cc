@@ -210,8 +210,10 @@ SionnaPropagationCache::DeserializeChannelMatrix(
     const ns3sionna::ChannelStateResponse::ChannelState::RxNodeInfo& message)
 {
     const int coefficientCount = message.csi_real_size();
-    NS_ABORT_MSG_IF(message.csi_imag_size() != coefficientCount,
-                    "Real and imaginary CFR arrays have different sizes");
+    if (message.csi_imag_size() != coefficientCount)
+    {
+        throw std::invalid_argument("Real and imaginary CFR arrays have different sizes");
+    }
 
     const int numSubcarriers = message.frequencies_size();
     if (coefficientCount == 0 && numSubcarriers == 0)
@@ -223,17 +225,32 @@ SionnaPropagationCache::DeserializeChannelMatrix(
         message.num_rx_antennas() == 0 ? 1 : message.num_rx_antennas();
     const uint32_t numTxAntennas =
         message.num_tx_antennas() == 0 ? 1 : message.num_tx_antennas();
-    const std::size_t expectedCount =
-        static_cast<std::size_t>(numSubcarriers) * numRxAntennas * numTxAntennas;
-
-    NS_ABORT_MSG_IF(numSubcarriers == 0, "A non-empty CFR needs subcarrier frequencies");
-    NS_ABORT_MSG_IF(static_cast<std::size_t>(coefficientCount) != expectedCount,
-                    "CFR coefficient count does not match sc/rx/tx dimensions");
+    if (numSubcarriers == 0)
+    {
+        throw std::invalid_argument("A non-empty CFR needs subcarrier frequencies");
+    }
+    std::size_t expectedCount = numSubcarriers;
+    for (uint32_t dimension : {numRxAntennas, numTxAntennas})
+    {
+        if (dimension > std::numeric_limits<std::size_t>::max() / expectedCount)
+        {
+            throw std::invalid_argument("CFR dimensions overflow size_t");
+        }
+        expectedCount *= dimension;
+    }
+    if (static_cast<std::size_t>(coefficientCount) != expectedCount)
+    {
+        throw std::invalid_argument("CFR coefficient count does not match sc/rx/tx dimensions");
+    }
 
     std::vector<std::complex<double>> coefficients;
     coefficients.reserve(expectedCount);
     for (int i = 0; i < coefficientCount; ++i)
     {
+        if (!std::isfinite(message.csi_real(i)) || !std::isfinite(message.csi_imag(i)))
+        {
+            throw std::invalid_argument("Non-finite CFR coefficient");
+        }
         coefficients.emplace_back(message.csi_real(i), message.csi_imag(i));
     }
 
@@ -384,6 +401,8 @@ SionnaPropagationCache::SetCaching(bool caching)
     {
         // Disabling also releases snapshots retained by earlier enabled requests.
         m_cache.clear();
+        m_storage.links = m_storage.snapshots = m_storage.payloadBytes = m_storage.capacityBytes = 0;
+        m_nextExpiry = Time::Max();
     }
 }
 
@@ -396,14 +415,90 @@ SionnaPropagationCache::SetOptimize(bool optimize)
 double
 SionnaPropagationCache::GetStats()
 {
-    double ratio = m_cache_hits / (m_cache_hits + m_cache_miss);
-    return ratio;
+    const double lookups = m_cache_hits + m_cache_miss;
+    return lookups == 0 ? 0.0 : m_cache_hits / lookups;
 }
 
 void SionnaPropagationCache::PrintStats()
 {
     std::cout << "Ns3-sionna: cache #lookups: " <<  (m_cache_hits + m_cache_miss) << ", #misses:"
         << m_cache_miss << ", hit ratio: " <<  this->GetStats() << std::endl;
+}
+
+
+bool
+SionnaPropagationCache::Matches(const CacheEntry& entry, uint32_t tx, uint32_t rx, Time now)
+{
+    return entry.m_start_time <= now && entry.m_end_time >= now &&
+           ((entry.m_a == tx && entry.m_b == rx) ||
+            (!entry.m_directed && entry.m_a == rx && entry.m_b == tx));
+}
+
+uint64_t
+SionnaPropagationCache::PayloadBytes(const CacheEntry& entry)
+{
+    return entry.m_cfr.GetCoefficients().size() * sizeof(std::complex<double>) +
+           entry.m_freq.size() * sizeof(int);
+}
+
+uint64_t
+SionnaPropagationCache::CapacityBytes(const CacheEntry& entry)
+{
+    return entry.m_cfr.GetCoefficients().capacity() * sizeof(std::complex<double>) +
+           entry.m_freq.capacity() * sizeof(int);
+}
+
+void
+SionnaPropagationCache::UpdateStoragePeaks() const
+{
+    m_storage.peakLinks = std::max(m_storage.peakLinks, m_storage.links);
+    m_storage.peakSnapshots = std::max(m_storage.peakSnapshots, m_storage.snapshots);
+    m_storage.peakPayloadBytes = std::max(m_storage.peakPayloadBytes, m_storage.payloadBytes);
+    m_storage.peakCapacityBytes = std::max(m_storage.peakCapacityBytes, m_storage.capacityBytes);
+}
+
+void
+SionnaPropagationCache::PurgeExpired(Time now) const
+{
+    // Validity is inclusive. Scan only after the earliest retained end time.
+    if (now <= m_nextExpiry)
+    {
+        return;
+    }
+    m_nextExpiry = Time::Max();
+    for (auto link = m_cache.begin(); link != m_cache.end();)
+    {
+        auto& entries = link->second;
+        auto expired = std::remove_if(entries.begin(), entries.end(), [&](const CacheEntry& entry) {
+            if (entry.m_end_time < now)
+            {
+                --m_storage.snapshots;
+                m_storage.payloadBytes -= PayloadBytes(entry);
+                m_storage.capacityBytes -= CapacityBytes(entry);
+                return true;
+            }
+            m_nextExpiry = std::min(m_nextExpiry, entry.m_end_time);
+            return false;
+        });
+        entries.erase(expired, entries.end());
+        if (entries.empty())
+        {
+            m_storage.capacityBytes -= entries.capacity() * sizeof(CacheEntry);
+            link = m_cache.erase(link);
+        }
+        else
+        {
+            ++link;
+        }
+    }
+    m_storage.links = m_cache.size();
+}
+
+SionnaPropagationCache::StorageStatistics
+SionnaPropagationCache::GetStorageStatistics() const
+{
+    PurgeExpired(Simulator::Now());
+    return m_storage;
 }
 
 
@@ -423,6 +518,7 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
 
     NS_LOG_DEBUG("ns3sionna::GetPropagationData for lnk: " << node_a->GetId() << " to " << node_b->GetId());
 
+    PurgeExpired(current_time);
     if (m_caching)
     {
         //NS_LOG_INFO("Check cache");
@@ -432,24 +528,11 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
 
         if (it != m_cache.end())
         {
-            //NS_LOG_INFO(" Cache entry found but need to check if expired ");
-            // remove outdated entries
-            std::vector<CacheEntry>::iterator vec_it = it->second.begin();
-            while (vec_it != it->second.end()) {
-                if (vec_it->m_end_time < current_time) {
-                    vec_it = it->second.erase(vec_it);
-                } else {
-                    ++vec_it;
-                }
-            }
-
             // iterate over all stored entries for that link
             for (CacheEntry c_entry : it->second) {
                 //NS_LOG_INFO(" " << c_entry.m_start_time << " " << c_entry.m_end_time << " " << current_time);
                 // If delay and loss exist in the cache, check if the entry is not outdated
-                if (c_entry.m_end_time >= current_time && c_entry.m_start_time <= current_time &&
-                    (!c_entry.m_directed ||
-                     (c_entry.m_a == node_a->GetId() && c_entry.m_b == node_b->GetId())))
+                if (Matches(c_entry, node_a->GetId(), node_b->GetId(), current_time))
                 {
                     NS_LOG_DEBUG("\t: Cache hit for lnk: " << node_a->GetId() << " to " << node_b->GetId());
                     m_cache_hits += 1;
@@ -488,10 +571,11 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
 
     // Check if the reply message is a propagation response
     ns3sionna::Wrapper reply_wrapper;
-    reply_wrapper.ParseFromArray(zmq_reply.data(), zmq_reply.size());
-    //NS_LOG_INFO("ZMQ::CSI_RESP sz=" << zmq_reply.size() << " Bytes");
-
-    NS_ASSERT_MSG(reply_wrapper.has_channel_state_response(), "Reply after channel state request is not a channel state response.");
+    if (!reply_wrapper.ParseFromArray(zmq_reply.data(), zmq_reply.size()) ||
+        !reply_wrapper.has_channel_state_response())
+    {
+        throw std::invalid_argument("Invalid channel-state response wrapper");
+    }
 
     // Extract the delay, loss and time to live value
     const ns3sionna::ChannelStateResponse& csi_response = reply_wrapper.channel_state_response();
@@ -502,6 +586,13 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
     std::vector<std::pair<CacheKey, CacheEntry>> pendingEntries;
     for (int csi_i=0; csi_i < csi_response.csi_size(); csi_i++) {
         const auto& csiMessage = csi_response.csi(csi_i);
+        if (csiMessage.start_time() > csiMessage.end_time() ||
+            csiMessage.end_time() > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()) ||
+            csiMessage.rx_nodes_size() == 0)
+        {
+            throw std::invalid_argument("Invalid channel snapshot validity or empty receivers");
+        }
+        std::set<uint32_t> receivers;
         bool hasUserIdentity = false;
         for (const auto& rxMessage : csiMessage.rx_nodes())
         {
@@ -524,6 +615,12 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
 
         for (int rx_i=0; rx_i < csi_response.csi(csi_i).rx_nodes_size(); rx_i++) {
             const auto& rxMessage = csi_response.csi(csi_i).rx_nodes(rx_i);
+            if (rxMessage.id() == txId || !receivers.insert(rxMessage.id()).second ||
+                !std::isfinite(rxMessage.wb_loss()) ||
+                rxMessage.delay() > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()))
+            {
+                throw std::invalid_argument("Invalid receiver endpoints, loss or delay");
+            }
             Time delay = NanoSeconds(rxMessage.delay());
             double wb_loss = rxMessage.wb_loss();
 
@@ -556,28 +653,36 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
         }
     }
 
-    if (!m_caching)
+    const auto fresh = std::find_if(pendingEntries.begin(), pendingEntries.end(),
+        [&](const auto& pending) {
+            return Matches(pending.second, node_a->GetId(), node_b->GetId(), current_time);
+        });
+    if (fresh == pendingEntries.end())
     {
-        // The entire batch was validated above. Return only a matching fresh
-        // reply and retain no link entries, including other receivers/look-ahead.
-        for (const auto& pending : pendingEntries)
-        {
-            const auto& entry = pending.second;
-            if (entry.m_start_time <= current_time && entry.m_end_time >= current_time &&
-                ((entry.m_a == node_a->GetId() && entry.m_b == node_b->GetId()) ||
-                 (!entry.m_directed && entry.m_b == node_a->GetId() &&
-                  entry.m_a == node_b->GetId())))
-            {
-                return entry;
-            }
-        }
         throw std::invalid_argument("Fresh response has no valid entry for the requested link");
     }
-
+    if (!m_caching)
+    {
+        return fresh->second; // Fully validated; retain no snapshots.
+    }
     for (auto& pending : pendingEntries)
     {
-        m_cache[pending.first].push_back(std::move(pending.second));
+        if (pending.second.m_end_time < current_time)
+        {
+            continue; // A valid batch may contain already obsolete samples.
+        }
+        auto& entries = m_cache[pending.first];
+        const auto oldCapacity = entries.capacity();
+        entries.push_back(std::move(pending.second));
+        const auto& entry = entries.back();
+        ++m_storage.snapshots;
+        m_storage.payloadBytes += PayloadBytes(entry);
+        m_storage.capacityBytes += CapacityBytes(entry) +
+                                  (entries.capacity() - oldCapacity) * sizeof(CacheEntry);
+        m_nextExpiry = std::min(m_nextExpiry, entry.m_end_time);
     }
+    m_storage.links = m_cache.size();
+    UpdateStoragePeaks();
 
     // get result from cache
     CacheKey key2 = CacheKey(node_a->GetId(), node_b->GetId());
@@ -587,18 +692,14 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
         // iterate over all stored entries for that link
         for (CacheEntry c_entry : cache_it->second) {
             // If delay and loss exist in the cache, check if the entry is not outdated
-            if (c_entry.m_end_time >= current_time && c_entry.m_start_time <= current_time &&
-                (!c_entry.m_directed ||
-                 (c_entry.m_a == node_a->GetId() && c_entry.m_b == node_b->GetId())))
+            if (Matches(c_entry, node_a->GetId(), node_b->GetId(), current_time))
             {
                 // Return cache entry as the value is still fresh
                 return c_entry;
             }
         }
     }
-    // cannot be reached
-    CacheEntry dummy_entry = CacheEntry();
-    return dummy_entry;
+    throw std::logic_error("Validated requested channel missing after cache commit");
 }
 
 } // namespace ns3

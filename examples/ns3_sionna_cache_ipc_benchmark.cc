@@ -304,6 +304,18 @@ main(int argc, char* argv[])
             sink = channel.Get(0, 0, 0).real();
         }
         const uint64_t digest = ValidateCache(memoryCache, radios, state);
+        // Check logical occupancy independently of allocator/RSS measurements.
+        const auto storage = memoryCache->GetStorageStatistics();
+        const uint64_t payloadBytes = static_cast<uint64_t>(links) *
+            (rx.csi_real_size() * sizeof(std::complex<double>) +
+             rx.frequencies_size() * sizeof(int));
+        Require(storage.links == links && storage.snapshots == links &&
+                    storage.payloadBytes == payloadBytes &&
+                    storage.peakLinks == links && storage.peakSnapshots == links &&
+                    storage.peakPayloadBytes == payloadBytes &&
+                    storage.capacityBytes >= payloadBytes &&
+                    storage.peakCapacityBytes == storage.capacityBytes,
+                "Cache occupancy does not match the frozen payload");
         const double memoryHitRatio = memoryCache->GetStats();
         Require(std::abs(memoryHitRatio - (4.0 * links) / (4.0 * links + 1)) <= 1e-12,
                 "A batched cache fill failed to retain all links");
@@ -349,6 +361,10 @@ main(int argc, char* argv[])
                     "Expired cache refresh changed channel");
         });
         Simulator::Run();
+        const auto refreshed = cache->GetStorageStatistics();
+        Require(refreshed.links == links && refreshed.snapshots == links &&
+                    refreshed.payloadBytes == payloadBytes && refreshed.peakSnapshots == links,
+                "Expiry refresh retained obsolete snapshots or lost inactive links");
         const double hitRatio = cache->GetStats();
         const uint32_t hits = warmup + hitIterations + 1;
         Require(std::abs(hitRatio - static_cast<double>(hits) / (hits + 2)) <= 1e-12,

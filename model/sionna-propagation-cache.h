@@ -81,7 +81,7 @@ struct MultiUserChannelSnapshot
 /**
  * All CSI values are cached within ns3sionna framework for faster simulation time.
  *
- * TODO: garbage collection - purge too old values from cache
+ * Expired snapshots across all links are purged lazily on access/statistics reads.
  */
 class SionnaPropagationCache : public ns3::Object
 {
@@ -119,7 +119,22 @@ class SionnaPropagationCache : public ns3::Object
         SionnaHelper* GetSionnaHelper();
         void SetCaching(bool caching);
         void SetOptimize(bool optimize);
+        /** Hit ratio; zero before the first lookup. Failed RPC attempts count as misses. */
         double GetStats();
+        /** Retained payload and vector capacities, excluding map/allocator/RSS overhead. */
+        struct StorageStatistics
+        {
+            uint64_t links{0};
+            uint64_t snapshots{0};
+            uint64_t payloadBytes{0};
+            uint64_t capacityBytes{0};
+            uint64_t peakLinks{0};
+            uint64_t peakSnapshots{0};
+            uint64_t peakPayloadBytes{0};
+            uint64_t peakCapacityBytes{0};
+        };
+        /** Purge expired entries and return current counters and lifetime peaks. */
+        StorageStatistics GetStorageStatistics() const;
         void PrintStats();
 
     private:
@@ -198,10 +213,18 @@ class SionnaPropagationCache : public ns3::Object
 
         CacheEntry GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityModel> b) const;
 
+        static bool Matches(const CacheEntry& entry, uint32_t tx, uint32_t rx, Time now);
+        static uint64_t PayloadBytes(const CacheEntry& entry);
+        static uint64_t CapacityBytes(const CacheEntry& entry);
+        void PurgeExpired(Time now) const;
+        void UpdateStoragePeaks() const;
+
         SionnaHelper *m_sionnaHelper;
         bool m_caching;
         typedef std::map<CacheKey, std::vector<CacheEntry>> Cache;
         mutable Cache m_cache;
+        mutable StorageStatistics m_storage;
+        mutable Time m_nextExpiry{Time::Max()};
         mutable double m_cache_hits;
         mutable double m_cache_miss;
         bool m_optimize; // too far distance are not computed with raytracing

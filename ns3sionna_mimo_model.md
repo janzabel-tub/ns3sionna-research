@@ -4,7 +4,8 @@ Stand: 1. Oktober 2026, Phase 4 einschließlich Unterphase 4.8 implementiert;
 Unterphase 5.1 für HE MCS 0/BCC/32 Byte/1x1 anhand von Link-Level-Daten validiert;
 Unterphasen 5.2.1 bis 5.2.5 mit Kanal-, Konvergenz-, Cache-/IPC-, Arrayabstands- und CSI-Alterungssensitivität implementiert;
 verbleibender Phase-5-Implementierungsplan R1 bis R6 ergänzt;
-erstes R1/R3-Inkrement mit portabler Provenienz, CPU-CI und deaktiviertem Cache implementiert
+erstes R1/R3-Inkrement mit portabler Provenienz, CPU-CI und deaktiviertem Cache implementiert;
+zweites R3-Inkrement mit Cachekorrektheitsregressionen, Belegungszählern und inaktiver Linkbereinigung implementiert
 
 Arbeitszweig: feature/su-mimo-minimal
 
@@ -1000,18 +1001,18 @@ Das vorhandene Ergebnis 0,054886 wird nicht nachträglich als Bestehen von
 
 Priorität: hoch; Voraussetzung eines aussagekräftigen Vergleichs ohne Cache.
 
-- Regressionen für wiederholte Anfragen bei deaktiviertem Cache mit
-  unterschiedlichen noch gültigen Antworten, Gültigkeitsränder,
+- Implementiert in 7.19/7.20: Regressionen für wiederholte deaktivierte
+  Anfragen mit unterschiedlichen noch gültigen Antworten, Gültigkeitsränder,
   überlappende Snapshots, Richtung, kalte Linkeinträge und atomare
-  Ablehnung fehlerhafter Batches ergänzen.
-- Bei deaktiviertem Cache die neue dekodierte Antwort direkt verwenden.
-  Der aktuelle Pfad überspringt nur die Suche vor der Anfrage, speichert
-  anschließend dennoch Antworten und durchsucht ältere Einträge.
-  Akkumulation und Wiederverwendung einer älteren Antwort beseitigen.
-- Günstige Belegungs-, logische Speicher-/Kapazitäts- und Spitzenzähler
-  ergänzen; `GetStats()` für null Zugriffe definieren. Abgelaufene Einträge
-  in inaktiven Links deterministisch bereinigen und leere Buckets entfernen.
-  Mobilitätshistorien und Allokatorpools gesondert messen.
+  Ablehnung fehlerhafter Batches.
+- Implementiert in 7.19: Bei deaktiviertem Cache die neue dekodierte Antwort
+  direkt verwenden; frühere Akkumulation und Auswahl älterer Antworten
+  beseitigen. Wiederaktivierung beginnt kalt.
+- Implementiert in 7.20: Belegungs-, logische Speicher-/Kapazitäts- und
+  Spitzenzähler; `GetStats()` liefert vor dem ersten Zugriff null.
+  Abgelaufene Einträge auch in inaktiven Links bei Zugriff/Statistiklesen
+  deterministisch bereinigen und leere Buckets entfernen.
+  Offen: Mobilitätshistorien und Allokatorpools gesondert messen.
 - Dimensionen, Antwortgrößen und Speicherbudgets vor gefährlichen
   Allokationen mit überlaufgeprüfter Multiplikation validieren.
   Benötigte gültige oder zukünftige Look-ahead-Snapshots nur verwerfen,
@@ -5128,13 +5129,105 @@ versioniert. Die PDF-Abschlussprüfung erfolgt nach der finalen Dokumentation
 mit genau einer Neuerzeugung; Seitenzahl, Textextraktion, vollständige
 Seitenfußzeilen und ausgewählte Seiten werden geprüft. Ihr Protokoll bleibt lokal.
 
-Offen bleiben insbesondere externer Artefaktzugang für 5.2.4/5.2.5,
+Zum Abschluss des ersten Inkrements blieben insbesondere externer Artefaktzugang für 5.2.4/5.2.5,
 Seed-/Run-/Streamunabhängigkeit, Resume, Wheel-/Systempaket-Locking und aktuelle
 Containerrezepte aus R1 sowie breitere Cache-Zeit-/Richtungs-/Batchregressionen,
 Belegungs-/Nullzugriffsstatistik, inaktive Linkbereinigung, Allokationsbudgets,
 Langzeitspeichergrenzen und erweiterte Sweeps aus R3. Vollständige RT-, Live-,
 GPU- und neue Referenzläufe sind kein Nachweis dieses Inkrements. Die Kalibrierung
 bleibt HE MCS 0/BCC/32 Byte/1x1; 2x2-Ergebnisse bleiben MMSE-/SVD-/MI-Diagnostik.
+Die nachfolgende Cachearbeit ist getrennt in Abschnitt 7.20 dokumentiert.
+
+### 7.20 Zweites R3-Inkrement: Cachekorrektheit und Belegungsstatistik
+
+Dieses Inkrement ergänzt den vorhandenen nativen Sockettest und IPC-Runner.
+Die historischen Exportdateien, Fixtures, Manifeste und Messzeitpunkt-Hashes
+bleiben erhalten; ihre früheren Laufzeiten werden nicht als neue Messung
+interpretiert. R1 und R3 sind weiterhin nicht vollständig abgeschlossen.
+Der ausführliche referenzierte Phase-5-Plan fehlt weiterhin im Checkout;
+der eingebettete R1-R6-Plan bleibt die verwendete Anforderungsgrundlage.
+
+Der Cache verwendet unverändert inklusive Gültigkeit
+\[
+ t_{\mathrm{start}} \leq t_{\mathrm{now}} \leq t_{\mathrm{end}}.
+\]
+Bei Überlappung gewinnt der erste passende Eintrag in Antwort-/Einfügereihenfolge.
+Zukünftige Einträge werden gespeichert, aber vor ihrem Beginn nicht ausgewählt.
+MU-Einträge mit Nutzeridentität gelten nur für ihre explizite TX/RX-Richtung;
+der bestehende reziproke Legacy-Pfad bleibt erhalten. Eine kalte Anfrage muss
+in ihrer neuen Antwort einen jetzt gültigen passenden Link besitzen.
+Eine fehlende Zuordnung wird als `std::invalid_argument` abgelehnt; der frühere
+Fallback auf einen nicht initialisierten Dummy-Eintrag entfällt.
+
+Die vollständige Antwort wird vor Veröffentlichung der neuen Cacheeinträge
+validiert. Ungültige Wrapper, Zeitintervalle und Zeit-/Delay-Konvertierungen,
+leere Empfängerlisten, doppelte Empfänger, nichtendliche Verluste/CFR-Werte
+und inkonsistente CFR-Längen oder Dimensionen liefern `std::invalid_argument`.
+Die Multiplikation der CFR-Dimensionen wird vor Reserve/Allokation auf
+`size_t`-Überlauf geprüft. Die bestehenden MU-Identitätsprüfungen bleiben aktiv.
+Bei einem fehlerhaften späteren Eintrag wird auch ein gültiges Präfix nicht
+gespeichert. Vorher gültige Einträge bleiben nutzbar; bereits abgelaufene
+Einträge dürfen unabhängig davon bereinigt werden. Diese Atomarität gilt
+für Datenvalidierung, nicht für einen Allokationsfehler während der Übernahme.
+Transporttimeouts und absolute Antwort-/Allokationsbudgets bleiben offen.
+
+`GetStats()` liefert vor dem ersten Lookup 0 statt des früheren `0/0`.
+Fehlgeschlagene RPC-Versuche zählen als Miss; Statistiklesen ist kein Lookup.
+Die additive API `GetStorageStatistics()` liefert aktuelle und lebenslange
+Spitzenwerte für Links, Snapshots, Nutzbytes und Vektorkapazität. Für die
+zurückgehaltenen Snapshots \(e\) gilt
+\[
+ B_{\mathrm{payload}} = \sum_e
+ \left(|H_e|\,\operatorname{sizeof}(\mathrm{complex<double>})
+ + |F_e|\,\operatorname{sizeof}(\mathrm{int})\right).
+\]
+`capacityBytes` zählt stattdessen die Kapazitäten der CFR-/Frequenzvektoren
+und zusätzlich `capacity * sizeof(CacheEntry)` der Linkvektoren. Spitzen sind
+das Maximum der veröffentlichten Belegung über die Objektlebensdauer.
+`SetCaching(false)` setzt die aktuelle Belegung auf null und erhält diese
+Spitzen; deaktivierte Anfragen speichern weiterhin keine Snapshots.
+Mapknoten, Allokatoroverhead, RSS und temporäre Protobuf-/Dekodierkopien werden
+nicht durch diese logischen Zähler erfasst. Teilweise belegte Linkvektoren
+behalten ihre Kapazität; vollständiges Leeren entfernt den Bucket.
+
+Nach Überschreiten der frühesten gespeicherten Endzeit entfernt ein stabiler
+Sweep auf dem nächsten Cache-Lookup oder `GetStorageStatistics()` sämtliche
+abgelaufenen Snapshots, auch in nie erneut angefragten Links. Er erhält
+Reihenfolge und gültige zukünftige Look-ahead-Snapshots. Vor dieser Endzeit
+entfällt der Sweep. Ein ganz ruhender Cache wird ohne erneuten Zugriff nicht
+bereinigt; ein Sweep kostet linear viele Snapshotprüfungen und ist keine
+harte Speicher-/Latenzschranke oder periodische Hintergrundbereinigung.
+
+Validierung am 1. Oktober 2026: drei zusätzliche native Cachefälle prüfen
+exakte Start-/Endränder und Zeit danach, Überlappungsreihenfolge, kalte Links,
+Legacy-Reziprozität, gerichtete MU-Antworten, Zukunftserhaltung, inaktive
+Bereinigung sowie aktuelle/Spitzenzähler und Leeren. Der dritte Fall lehnt
+13 fehlerhafte Antworten atomar ab und prüft nach jeder Ablehnung den alten
+Link; anschließend gelingt ein gültiger Retry. Alle Antworten entstehen im
+Speicher, ohne aufgezeichnete neue Fixtures. Der bestehende IPC-Runner
+prüft die Zähler zusätzlich gegen seine eingefrorenen CFR-/Frequenzlängen
+und nach Ablauf/Refresh; sein JSON-/CSV-Exportschema bleibt unverändert.
+
+Der inkrementelle Build im zuvor frisch erzeugten, festgelegten ns-3.40-
+Checkout bestand. Die einmalige vollständige Auswahl über
+`tools/run_cpu_regressions.py` bestand mit 53 nativen Fällen in sieben Suites
+und 56 erfolgreichen Python-Tests unter den 57 ausgewählten Tests.
+Ein optionaler lokaler Alterungsexporttest wurde ausgelassen; dieselben drei
+frischen RT-Prüfungen bleiben separat. Verwendet wurden die zuvor geprüften
+Python-/Paketpins und `llvm_ad_mono_polarized`. Die bestehenden eingefrorenen
+IPC-Replays bestanden einschließlich der neuen Zählerprüfungen.
+Logs und Builddaten liegen unter `/tmp/r3-*` und `/tmp/ns3-r1r3-*`.
+Die PDF wird nach den finalen Dokumentationsänderungen genau einmal erzeugt;
+Seitenzahl, Text, alle Fußzeilen und ausgewählte Seiten werden lokal geprüft.
+
+Der gehostete CPU-Job bleibt unvalidiert: Der Remotezweig steht noch auf
+`7dead3b`, vor der lokalen Workflowimplementierung. Eine Ausführung benötigt
+die Veröffentlichung der lokalen Commits. Es wird kein gehosteter Erfolg
+behauptet. Offen aus R3 bleiben insbesondere vor dem RT geprüfte Antwort-/
+Allokationsbudgets, langfristige Grenzen für gültige/überlappende/zukünftige
+Snapshots, Mobilitätshistorien-/Allokatormessungen, CFR-Kopieroptimierungen
+und erweiterte Live-/Zeit-/Link-/Look-ahead-Sweeps. Die offenen R1-Pakete aus
+7.19 sowie weitere PHY-Profile, GPU- und neue Referenzvalidierung bleiben offen.
 
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 

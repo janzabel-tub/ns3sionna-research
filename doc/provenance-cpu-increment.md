@@ -131,7 +131,12 @@ R1 still needs an external artifact index/access for local 5.2.4/5.2.5 studies,
 seed/run/stream changes and independence tests, resume validation if resume is
 introduced, wheel/system dependency locking, and container recipes building the
 current revision (existing Docker/Singularity recipes still clone upstream).
-R3 still needs broader time/direction/atomic-batch regressions, cache occupancy and
-zero-access statistics, inactive-link cleanup, overflow/allocation budgets,
+At completion of this first increment, R3 still needed broader time/direction/
+atomic-batch regressions, cache occupancy and zero-access statistics,
+inactive-link cleanup, overflow/allocation budgets,
 long-run memory limits, copy optimizations and extended cache/IPC sweeps.
 GPU/RT/reference validation and other R2/R4/R5/R6 work remain outside this increment.
+
+The subsequent [R3 cache increment](../ns3sionna_mimo_model.md#720-zweites-r3-inkrement-cachekorrektheit-und-belegungsstatistik)
+implements those correctness regressions, counters and lazy inactive-link cleanup.
+It records new validation separately; the first increment's results above remain historical.

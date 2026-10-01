@@ -4370,6 +4370,276 @@ class DisabledCacheFreshReplyTest : public TestCase
     }
 };
 
+
+// A bounded production REQ/REP peer; every response is generated in memory.
+class CachePeer
+{
+  public:
+    explicit CachePeer(std::vector<std::string> replies)
+        : m_context(1), m_socket(m_context, ZMQ_REP)
+    {
+        m_socket.set(zmq::sockopt::linger, 0);
+        m_socket.set(zmq::sockopt::rcvtimeo, 3000);
+        m_socket.bind("tcp://127.0.0.1:*");
+        endpoint = m_socket.get(zmq::sockopt::last_endpoint);
+        m_requests = std::async(std::launch::async, [this, replies]() {
+            std::vector<ns3sionna::ChannelStateRequest> requests;
+            for (const auto& reply : replies)
+            {
+                zmq::message_t wire;
+                if (!m_socket.recv(wire, zmq::recv_flags::none))
+                {
+                    break;
+                }
+                ns3sionna::Wrapper request;
+                if (!request.ParseFromArray(wire.data(), wire.size()) ||
+                    !request.has_channel_state_request())
+                {
+                    throw std::runtime_error("Invalid cache request");
+                }
+                requests.push_back(request.channel_state_request());
+                m_socket.send(zmq::buffer(reply), zmq::send_flags::none);
+            }
+            return requests;
+        });
+    }
+
+    std::vector<ns3sionna::ChannelStateRequest> Finish() { return m_requests.get(); }
+    std::string endpoint;
+
+  private:
+    zmq::context_t m_context;
+    zmq::socket_t m_socket;
+    std::future<std::vector<ns3sionna::ChannelStateRequest>> m_requests;
+};
+
+Ptr<SionnaMobilityModel>
+MakeCacheRadio()
+{
+    auto node = CreateObject<Node>();
+    auto radio = CreateObject<SionnaMobilityModel>();
+    node->AggregateObject(radio);
+    return radio;
+}
+
+uint32_t
+CacheRadioId(Ptr<SionnaMobilityModel> radio)
+{
+    return radio->GetObject<Node>()->GetId();
+}
+
+void
+AddCacheState(ns3sionna::Wrapper& reply, Ptr<SionnaMobilityModel> tx,
+              Ptr<SionnaMobilityModel> rx, uint64_t start, uint64_t end,
+              double loss, bool directed = false)
+{
+    auto* state = reply.mutable_channel_state_response()->add_csi();
+    state->set_start_time(start);
+    state->set_end_time(end);
+    state->mutable_tx_node()->set_id(CacheRadioId(tx));
+    auto* user = state->add_rx_nodes();
+    user->set_id(CacheRadioId(rx));
+    user->set_wb_loss(loss);
+    user->set_delay(1);
+    user->add_frequencies(78125);
+    user->add_csi_real(1);
+    user->add_csi_imag(0);
+    user->set_num_rx_antennas(1);
+    user->set_num_tx_antennas(1);
+    if (directed)
+    {
+        auto* identity = user->mutable_user_identity();
+        identity->set_user_id(CacheRadioId(rx));
+        identity->set_tx_node_id(CacheRadioId(tx));
+        identity->set_rx_node_id(CacheRadioId(rx));
+        identity->set_csi_timestamp(start);
+        identity->set_direction(ns3sionna::CHANNEL_DIRECTION_DOWNLINK);
+        auto* array = identity->mutable_rx_array();
+        array->set_num_rows(1);
+        array->set_num_cols(1);
+        array->set_vertical_spacing(0.5);
+        array->set_horizontal_spacing(0.5);
+        array->set_pattern("dipole");
+        array->set_polarization("V");
+    }
+}
+
+class CacheContractTest : public TestCase
+{
+  public:
+    explicit CacheContractTest(unsigned scenario)
+        : TestCase(scenario == 0 ? "cache validity, overlaps, inactive expiry and storage peaks" :
+                   scenario == 1 ? "cache directed MU endpoints and legacy reciprocity" :
+                                   "cache rejects malformed batches atomically"),
+          m_scenario(scenario)
+    {
+    }
+
+  private:
+    void CheckStorage(Ptr<SionnaPropagationCache> cache, uint64_t links, uint64_t snapshots,
+                      uint64_t peakSnapshots)
+    {
+        const auto stats = cache->GetStorageStatistics();
+        const uint64_t bytes = sizeof(std::complex<double>) + sizeof(int);
+        NS_TEST_ASSERT_MSG_EQ(stats.links, links, "Wrong retained links");
+        NS_TEST_ASSERT_MSG_EQ(stats.snapshots, snapshots, "Wrong retained snapshots");
+        NS_TEST_ASSERT_MSG_EQ(stats.payloadBytes, snapshots * bytes, "Wrong live payload");
+        NS_TEST_ASSERT_MSG_EQ(stats.peakSnapshots, peakSnapshots, "Wrong lifetime peak");
+        NS_TEST_ASSERT_MSG_EQ(stats.peakPayloadBytes, peakSnapshots * bytes, "Wrong peak payload");
+        NS_TEST_ASSERT_MSG_GT_OR_EQ(stats.capacityBytes, stats.payloadBytes, "Capacity undercounts");
+        NS_TEST_ASSERT_MSG_GT_OR_EQ(stats.peakCapacityBytes, stats.capacityBytes,
+                                   "Capacity peak undercounts");
+        if (snapshots == 0)
+        {
+            NS_TEST_ASSERT_MSG_EQ(stats.capacityBytes, 0, "Empty buckets retain capacity");
+        }
+    }
+
+    void DoRun() override
+    {
+        auto a = MakeCacheRadio();
+        auto b = MakeCacheRadio();
+        auto c = MakeCacheRadio();
+        auto d = MakeCacheRadio();
+        auto e = MakeCacheRadio();
+        auto f = MakeCacheRadio();
+        std::vector<std::string> replies;
+        auto single = [&](auto tx, auto rx, uint64_t start, uint64_t end, double loss,
+                          bool directed = false) {
+            ns3sionna::Wrapper reply;
+            AddCacheState(reply, tx, rx, start, end, loss, directed);
+            return reply.SerializeAsString();
+        };
+        if (m_scenario == 0)
+        {
+            ns3sionna::Wrapper first;
+            AddCacheState(first, a, b, 0, 10, 10);
+            AddCacheState(first, c, d, 0, 10, 99); // Never queried: global cleanup must remove it.
+            AddCacheState(first, a, b, 20, 30, 50);
+            AddCacheState(first, a, b, 20, 40, 60); // First matching overlap wins.
+            replies = {first.SerializeAsString(), single(e, f, 11, 11, 55),
+                       single(a, b, 19, 19, 70), single(a, b, 41, 41, 80)};
+        }
+        else if (m_scenario == 1)
+        {
+            replies = {single(a, b, 0, 100, 1, true), single(b, a, 0, 100, 2, true),
+                       single(c, d, 0, 100, 3)};
+        }
+        else
+        {
+            replies.push_back(single(a, b, 0, 100, 10));
+            for (unsigned malformed = 0; malformed < 13; ++malformed)
+            {
+                ns3sionna::Wrapper reply;
+                AddCacheState(reply, c, d, 0, 100, 20); // Valid prefix must never leak.
+                AddCacheState(reply, e, f, 0, 100, 30);
+                auto* state = reply.mutable_channel_state_response()->mutable_csi(1);
+                auto* user = state->mutable_rx_nodes(0);
+                switch (malformed)
+                {
+                case 0: user->clear_csi_imag(); break;
+                case 1: state->set_start_time(101); break;
+                case 2: state->set_end_time(std::numeric_limits<uint64_t>::max()); break;
+                case 3: user->set_wb_loss(std::numeric_limits<double>::quiet_NaN()); break;
+                case 4: user->set_csi_real(0, std::numeric_limits<double>::quiet_NaN()); break;
+                case 5: *state->add_rx_nodes() = *user; break;
+                case 6: state->clear_rx_nodes(); break;
+                case 7: reply.mutable_channel_state_response()->mutable_csi(0)->
+                            mutable_rx_nodes(0)->set_id(CacheRadioId(f)); break;
+                case 8: user->set_num_rx_antennas(2); break;
+                case 9: user->set_delay(std::numeric_limits<uint64_t>::max()); break;
+                case 10: replies.push_back(std::string(1, '\xff')); continue;
+                case 11: replies.push_back(ns3sionna::Wrapper().SerializeAsString()); continue;
+                case 12:
+                    user->set_num_rx_antennas(std::numeric_limits<uint32_t>::max());
+                    user->set_num_tx_antennas(std::numeric_limits<uint32_t>::max());
+                    user->add_frequencies(156250);
+                    break;
+                }
+                replies.push_back(reply.SerializeAsString());
+            }
+            replies.push_back(single(c, d, 0, 100, 42));
+        }
+        CachePeer peer(replies);
+        SionnaHelper helper("in-memory-cache-contract", peer.endpoint);
+        helper.m_zmq_socket.set(zmq::sockopt::linger, 0);
+        helper.m_zmq_socket.set(zmq::sockopt::rcvtimeo, 3000);
+        auto cache = CreateObject<SionnaPropagationCache>();
+        cache->SetSionnaHelper(helper);
+        cache->SetOptimize(false);
+        const auto emptyRatio = cache->GetStats();
+        NS_TEST_ASSERT_MSG_EQ(emptyRatio, 0, "Zero lookups must produce a finite zero ratio");
+        CheckStorage(cache, 0, 0, 0);
+        auto loss = [&](auto tx, auto rx, double expected) {
+            const double actual = cache->GetPropagationLoss(tx, rx);
+            NS_TEST_ASSERT_MSG_EQ(actual, expected, "Wrong snapshot selected");
+        };
+        if (m_scenario == 0)
+        {
+            loss(a, b, 10);
+            CheckStorage(cache, 2, 4, 4);
+            Simulator::Schedule(NanoSeconds(10), [&]() { loss(a, b, 10); });
+            Simulator::Schedule(NanoSeconds(11), [&]() {
+                loss(e, f, 55);
+                CheckStorage(cache, 2, 3, 4);
+            });
+            Simulator::Schedule(NanoSeconds(12), [&]() { CheckStorage(cache, 1, 2, 4); });
+            Simulator::Schedule(NanoSeconds(19), [&]() { loss(a, b, 70); });
+            Simulator::Schedule(NanoSeconds(20), [&]() { loss(a, b, 50); });
+            Simulator::Schedule(NanoSeconds(30), [&]() { loss(a, b, 50); });
+            Simulator::Schedule(NanoSeconds(31), [&]() { loss(a, b, 60); });
+            Simulator::Schedule(NanoSeconds(40), [&]() { loss(a, b, 60); });
+            Simulator::Schedule(NanoSeconds(41), [&]() { loss(a, b, 80); });
+            Simulator::Schedule(NanoSeconds(42), [&]() { CheckStorage(cache, 0, 0, 4); });
+            Simulator::Run();
+            const auto ratio = cache->GetStats();
+            NS_TEST_ASSERT_MSG_EQ_TOL(ratio, 5.0 / 9, 1e-12, "Stat reads counted as lookups");
+        }
+        else if (m_scenario == 1)
+        {
+            loss(a, b, 1);
+            loss(b, a, 2);
+            loss(a, b, 1);
+            loss(c, d, 3);
+            loss(d, c, 3);
+            CheckStorage(cache, 2, 3, 3);
+        }
+        else
+        {
+            loss(a, b, 10);
+            const auto original = cache->GetStorageStatistics();
+            for (unsigned malformed = 0; malformed < 13; ++malformed)
+            {
+                bool rejected = false;
+                try { cache->GetPropagationLoss(c, d); }
+                catch (const std::invalid_argument&) { rejected = true; }
+                NS_TEST_ASSERT_MSG_EQ(rejected, true, "Malformed response accepted: " << malformed);
+                loss(a, b, 10);
+                CheckStorage(cache, 1, 1, 1);
+                const auto stats = cache->GetStorageStatistics();
+                NS_TEST_ASSERT_MSG_EQ(stats.capacityBytes, original.capacityBytes,
+                                      "Rejected batch changed live capacity");
+                NS_TEST_ASSERT_MSG_EQ(stats.peakCapacityBytes, original.peakCapacityBytes,
+                                      "Rejected batch changed peak capacity");
+            }
+            loss(c, d, 42);
+            CheckStorage(cache, 2, 2, 2);
+        }
+        const auto requests = peer.Finish();
+        NS_TEST_ASSERT_MSG_EQ(requests.size(), replies.size(), "Unexpected RPC count");
+        const auto peak = cache->GetStorageStatistics();
+        cache->SetCaching(false);
+        CheckStorage(cache, 0, 0, peak.peakSnapshots);
+        const auto cleared = cache->GetStorageStatistics();
+        NS_TEST_ASSERT_MSG_EQ(cleared.peakLinks, peak.peakLinks, "Disable cleared lifetime peaks");
+        NS_TEST_ASSERT_MSG_EQ(cleared.peakCapacityBytes, peak.peakCapacityBytes,
+                              "Disable cleared capacity peak");
+        Simulator::Destroy();
+    }
+
+    unsigned m_scenario;
+};
+
 class SionnaTestSuite : public TestSuite
 {
   public:
@@ -4377,6 +4647,10 @@ class SionnaTestSuite : public TestSuite
         : TestSuite("sionna", UNIT)
     {
         AddTestCase(new DisabledCacheFreshReplyTest, TestCase::QUICK);
+        for (unsigned scenario = 0; scenario < 3; ++scenario)
+        {
+            AddTestCase(new CacheContractTest(scenario), TestCase::QUICK);
+        }
         AddTestCase(new SionnaMimoHelperDefaultsTest, TestCase::QUICK);
         AddTestCase(new SionnaMimoHelperValidConfigurationTest, TestCase::QUICK);
         AddTestCase(new SionnaMimoHelperBeamformingSelectionTest, TestCase::QUICK);

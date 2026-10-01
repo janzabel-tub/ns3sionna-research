@@ -302,3 +302,9 @@ propagation cache now returns each new validated reply and releases retained
 snapshots. See [the increment contract and limitations](doc/provenance-cpu-increment.md)
 and [the model validation](ns3sionna_mimo_model.md#719-r1r3-inkrement-portable-provenienz-und-erste-cpu-ci).
 This increment does not complete all of R1/R3.
+
+The following [R3 cache increment](ns3sionna_mimo_model.md#720-zweites-r3-inkrement-cachekorrektheit-und-belegungsstatistik)
+adds validity/direction/atomic-batch regressions, finite zero-lookup statistics,
+current/lifetime-peak storage counters and lazy expiry cleanup across inactive
+links. Future snapshots are retained. Existing IPC exports remain unchanged;
+long-run budgets, copy optimization and hosted CPU validation remain open.
