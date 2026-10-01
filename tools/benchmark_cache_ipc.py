@@ -317,10 +317,9 @@ def plots(output, summaries):
         plt.close(fig)
 
 
+@base.provenance.benchmark_run(lambda a: plan(), inputs=(ANCHOR,))
 def run(output, binary):
-    if output.exists() and any(output.iterdir()):
-        raise ValueError("Use an empty output directory to preserve results")
-    output.mkdir(parents=True, exist_ok=True)
+    base.provenance.backend_selected("frozen-protobuf-local-zmq")
     policy = {**plan(), "defined_before_measurements_utc": datetime.now(timezone.utc).isoformat()}
     (output / "plan.json").write_text(json.dumps(policy, indent=2) + "\n")
     started = time.perf_counter()

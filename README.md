@@ -283,3 +283,22 @@ Please use the following bibtex:
     year = {2024},
    }
 ```
+
+CPU regression CI and provenance
+===============================
+
+The initial CPU workflow builds the current module against a fixed ns-3.40
+revision with fresh Protobuf bindings, Python 3.12.12 and exact direct/transitive
+versions in `model/ns3sionna/requirements_cpu_ci.lock`. After building the native
+benchmark examples, `test-runner` and `sionna-test`, run `python tools/run_cpu_regressions.py`
+from this module (or pass its path from ns-3). It reuses seven native suites,
+server contracts, calibration/policy checks and the three existing frozen exports.
+Full RT checks remain separate; build/test logs are retained by CI.
+
+New tool runs add a versioned `run.json` sidecar (calibration: `<output>.run.json`)
+with portable text/raw binary hashes and explicit execution status. Existing
+exports and historical measurement source hashes are preserved. Disabling the
+propagation cache now returns each new validated reply and releases retained
+snapshots. See [the increment contract and limitations](doc/provenance-cpu-increment.md)
+and [the model validation](ns3sionna_mimo_model.md#719-r1r3-inkrement-portable-provenienz-und-erste-cpu-ci).
+This increment does not complete all of R1/R3.

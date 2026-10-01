@@ -229,14 +229,12 @@ def plots(output: Path, summaries: list[dict], errors: list[dict]) -> None:
     plt.close(fig)
 
 
+@base.provenance.benchmark_run(lambda a: plan(a["repetitions"], a["independent_spacing"], a["csi_aging"]))
 def run(output: Path, binary: Path, repetitions=2, independent_spacing=False, csi_aging=False) -> dict:
     if independent_spacing and csi_aging:
         raise ValueError("Select one benchmark matrix")
     if repetitions < 2:
         raise ValueError("At least two fresh repetitions are required")
-    if output.exists() and any(output.iterdir()):
-        raise ValueError("Use an empty output directory to preserve results")
-    output.mkdir(parents=True, exist_ok=True)
     policy = {**plan(repetitions, independent_spacing, csi_aging),
               "defined_before_tracing_utc": datetime.now(timezone.utc).isoformat()}
     (output / "plan.json").write_text(json.dumps(policy, indent=2) + "\n")

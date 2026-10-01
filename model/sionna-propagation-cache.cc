@@ -380,6 +380,11 @@ void
 SionnaPropagationCache::SetCaching(bool caching)
 {
     m_caching = caching;
+    if (!caching)
+    {
+        // Disabling also releases snapshots retained by earlier enabled requests.
+        m_cache.clear();
+    }
 }
 
 void
@@ -549,6 +554,24 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
 
             pendingEntries.emplace_back(otherkey, std::move(entry));
         }
+    }
+
+    if (!m_caching)
+    {
+        // The entire batch was validated above. Return only a matching fresh
+        // reply and retain no link entries, including other receivers/look-ahead.
+        for (const auto& pending : pendingEntries)
+        {
+            const auto& entry = pending.second;
+            if (entry.m_start_time <= current_time && entry.m_end_time >= current_time &&
+                ((entry.m_a == node_a->GetId() && entry.m_b == node_b->GetId()) ||
+                 (!entry.m_directed && entry.m_b == node_a->GetId() &&
+                  entry.m_a == node_b->GetId())))
+            {
+                return entry;
+            }
+        }
+        throw std::invalid_argument("Fresh response has no valid entry for the requested link");
     }
 
     for (auto& pending : pendingEntries)

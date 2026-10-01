@@ -24,6 +24,8 @@ import time
 
 import numpy as np
 
+import provenance
+
 MODULE = Path(__file__).resolve().parents[1]
 NS3 = MODULE.parents[1]
 SERVER = MODULE / "model/ns3sionna"
@@ -65,7 +67,9 @@ def executable() -> Path:
 
 
 def native(binary: Path, **arguments) -> None:
-    subprocess.run([str(binary), *(f"--{key}={value}" for key, value in arguments.items())],
+    command = [str(binary), *(f"--{key}={value}" for key, value in arguments.items())]
+    provenance.native_command(command)
+    subprocess.run(command,
                    check=True, cwd=NS3, capture_output=True, text=True, timeout=60)
 
 
@@ -111,6 +115,7 @@ def runtime():
     from ns3sionna_server import SionnaEnv
     import mitsuba as mi
     import drjit as dr
+    provenance.backend_selected(mi.variant())
     if mi.variant() != "llvm_ad_mono_polarized":
         raise RuntimeError(f"Expected CPU LLVM backend, got {mi.variant()}")
     dr.set_thread_count(CONTROLS["drjit_threads"])
@@ -337,12 +342,10 @@ def plots(output: Path, summaries: list[dict], independent_spacing=False) -> Non
         plt.close(fig)
 
 
+@provenance.benchmark_run(lambda a: {"controls": CONTROLS, "repetitions": a["repetitions"]})
 def run(output: Path, binary: Path, repetitions: int) -> dict:
     if repetitions < 2:
         raise ValueError("At least two fresh repetitions are required")
-    if output.exists() and any(output.iterdir()):
-        raise ValueError("Use an empty output directory to preserve existing results")
-    output.mkdir(parents=True, exist_ok=True)
     env_class, mi = runtime()
     started = time.perf_counter()
     summaries, tones, configurations = [], [], []

@@ -15,6 +15,8 @@ import math
 from bisect import bisect_left
 from pathlib import Path
 
+import provenance
+
 
 PHY_FIELDS = (
     "mcs", "coding", "packet_size_bytes", "nss", "num_rx_antennas",
@@ -351,11 +353,21 @@ def main():
             not 0.0 <= args.max_awgn_mae <= 1.0 or
             not 0.0 <= args.max_validation_mae <= 1.0):
             raise CalibrationError("MAE thresholds must lie in [0, 1]")
-        result = calibrate(args.model_awgn, args.reference, args.beta_min,
-                           args.beta_max, args.max_awgn_mae,
-                           args.max_validation_mae)
-        args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n",
-                               encoding="utf-8")
+        if args.output.exists():
+            raise CalibrationError("Existing calibration output must be preserved")
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        with provenance.Run(args.output.with_suffix(args.output.suffix + ".run.json"),
+                            {key: value for key, value in vars(args).items()
+                             if key not in ("model_awgn", "reference", "output")},
+                            inputs=(args.model_awgn, args.reference),
+                            artifacts=(args.output,)) as run:
+            provenance.backend_selected("offline-numpy-calibration")
+            result = calibrate(args.model_awgn, args.reference, args.beta_min,
+                               args.beta_max, args.max_awgn_mae,
+                               args.max_validation_mae)
+            args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n",
+                                   encoding="utf-8")
+            run.data["validation"] = {"calibration_status": result["status"]}
     except (CalibrationError, OSError, json.JSONDecodeError) as exc:
         parser.error(str(exc))
     print(f"status={result['status']} candidate_beta_linear={result['candidate_beta_linear']:.9g} "

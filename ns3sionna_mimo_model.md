@@ -3,7 +3,8 @@
 Stand: 1. Oktober 2026, Phase 4 einschließlich Unterphase 4.8 implementiert;
 Unterphase 5.1 für HE MCS 0/BCC/32 Byte/1x1 anhand von Link-Level-Daten validiert;
 Unterphasen 5.2.1 bis 5.2.5 mit Kanal-, Konvergenz-, Cache-/IPC-, Arrayabstands- und CSI-Alterungssensitivität implementiert;
-verbleibender Phase-5-Implementierungsplan R1 bis R6 ergänzt
+verbleibender Phase-5-Implementierungsplan R1 bis R6 ergänzt;
+erstes R1/R3-Inkrement mit portabler Provenienz, CPU-CI und deaktiviertem Cache implementiert
 
 Arbeitszweig: feature/su-mimo-minimal
 
@@ -1142,11 +1143,16 @@ Kalibrierung sämtlicher MCS-/FEC-/Längen-/SU-/MU-Kombinationen sind nicht
 enthalten. Die Schätzung ersetzt den früheren Gesamtphasenansatz 27-47 Tage;
 bereits geleistete Arbeit wird damit nicht rückwirkend bewertet.
 
-**Nächstes Inkrement:** portable Provenienz und erste CPU-CI aus R1 sowie
-Regression und Korrektur des deaktivierten Caches aus R3. R1/R3 können
-unabhängig entwickelt werden; anschließend R2 parallel zu R4 und R5 zunächst
-als Kanaldiagnostik. Korrektheit, Provenienz, Kalibrierung und Optimierung
-bleiben getrennt prüfbare Änderungen.
+**Erstes R1/R3-Inkrement (implementiert):** portable Provenienz mit additivem
+versioniertem Laufmanifest, erste CPU-CI sowie Regression und Korrektur des
+deaktivierten Caches. Vertrag, Schemamigration und verbleibende Grenzen stehen
+in [der Inkrementdokumentation](doc/provenance-cpu-increment.md), Prüfergebnisse
+in Abschnitt 7.19. R1/R3 sind damit nicht vollständig abgeschlossen. Der oben
+referenzierte ausführliche Phase-5-Plan war im aktuellen Checkout und im
+durchsuchten Arbeitsbereich nicht vorhanden; maßgeblich war der hier enthaltene
+Restplan. Weitere R1-/R3-Arbeit bleibt offen; R2, R4 und R5 folgen innerhalb
+ihrer jeweiligen Abhängigkeiten. Korrektheit, Provenienz, Kalibrierung und
+Optimierung bleiben getrennt prüfbare Änderungen.
 
 Die Prüfung vom 1. Oktober bestätigte acht Kalibrier-Unit-Tests sowie alle
 135 referenzierten binären Konfigurations-/Kanal-/Templatehashes der drei
@@ -5037,6 +5043,98 @@ monotone Verlustkurve. Hohe gaußsche MI-Werte und alle 256 FFT-Bins
 einschließlich DC/Guards sind Kanaldiagnostik, keine Wi-Fi-Payloadraten.
 PER wird nicht berechnet: Die dokumentierte Kalibrierung gilt nur für
 HE MCS 0/BCC/32 Byte/1x1 und wird nicht auf diese 2x2-Fälle übertragen.
+
+### 7.19 R1/R3-Inkrement: portable Provenienz und erste CPU-CI
+
+Dieses Inkrement erweitert die vorhandenen Runner und korrigiert ausschließlich
+den deaktivierten Cachepfad. Die historischen Messmanifeste, Exporte und
+Messzeitpunkt-Quellhashes bleiben erhalten; R1 und R3 bleiben offene Pakete.
+Der vollständige Vertrag steht in `doc/provenance-cpu-increment.md`.
+
+Neue Benchmarkläufe besitzen ein additives `run.json` mit
+`schema=ns3sionna.run`, `schema_version=1`; Kalibrier-CLI-Läufe verwenden
+`<output>.run.json`. Erfasst werden Konfiguration, Fall-/Seedidentitäten,
+Revision/lokale Änderungen/Quellhashes vor dem Lauf, tatsächliches Backend,
+CPU-/Paket-/Buildidentität, Befehle sowie Eingangs- und Artefakthashes.
+Die bisherigen Exportschemata bleiben unverändert. Historische Läufe ohne
+Sidecar haben keinen nachträglich behaupteten Ausführungsstatus; aktuelle
+Replayquellen ersetzen niemals ihre historischen Messquellen.
+
+Für Binärdaten gilt weiterhin der Rohbyte-SHA-256. UTF-8-Text erhält zusätzlich
+einen versionierten Digest
+\[
+ d_{\mathrm{LF},1}(T)=\operatorname{SHA256}
+ \left(\operatorname{UTF8encode}
+ \left(\operatorname{CRLFtoLF}(\operatorname{UTF8decode}(T))\right)\right).
+\]
+Nur CRLF wird normalisiert; einzelne CR, Leerzeichen, BOM und Endzeilen bleiben
+relevant. Der Rohdigest bleibt parallel sichtbar. `.gitattributes` erzwingt LF
+für historische CSV-/JSON-Checkouts; Protobufs werden niemals textnormalisiert.
+Die alten Rohhashes werden weder umgedeutet noch neu geschrieben.
+
+Vor der Ausführung steht atomar `incomplete`; Ausnahmen liefern `failed` mit
+lokalem Traceback und gegebenenfalls Subprozess-stdout/stderr. Regulärer
+Abschluss schreibt atomar `success` mit Artefaktindex. Wissenschaftliche
+Akzeptanz bleibt separat unter `validation`: erfolgreicher Programmablauf ist
+keine Freigabe eines abgelehnten Kalibrierprofils. Unterbrechungen bleiben
+`incomplete`; vorhandene Ausgaben werden geschützt, Resume wird nicht angeboten.
+Der unvollständige GPU-Selektor wurde auf den bisherigen strikten CPU-Vertrag
+zurückgeführt. Auch ein abgelehntes Backend wird im Fehlermanifest benannt.
+
+Bei deaktiviertem Cache wurden zuvor neue Antworten gespeichert und ältere,
+noch gültige Antworten erneut ausgewählt. Der neue native REQ/REP-Test
+konstruiert unterschiedliche überlappend gültige Antworten ausschließlich im
+Speicher. Vor der Korrektur lieferte er Verlust 41 statt 42, Verzögerung 1 ns
+statt 3 ns und CFR `(1,-1)` statt `(4,-4)`; nach Wiederaktivierung wurde weiter
+41 verwendet, und nur vier statt fünf Anfragen erreichten den Peer.
+`SetCaching(false)` leert jetzt vorhandene Snapshots. Die gesamte neue Antwort
+wird vor der Rückgabe validiert; der passende aktuelle Eintrag wird direkt
+zurückgegeben, ohne andere Empfänger oder Look-ahead-Snapshots zu speichern.
+Die inklusive Zeitgültigkeit und bestehende Richtungsprüfung bleiben erhalten.
+Wiederaktivierung beginnt kalt und füllt den Cache regulär neu. Der Test prüft
+auch den anschließenden Treffer ohne zusätzliche Anfrage.
+
+Die neue CPU-CI baut den aktuellen Modulcheckout gegen die feste ns-3.40-
+Revision `4fdc985b5d5b800992e0ce87df7a727e32033794`, mit frisch generierten
+C++-/Python-Protobuf-Bindings. Python 3.12.12, pip 26.0.1 und 55 direkte/transitive
+Paketversionen sind exakt festgelegt (`requirements_cpu_ci.lock`); `pip check`
+und der Vergleich aller installierten Versionen bestanden. Der lokale frische
+Linux-Build und die einmalige vollständige Auswahl über
+`tools/run_cpu_regressions.py` bestanden: 50 native Testfälle in den sieben
+Suites `sionna`, `sionna-mimo-csi-feedback`, `dl-mu-mimo-runtime`, `dl-mu-mimo-ru`,
+`he-dl-mu-spectrum-ru`, `ul-mu-mimo` und `he-ul-mu-mimo-phy-adapter` sowie
+56 erfolgreiche Python-Tests. Unter den insgesamt 57 ausgewählten Python-Tests
+wurde ein optionaler lokaler Alterungsexporttest ausgelassen; drei teure frische
+RT-Prüfungen wurden ausdrücklich aus dieser CI-Auswahl herausgenommen.
+Vertrags-, Kalibrier-, Policy-, Provenienz- und eingefrorene Benchmarkprüfungen
+verwendeten die bestehenden drei versionierten Exportstudien. Die tatsächlich
+gewählte Mitsuba-Variante war `llvm_ad_mono_polarized`.
+
+Zusätzlich bestanden ein lokaler IPC-Smoke mit einem Fall (64 Töne, TX 2/RX 4, ein Link,
+drei frische Prozesse) und der Kalibrier-CLI-Replay mit Prüfung der neuen
+Sidecars und Artefakthashes. Der historische selektive MAE bleibt 0,054886
+bei Grenze 0,10; daraus folgt keine Freigabe für 0,05 oder weitere PHY-Profile.
+Die GitHub-Workflowdatei und ihre festen Action-Revisionen wurden geprüft;
+der gehostete Job selbst wurde hier nicht ausgeführt. Ubuntu-Systempakete
+folgen weiterhin den Paketquellen, Wheelhashes sind noch nicht gesperrt.
+Verfügbare CI-Installations-/Build-/Testlogs werden als Artefakt gesichert;
+unerwartete native Testfehler enthalten auch erfasstes stdout/stderr. Nach der
+abschließenden Erweiterung des Artefaktindex auf binäre Plotdateien bestanden
+die neun gezielten Provenienztests erneut; PNG-Hashes bleiben rohbytegeprüft.
+
+Lokale Logs, Builds und Smoke-Ausgaben liegen unter `/tmp/r1r3-*` beziehungsweise
+`/tmp/ns3-r1r3-*`; es werden keine neuen Datensätze oder aufgezeichneten Fixtures
+versioniert. Die PDF-Abschlussprüfung erfolgt nach der finalen Dokumentation
+mit genau einer Neuerzeugung; Seitenzahl, Textextraktion, vollständige
+Seitenfußzeilen und ausgewählte Seiten werden geprüft. Ihr Protokoll bleibt lokal.
+
+Offen bleiben insbesondere externer Artefaktzugang für 5.2.4/5.2.5,
+Seed-/Run-/Streamunabhängigkeit, Resume, Wheel-/Systempaket-Locking und aktuelle
+Containerrezepte aus R1 sowie breitere Cache-Zeit-/Richtungs-/Batchregressionen,
+Belegungs-/Nullzugriffsstatistik, inaktive Linkbereinigung, Allokationsbudgets,
+Langzeitspeichergrenzen und erweiterte Sweeps aus R3. Vollständige RT-, Live-,
+GPU- und neue Referenzläufe sind kein Nachweis dieses Inkrements. Die Kalibrierung
+bleibt HE MCS 0/BCC/32 Byte/1x1; 2x2-Ergebnisse bleiben MMSE-/SVD-/MI-Diagnostik.
 
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 

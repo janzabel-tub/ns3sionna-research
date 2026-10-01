@@ -1,0 +1,11 @@
+# Keep the existing LF historical export identities portable across checkouts.
+# New run manifests also record a versioned canonical text digest plus raw bytes.
+/data/**/*.json text eol=lf
+/data/**/*.csv text eol=lf
+/data/*.json text eol=lf
+/data/*.csv text eol=lf
+*.pb -text
+*.pdf -text
+
+# Preserve historical C++ CRLF bytes without flagging CR as trailing space.
+*.cc whitespace=cr-at-eol

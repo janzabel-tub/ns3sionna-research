@@ -18,6 +18,7 @@
 #include "ns3/multi-model-spectrum-channel.h"
 #include "ns3/simulator.h"
 #include "ns3/sionna-helper.h"
+#include "ns3/sionna-mobility-model.h"
 #include "ns3/sionna-mimo-helper.h"
 #include "ns3/sionna-propagation-cache.h"
 #include "ns3/sionna-spectrum-propagation-loss-model.h"
@@ -43,6 +44,7 @@
 #include <cmath>
 #include <complex>
 #include <iterator>
+#include <future>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -4285,12 +4287,96 @@ class SpectrumWifiPhyMimoAdapterTest : public TestCase
     }
 };
 
+// Exercise the production REQ/REP path with distinct, overlapping valid replies.
+// All data is constructed in memory; no recorded fixture or RT process is needed.
+class DisabledCacheFreshReplyTest : public TestCase
+{
+  public:
+    DisabledCacheFreshReplyTest()
+        : TestCase("disabled cache returns every fresh reply and retains no snapshots")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        zmq::context_t context(1);
+        zmq::socket_t peer(context, ZMQ_REP);
+        peer.set(zmq::sockopt::linger, 0);
+        peer.set(zmq::sockopt::rcvtimeo, 3000);
+        peer.set(zmq::sockopt::sndtimeo, 3000);
+        peer.bind("tcp://127.0.0.1:*");
+        const auto endpoint = peer.get(zmq::sockopt::last_endpoint);
+        auto tx = CreateObject<Node>();
+        auto rx = CreateObject<Node>();
+        auto a = CreateObject<SionnaMobilityModel>();
+        auto b = CreateObject<SionnaMobilityModel>();
+        tx->AggregateObject(a);
+        rx->AggregateObject(b);
+        auto replies = std::async(std::launch::async, [&]() {
+            unsigned requests = 0;
+            // Prime enabled cache, three disabled getters, then re-enable.
+            for (unsigned value = 1; value <= 5; ++value)
+            {
+                zmq::message_t request;
+                if (!peer.recv(request, zmq::recv_flags::none))
+                {
+                    break; // Bounded even when a regression suppresses an RPC.
+                }
+                ++requests;
+                ns3sionna::Wrapper reply;
+                auto state = reply.mutable_channel_state_response()->add_csi();
+                state->set_start_time(0);
+                state->set_end_time(5000000);
+                state->mutable_tx_node()->set_id(tx->GetId());
+                auto radio = state->add_rx_nodes();
+                radio->set_id(rx->GetId());
+                radio->set_delay(value);
+                radio->set_wb_loss(40 + value);
+                radio->set_num_rx_antennas(1);
+                radio->set_num_tx_antennas(1);
+                radio->add_frequencies(78125);
+                radio->add_csi_real(value);
+                radio->add_csi_imag(-static_cast<double>(value));
+                const auto wire = reply.SerializeAsString();
+                peer.send(zmq::buffer(wire), zmq::send_flags::none);
+            }
+            return requests;
+        });
+        SionnaHelper helper("in-memory-cache-regression", endpoint);
+        helper.m_zmq_socket.set(zmq::sockopt::linger, 0);
+        helper.m_zmq_socket.set(zmq::sockopt::rcvtimeo, 3000);
+        auto cache = CreateObject<SionnaPropagationCache>();
+        cache->SetSionnaHelper(helper);
+        cache->SetOptimize(false);
+        const auto primingLoss = cache->GetPropagationLoss(a, b);
+        NS_TEST_ASSERT_MSG_EQ(primingLoss, 41, "Priming reply changed");
+        cache->SetCaching(false);
+        const auto freshLoss = cache->GetPropagationLoss(a, b);
+        NS_TEST_ASSERT_MSG_EQ(freshLoss, 42, "Old valid loss reused");
+        const auto freshDelay = cache->GetPropagationDelay(a, b);
+        NS_TEST_ASSERT_MSG_EQ(freshDelay.GetNanoSeconds(), 3, "Old valid delay reused");
+        const auto channel = cache->GetPropagationChannelMatrix(a, b);
+        NS_TEST_ASSERT_MSG_EQ(channel.Get(0, 0, 0), std::complex<double>(4, -4),
+                              "Old valid CFR reused");
+        cache->SetCaching(true);
+        const auto enabledLoss = cache->GetPropagationLoss(a, b);
+        NS_TEST_ASSERT_MSG_EQ(enabledLoss, 45, "Disabled requests retained a snapshot");
+        const auto hitLoss = cache->GetPropagationLoss(a, b);
+        NS_TEST_ASSERT_MSG_EQ(hitLoss, 45, "Re-enabled cache no longer hits");
+        const auto requests = replies.get();
+        NS_TEST_ASSERT_MSG_EQ(requests, 5, "Unexpected RPC count");
+        Simulator::Destroy();
+    }
+};
+
 class SionnaTestSuite : public TestSuite
 {
   public:
     SionnaTestSuite()
         : TestSuite("sionna", UNIT)
     {
+        AddTestCase(new DisabledCacheFreshReplyTest, TestCase::QUICK);
         AddTestCase(new SionnaMimoHelperDefaultsTest, TestCase::QUICK);
         AddTestCase(new SionnaMimoHelperValidConfigurationTest, TestCase::QUICK);
         AddTestCase(new SionnaMimoHelperBeamformingSelectionTest, TestCase::QUICK);
