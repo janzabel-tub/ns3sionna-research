@@ -4640,6 +4640,107 @@ class CacheContractTest : public TestCase
     unsigned m_scenario;
 };
 
+class CacheBudgetTest : public TestCase
+{
+  public:
+    CacheBudgetTest() : TestCase("cache budget boundaries, overflow, atomic rejection and recovery") {}
+  private:
+    void DoRun() override
+    {
+        using Limits = SionnaPropagationCache::ResourceLimits;
+        Limits limits;
+        limits.maxSubcarriers = 2;
+        limits.maxRxAntennas = 2;
+        limits.maxTxAntennas = 2;
+        limits.maxCoefficientsPerChannel = 8;
+        NS_TEST_ASSERT_MSG_EQ(SionnaPropagationCache::ValidateChannelDimensions(2, 2, 2, limits),
+                              8, "Inclusive channel boundary");
+        for (const auto& dimensions : {std::vector<uint64_t>{3, 2, 2}, {2, 3, 2},
+                                      {2, 2, 3}, {0, 1, 1},
+                                      {UINT64_MAX, UINT64_MAX, UINT64_MAX}})
+        {
+            bool rejected = false;
+            try { SionnaPropagationCache::ValidateChannelDimensions(
+                    dimensions[0], dimensions[1], dimensions[2], limits); }
+            catch (const std::invalid_argument&) { rejected = true; }
+            NS_TEST_ASSERT_MSG_EQ(rejected, true, "Reject dimensions/overflow before allocation");
+        }
+        limits.maxCoefficientsPerChannel = 7;
+        bool rejected = false;
+        try { SionnaPropagationCache::ValidateChannelDimensions(2, 2, 2, limits); }
+        catch (const std::invalid_argument&) { rejected = true; }
+        NS_TEST_ASSERT_MSG_EQ(rejected, true, "Coefficient boundary");
+
+        auto a = MakeCacheRadio(), b = MakeCacheRadio();
+        auto c = MakeCacheRadio(), d = MakeCacheRadio();
+        ns3sionna::Wrapper first, oversized, recovery;
+        AddCacheState(first, a, b, 0, 10, 10);
+        AddCacheState(first, a, b, 20, 30, 50);
+        AddCacheState(oversized, c, d, 0, 100, 20);
+        AddCacheState(oversized, c, d, 20, 100, 30);
+        for (auto& state : *oversized.mutable_channel_state_response()->mutable_csi())
+        {
+            auto* rx = state.mutable_rx_nodes(0);
+            rx->add_frequencies(156250); rx->add_csi_real(1); rx->add_csi_imag(0);
+        }
+        AddCacheState(recovery, c, d, 11, 100, 70);
+        std::vector<std::string> replies{first.SerializeAsString()};
+        for (int i = 0; i < 6; ++i) { replies.push_back(oversized.SerializeAsString()); }
+        replies.push_back(recovery.SerializeAsString());
+        CachePeer peer(replies);
+        SionnaHelper helper("budget-contract", peer.endpoint);
+        auto cache = CreateObject<SionnaPropagationCache>();
+        cache->SetSionnaHelper(helper); cache->SetOptimize(false);
+        Limits base;
+        base.maxSnapshots = 2; base.maxPayloadBytes = 40;
+        base.maxReplyBytes = first.ByteSizeLong();
+        cache->SetResourceLimits(base);
+        NS_TEST_ASSERT_MSG_EQ(cache->GetPropagationLoss(a, b), 10, "Exact storage/wire boundaries");
+        base.maxReplyBytes = 268435456;
+        base.maxSnapshots = 65536; base.maxPayloadBytes = 536870912;
+        for (int i = 0; i < 6; ++i)
+        {
+            auto small = base;
+            switch (i)
+            {
+            case 0: small.maxReplyBytes = oversized.ByteSizeLong() - 1; break;
+            case 1: small.maxBatchCoefficients = 3; break;
+            case 2: small.maxSnapshots = 3; break;
+            case 3: small.maxPayloadBytes = 119; break;
+            case 4: small.maxSubcarriers = 1; break;
+            case 5: small.maxCoefficientsPerChannel = 1; break;
+            }
+            cache->SetResourceLimits(small);
+            rejected = false;
+            try { cache->GetPropagationLoss(c, d); }
+            catch (const std::invalid_argument&) { rejected = true; }
+            NS_TEST_ASSERT_MSG_EQ(rejected, true, "Oversized reply accepted");
+            NS_TEST_ASSERT_MSG_EQ(cache->GetPropagationLoss(a, b), 10, "Old valid entry lost");
+            const auto stats = cache->GetStorageStatistics();
+            NS_TEST_ASSERT_MSG_EQ(stats.snapshots, 2, "Rejected prefix leaked or future evicted");
+            NS_TEST_ASSERT_MSG_EQ(stats.payloadBytes, 40, "Rejected payload retained");
+            NS_TEST_ASSERT_MSG_EQ(stats.peakPayloadBytes, 40, "Rejection changed peaks");
+        }
+        base.maxSnapshots = 2; base.maxPayloadBytes = 40;
+        cache->SetResourceLimits(base);
+        auto below = base; below.maxPayloadBytes = 39;
+        rejected = false;
+        try { cache->SetResourceLimits(below); }
+        catch (const std::invalid_argument&) { rejected = true; }
+        NS_TEST_ASSERT_MSG_EQ(rejected, true, "Lowering budget silently evicted snapshots");
+        Simulator::Schedule(NanoSeconds(11), [&] {
+            NS_TEST_ASSERT_MSG_EQ(cache->GetPropagationLoss(c, d), 70, "Retry after expiry failed");
+            NS_TEST_ASSERT_MSG_EQ(cache->GetStorageStatistics().payloadBytes, 40, "Retry exceeds budget");
+        });
+        Simulator::Schedule(NanoSeconds(20), [&] {
+            NS_TEST_ASSERT_MSG_EQ(cache->GetPropagationLoss(a, b), 50, "Future snapshot lost");
+        });
+        Simulator::Run();
+        NS_TEST_ASSERT_MSG_EQ(peer.Finish().size(), replies.size(), "Unexpected retry/hit requests");
+        helper.m_zmq_socket.close(); Simulator::Destroy();
+    }
+};
+
 class SionnaTestSuite : public TestSuite
 {
   public:
@@ -4647,6 +4748,7 @@ class SionnaTestSuite : public TestSuite
         : TestSuite("sionna", UNIT)
     {
         AddTestCase(new DisabledCacheFreshReplyTest, TestCase::QUICK);
+        AddTestCase(new CacheBudgetTest, TestCase::QUICK);
         for (unsigned scenario = 0; scenario < 3; ++scenario)
         {
             AddTestCase(new CacheContractTest(scenario), TestCase::QUICK);

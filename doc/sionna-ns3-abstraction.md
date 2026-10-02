@@ -3,7 +3,7 @@
 Sionna RT supplies the physical channel; ns-3 computes MIMO reception and packet outcomes.
 
 - **Sionna:** ray traces the scene and antenna arrays, then exports wideband path loss, propagation delay and normalized complex matrices $H[k]$ with antenna dimensions and validity times.
-- **Interface:** Protobuf/ZMQ transfers channel snapshots. ns-3 validates whole replies before caching them, preserves directed MU identities and future snapshots, and removes expired entries on cache access. With caching disabled, each request uses its fresh reply.
+- **Interface:** Protobuf/ZMQ transfers channel snapshots. ns-3 validates whole replies before caching them, preserves directed MU identities and future snapshots, and removes expired entries on cache access. Configurable admission budgets reject oversized replies before CFR/cache allocation; with caching disabled, each request uses its fresh reply.
 - **ns-3:** selects/applies precoding, computes stream SINRs (SU MMSE, DL-MU with inter-user interference, UL-MU ZF/MMSE), and maps them through EESM and the configured error model to packet reception in `SpectrumWifiPhy`. CSI feedback and aging also belong to ns-3; UL integration uses explicit simultaneous-user channel state.
 
 ```text
@@ -176,7 +176,7 @@ for curr_rx_id, curr_rx_node in enumerate(rx_nodes):
     h = extract_link_cfr(h_raw, rx_id)
 ```
 
-Each future point becomes a separate `ChannelState` response with its own `start_time` and `end_time`. A time dimension is not retained in the flattened per-link CFR.
+Each future point becomes a separate `ChannelState` response with its own `start_time` and `end_time`. A time dimension is not retained in the flattened per-link CFR. Actual look-ahead depth is `floor(sub_mode / receiver_count)`, where `receiver_count = node_count - 1`; `sub_mode` counts parallel links. Zero depth or no receivers raises a clear error before mobility advances or tracing begins.
 
 ## 5. Separating wideband loss from small-scale fading
 
@@ -345,6 +345,15 @@ CacheEntry entry = CacheEntry(delay,
 ```
 
 Later packets reuse an entry while the current simulation time lies between `m_start_time` and `m_end_time`. Sionna therefore does not need to run once per packet.
+
+`SionnaPropagationCache::ResourceLimits` and `SetResourceLimits()` configure positive inclusive admission limits. Python uses `SionnaEnv(resource_limits=ResourceLimits(...))` or the server's corresponding `--max_*` arguments. Defaults are 4096 subcarriers, 64 RX and 64 TX antennas, 4,194,304 coefficients per channel, 16,777,216 per reply, 256 MiB reply bytes, 65,536 link snapshots and 512 MiB retained logical payload. A snapshot means one link at one time. All limits apply together.
+
+The client checks received wire bytes before parsing, and checked dimensions, aggregate coefficients and projected storage before CFR decoding. The server checks the planned batch and a conservative wire-size bound before mobility or RT. Logical payload is `16 * coefficient_count + 4 * frequency_count` per retained snapshot. Budget rejection preserves valid and future snapshots and publishes no valid prefix; expired snapshots may be purged. Lowering storage limits below live occupancy is rejected. `GetStorageStatistics()` continues to report current and lifetime peaks.
+
+The [third scoped R3 increment](../ns3sionna_mimo_model.md#721-drittes-r3-inkrement-budgets-und-look-ahead-tiefe) passed 54 native cases and 60 Python tests (one optional export test skipped). The existing IPC runner's `--storage-steps=16` validation advanced to 85.000017 ms with four links (64 tones, TX 2/RX 4); current and peak storage stayed at the configured four snapshots and 33,792 payload bytes. Existing historical exports and provenance remain unchanged.
+
+These budgets exclude received ZMQ buffers, RT/CIR intermediates, temporary copies, allocator overhead and RSS. Server limits are configured independently and do not account for the client's existing occupancy; rejection does not rewind server state. Allocation failure during cache insertion still has no full rollback guarantee. Mobility-history limits, copy optimization, long changing workloads and broad live/GPU sweeps remain open; this increment does not complete R3.
+
 
 ## 9. SISO and non-HE control-frame processing
 

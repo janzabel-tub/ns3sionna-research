@@ -178,5 +178,79 @@ class MimoDataContractTest(unittest.TestCase):
                     validate_multi_user_snapshot(snapshot)
 
 
+class TestResourceLimits(unittest.TestCase):
+    def test_boundaries_and_overflow(self):
+        from mimo_data_contract import ResourceLimits
+        limits = ResourceLimits(max_subcarriers=2, max_rx_antennas=2,
+                                max_tx_antennas=2, max_coefficients_per_channel=8)
+        self.assertEqual(limits.channel(2, 2, 2), 8)
+        for shape in ((3, 2, 2), (2, 3, 2), (2, 2, 3), (0, 1, 1)):
+            with self.subTest(shape=shape), self.assertRaises(ValueError):
+                limits.channel(*shape)
+        huge = ResourceLimits(max_subcarriers=2**64, max_rx_antennas=2**64,
+                              max_tx_antennas=2**64, max_coefficients_per_channel=2**200)
+        with self.assertRaisesRegex(ValueError, "overflow"):
+            huge.channel(2**64, 2**64, 2**64)
+        with self.assertRaises(ValueError):
+            ResourceLimits(max_reply_bytes=0)
+        message = message_pb2.ChannelStateResponse.ChannelState.RxNodeInfo()
+        original = message.SerializeToString()
+        with self.assertRaises(ValueError):
+            append_cfr_to_message(message, [0, 1], np.ones((2, 2, 2)),
+                                  ResourceLimits(max_coefficients_per_channel=7))
+        self.assertEqual(message.SerializeToString(), original)
+        append_cfr_to_message(message, [0, 1], np.ones((2, 2, 2)), limits)
+        self.assertEqual(len(message.csi_real), 8)
+
+    def test_batch_inclusive_limits(self):
+        from dataclasses import replace
+        from mimo_data_contract import ResourceLimits
+        base = ResourceLimits()
+        bound = base.plan(2, 2, 2, 2, 4)
+        limits = replace(base, max_batch_coefficients=64, max_snapshots=8,
+                         max_payload_bytes=1088, max_reply_bytes=bound)
+        self.assertEqual(limits.plan(2, 2, 2, 2, 4), bound)
+        for name in ("max_batch_coefficients", "max_snapshots", "max_payload_bytes", "max_reply_bytes"):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                replace(limits, **{name: getattr(limits, name) - 1}).plan(2, 2, 2, 2, 4)
+
+    def test_actual_lookahead_depth(self):
+        from mimo_data_contract import lookahead_depth
+        for depth in (1, 4, 16):
+            self.assertEqual(lookahead_depth(3 * depth + 2, 3), depth)
+        for sub_mode, receivers in ((0, 3), (2, 3), (4, 0)):
+            with self.assertRaisesRegex(ValueError, "[Ll]ook-ahead"):
+                lookahead_depth(sub_mode, receivers)
+
+    def test_server_preflight_precedes_mobility_and_tracing(self):
+        from unittest.mock import Mock, patch
+        from mimo_data_contract import ResourceLimits, RX_ARRAY_DEFAULTS, TX_ARRAY_DEFAULTS
+        from ns3sionna_server import SionnaEnv
+        env = SionnaEnv(resource_limits=ResourceLimits(max_batch_coefficients=1), VERBOSE=False)
+        env.fft_size = 2
+        env.rx_array_config = RX_ARRAY_DEFAULTS.copy()
+        env.tx_array_config = TX_ARRAY_DEFAULTS.copy()
+        env.node_info = {0: object(), 1: object(), 2: object()}
+        env.time_evo_model = "position"
+        env.sub_mode = 8
+        env._update_nodes_to_time = Mock()
+        request = message_pb2.ChannelStateRequest(tx_node=0, rx_node=1)
+        reply = message_pb2.Wrapper()
+        for operation in (lambda: env.compute_cfr_with_lookahead(request, reply),
+                          lambda: env._compute_cfr_via_position(0, 0, 1, SionnaEnv.MODE_P2P)):
+            with patch("ns3sionna_server.PathSolver") as solver:
+                with self.assertRaisesRegex(ValueError, "batch_coefficients"):
+                    operation()
+                solver.assert_not_called()
+            env._update_nodes_to_time.assert_not_called()
+            self.assertFalse(reply.HasField("channel_state_response"))
+        env.sub_mode = 1
+        with self.assertRaisesRegex(ValueError, "Zero look-ahead depth"):
+            env.compute_cfr_with_lookahead(request, reply)
+        env._update_nodes_to_time.assert_not_called()
+        env.resource_limits = ResourceLimits()
+        self.assertGreater(env._check_batch_budget(2, 4), 0)  # Reconfiguration recovers.
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -129,11 +129,6 @@ def coefficient_digest(fixture):
 def serve(input_path, endpoint, ready_path, stats_path):
     wire = input_path.read_bytes()
     response = base.message_pb2.Wrapper.FromString(wire)
-    response.channel_state_response.csi[0].start_time = 5000001
-    response.channel_state_response.csi[0].end_time = 10000001
-    for radio in response.channel_state_response.csi[0].rx_nodes:
-        radio.end_time2 = 10000001
-    shifted = response.SerializeToString(deterministic=True)
     context = zmq.Context()
     socket = context.socket(zmq.REP)
     socket.setsockopt(zmq.LINGER, 0)
@@ -153,10 +148,17 @@ def serve(input_path, endpoint, ready_path, stats_path):
             if request.WhichOneof("msg") != "channel_state_request":
                 raise ValueError("Unexpected frozen-peer request type")
             query = request.channel_state_request
-            if (query.tx_node, query.rx_node) != (0, 1) or query.time not in (0, 5000001):
+            if (query.tx_node, query.rx_node) != (0, 1) or (query.time < 0 or query.time % 5000001 != 0):
                 raise ValueError("Unexpected frozen-peer endpoints or timestamp")
             requests.append({"tx_node": query.tx_node, "rx_node": query.rx_node, "time_ns": query.time})
-            socket.send(wire if query.time == 0 else shifted)
+            if query.time:
+                state = response.channel_state_response.csi[0]
+                state.start_time, state.end_time = query.time, query.time + 5000000
+                for radio in state.rx_nodes:
+                    radio.end_time2 = state.end_time
+                socket.send(response.SerializeToString(deterministic=True))
+            else:
+                socket.send(wire)
         hwm = next(line for line in Path("/proc/self/status").read_text().splitlines()
                    if line.startswith("VmHWM:"))
         stats_path.write_text(json.dumps({"channel_requests": len(requests), "close_requests": 1,
@@ -173,7 +175,7 @@ def deterministic_fields(record):
         token in key for token in ("rss", "heap", "_ns", "seconds"))}
 
 
-def validate_record(record, fixture, server, samples):
+def validate_record(record, fixture, server, samples, storage_steps=0):
     state = fixture.channel_state_response.csi[0]
     radio = state.rx_nodes[0]
     nsc, rx, tx, links = len(radio.frequencies), radio.num_rx_antennas, radio.num_tx_antennas, len(state.rx_nodes)
@@ -183,17 +185,24 @@ def validate_record(record, fixture, server, samples):
         "response_bytes": len(fixture.SerializeToString(deterministic=True)),
         "request_bytes": 4, "coefficient_digest": coefficient_digest(fixture),
         "cache_hit_count": CONTROLS["warmup"] + CONTROLS["hit_iterations"] + 1,
-        "cache_miss_count": 2, "expected_channel_requests": 27, "verified_links": links,
+        "cache_miss_count": 2 + storage_steps, "expected_channel_requests": 27 + storage_steps, "verified_links": links,
         "boundary_hit": 1, "expired_miss": 1}
     for key, value in expected.items():
         if record[key] != value:
             raise AssertionError(f"Incorrect native {key}: {record[key]} != {value}")
-    np.testing.assert_allclose(record["cache_hit_ratio"], 132 / 134, rtol=0, atol=1e-12)
+    np.testing.assert_allclose(record["cache_hit_ratio"], 132 / (134 + storage_steps), rtol=0, atol=1e-12)
     np.testing.assert_allclose(record["memory_validation_hit_ratio"], 4 * links / (4 * links + 1),
                                rtol=0, atol=1e-12)
     expected_requests = [{"tx_node": 0, "rx_node": 1, "time_ns": 0}] * 26 + [
                          {"tx_node": 0, "rx_node": 1, "time_ns": 5000001}]
-    assert server["channel_requests"] == 27 and server["close_requests"] == 1
+    expected_requests.extend({"tx_node": 0, "rx_node": 1, "time_ns": 5000001 * (step + 2)}
+                             for step in range(storage_steps))
+    if storage_steps:
+        assert record["storage_steps"] == storage_steps
+        assert record["storage_snapshot_budget"] == record["storage_peak_snapshots"] == links
+        assert record["storage_payload_budget_bytes"] == record["storage_peak_payload_bytes"] == (
+            expected["cache_cfr_bytes"] + expected["cache_frequency_bytes"])
+    assert server["channel_requests"] == 27 + storage_steps and server["close_requests"] == 1
     assert server["requests"] == expected_requests
     operations = {"ipc_roundtrip": 16, "cpp_serialize": 16, "cpp_parse": 16, "matrix_decode": 16,
                   "cache_hit": 128, "cache_miss": 5, "python_serialize": 16, "python_parse": 16}
@@ -226,7 +235,7 @@ def python_timings(fixture, wire):
     return samples
 
 
-def measure(binary, fixture):
+def measure(binary, fixture, storage_steps=0):
     """One fresh native process and one fresh Python REP peer, both bounded/cleaned."""
     wire = fixture.SerializeToString(deterministic=True)
     with tempfile.TemporaryDirectory(prefix="cache-ipc-") as temporary:
@@ -251,7 +260,7 @@ def measure(binary, fixture):
                     timings=path / "timings.csv", endpoint=endpoint,
                     links=len(fixture.channel_state_response.csi[0].rx_nodes),
                     iterations=CONTROLS["iterations"], hitIterations=CONTROLS["hit_iterations"],
-                    missIterations=CONTROLS["miss_iterations"], warmup=CONTROLS["warmup"])
+                    missIterations=CONTROLS["miss_iterations"], warmup=CONTROLS["warmup"], storageSteps=storage_steps)
                 native_seconds = time.perf_counter() - started
                 process.wait(timeout=10)
                 if process.returncode:
@@ -271,7 +280,7 @@ def measure(binary, fixture):
                         process.kill()
                         process.wait()
     samples.extend(python_timings(fixture, wire))
-    validate_record(record, fixture, server, samples)
+    validate_record(record, fixture, server, samples, storage_steps)
     for operation in sorted({row["operation"] for row in samples}):
         values = [row["nanoseconds"] for row in samples if row["operation"] == operation]
         for statistic, value in (("median", np.median(values)), ("p95", np.percentile(values, 95)),
@@ -379,10 +388,31 @@ def run(output, binary):
     return manifest
 
 
+@base.provenance.benchmark_run(lambda a: {"storage_steps": a["steps"], "subcarriers": 64,
+    "tx_antennas": 2, "rx_antennas": 4, "links": 4, "rt": False}, inputs=(ANCHOR,))
+def run_storage(output, binary, steps):
+    """Small bounded advancing-time validation; reuse the frozen IPC peer."""
+    if not 1 <= steps <= 128:
+        raise ValueError("storage steps must be in [1, 128]")
+    base.provenance.backend_selected("frozen-protobuf-local-zmq")
+    (output / "plan.json").write_text(json.dumps({"storage_steps": steps, "links": 4,
+        "subcarriers": 64, "tx_antennas": 2, "rx_antennas": 4,
+        "budget": "exact one-batch logical payload and snapshots", "rt": False}, indent=2) + "\n")
+    record, samples, server = measure(binary, batch(template(64, 2, 4), 4), steps)
+    result = {"schema_version": 1, "subphase": "r3-storage-budget",
+              "configurations": [{"storage_steps": steps, "links": 4, "subcarriers": 64,
+                                  "tx_antennas": 2, "rx_antennas": 4}],
+              "validation": {"status": "passed"}, "record": record, "server": server}
+    (output / "manifest.json").write_text(json.dumps(result, indent=2) + "\n")
+    base.write_csv(output / "timings.csv", samples)
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--executable", type=Path)
+    parser.add_argument("--storage-steps", type=int, default=0)
     parser.add_argument("--serve", action="store_true")
     parser.add_argument("--input", type=Path)
     parser.add_argument("--endpoint")
@@ -392,7 +422,9 @@ def main():
     if args.serve:
         serve(args.input, args.endpoint, args.ready, args.stats)
     elif args.output:
-        manifest = run(args.output.resolve(), (args.executable or executable()).resolve())
+        binary = (args.executable or executable()).resolve()
+        manifest = (run_storage(args.output.resolve(), binary, args.storage_steps) if args.storage_steps
+                    else run(args.output.resolve(), binary))
         print(json.dumps(manifest["validation"]))
     else:
         parser.error("Provide --output=<empty directory>")

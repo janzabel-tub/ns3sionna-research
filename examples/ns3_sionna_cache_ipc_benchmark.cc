@@ -200,6 +200,7 @@ int
 main(int argc, char* argv[])
 {
     std::string input, output, timings, endpoint;
+    uint32_t storageSteps = 0;
     uint32_t links = 1, iterations = 16, hitIterations = 128, missIterations = 5, warmup = 3;
     CommandLine command(__FILE__);
     command.AddValue("input", "Frozen Wrapper response file", input);
@@ -211,10 +212,11 @@ main(int argc, char* argv[])
     command.AddValue("hitIterations", "Measured cache getter hit iterations", hitIterations);
     command.AddValue("missIterations", "Measured cold-cache miss iterations", missIterations);
     command.AddValue("warmup", "Warmup iterations for non-miss measurements", warmup);
+    command.AddValue("storageSteps", "Additional advancing-time refreshes (0..128)", storageSteps);
     command.Parse(argc, argv);
     try
     {
-        Require(links > 0 && links <= 64 && iterations > 0 && hitIterations > 0 &&
+        Require(storageSteps <= 128 && links > 0 && links <= 64 && iterations > 0 && hitIterations > 0 &&
                     missIterations > 0 && warmup > 0,
                 "Positive counts and at most 64 cached links are required");
         Require(!input.empty() && !output.empty() && !timings.empty() &&
@@ -326,6 +328,10 @@ main(int argc, char* argv[])
         const uint64_t rssReleased = RssBytes();
 
         auto cache = MakeCache(helper);
+        SionnaPropagationCache::ResourceLimits limits;
+        limits.maxSnapshots = links;
+        limits.maxPayloadBytes = payloadBytes;
+        cache->SetResourceLimits(limits);
         {
             const auto channel = cache->GetPropagationChannelMatrix(radios[0], radios[1]);
             sink = channel.Get(0, 0, 0).real();
@@ -360,6 +366,19 @@ main(int argc, char* argv[])
             Require(channel.Get(0, 0, 0) == std::complex<double>(rx.csi_real(0), rx.csi_imag(0)),
                     "Expired cache refresh changed channel");
         });
+        for (uint32_t step = 1; step <= storageSteps; ++step)
+        {
+            Simulator::Schedule(NanoSeconds(5000001LL * (step + 1)), [&] {
+                const auto channel = cache->GetPropagationChannelMatrix(radios[0], radios[1]);
+                Require(channel.Get(0, 0, 0) == std::complex<double>(rx.csi_real(0), rx.csi_imag(0)),
+                        "Advancing-time refresh changed channel");
+                const auto live = cache->GetStorageStatistics();
+                Require(live.snapshots == limits.maxSnapshots && live.payloadBytes == limits.maxPayloadBytes &&
+                            live.peakSnapshots == limits.maxSnapshots &&
+                            live.peakPayloadBytes == limits.maxPayloadBytes,
+                        "Advancing-time storage exceeded configured budget");
+            });
+        }
         Simulator::Run();
         const auto refreshed = cache->GetStorageStatistics();
         Require(refreshed.links == links && refreshed.snapshots == links &&
@@ -367,7 +386,7 @@ main(int argc, char* argv[])
                 "Expiry refresh retained obsolete snapshots or lost inactive links");
         const double hitRatio = cache->GetStats();
         const uint32_t hits = warmup + hitIterations + 1;
-        Require(std::abs(hitRatio - static_cast<double>(hits) / (hits + 2)) <= 1e-12,
+        Require(std::abs(hitRatio - static_cast<double>(hits) / (hits + 2 + storageSteps)) <= 1e-12,
                 "Incorrect hit/miss or inclusive-expiry behavior");
         helper.Destroy();
         Simulator::Destroy();
@@ -381,9 +400,9 @@ main(int argc, char* argv[])
             {"response_bytes", wire.size()}, {"request_bytes", requestWire.size()},
             {"complex_coefficients", coefficients}, {"cache_cfr_bytes", coefficients * sizeof(std::complex<double>)},
             {"cache_frequency_bytes", static_cast<uint64_t>(rx.frequencies_size()) * links * sizeof(int)},
-            {"cache_hit_count", hits}, {"cache_miss_count", 2}, {"cache_hit_ratio", hitRatio},
+            {"cache_hit_count", hits}, {"cache_miss_count", 2 + storageSteps}, {"cache_hit_ratio", hitRatio},
             {"memory_validation_hit_ratio", memoryHitRatio},
-            {"expected_channel_requests", warmup + iterations + missIterations + 3},
+            {"expected_channel_requests", warmup + iterations + missIterations + 3 + storageSteps},
             {"rss_before_fill_bytes", rssBefore}, {"rss_with_cache_bytes", rssLive},
             {"rss_after_release_bytes", rssReleased}, {"peak_rss_bytes", RssBytes("VmHWM:")},
             {"lifetime_peak_rss_bytes", usage.ru_maxrss * 1024.0},
@@ -393,6 +412,14 @@ main(int argc, char* argv[])
             {"cache_fill_heap_delta_bytes", static_cast<double>(heapLive) - heapBefore},
             {"cpp_protobuf_version", GOOGLE_PROTOBUF_VERSION},
             {"verified_links", links}, {"boundary_hit", 1}, {"expired_miss", 1}};
+        if (storageSteps > 0)
+        {
+            fields["storage_steps"] = storageSteps;
+            fields["storage_snapshot_budget"] = limits.maxSnapshots;
+            fields["storage_payload_budget_bytes"] = limits.maxPayloadBytes;
+            fields["storage_peak_payload_bytes"] = refreshed.peakPayloadBytes;
+            fields["storage_peak_snapshots"] = refreshed.peakSnapshots;
+        }
         int major, minor, patch;
         zmq_version(&major, &minor, &patch);
         std::ofstream result(output);

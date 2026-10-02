@@ -1,11 +1,12 @@
 # ns3sionna: MIMO-Abstraktionsmodell für IEEE 802.11ax/be
 
-Stand: 1. Oktober 2026, Phase 4 einschließlich Unterphase 4.8 implementiert;
+Stand: 2. Oktober 2026, Phase 4 einschließlich Unterphase 4.8 implementiert;
 Unterphase 5.1 für HE MCS 0/BCC/32 Byte/1x1 anhand von Link-Level-Daten validiert;
 Unterphasen 5.2.1 bis 5.2.5 mit Kanal-, Konvergenz-, Cache-/IPC-, Arrayabstands- und CSI-Alterungssensitivität implementiert;
 verbleibender Phase-5-Implementierungsplan R1 bis R6 ergänzt;
 erstes R1/R3-Inkrement mit portabler Provenienz, CPU-CI und deaktiviertem Cache implementiert;
-zweites R3-Inkrement mit Cachekorrektheitsregressionen, Belegungszählern und inaktiver Linkbereinigung implementiert
+zweites R3-Inkrement mit Cachekorrektheitsregressionen, Belegungszählern und inaktiver Linkbereinigung implementiert;
+drittes R3-Inkrement mit Allokations-/Antwort-/Speicherbudgets und Look-ahead-Tiefenprüfung implementiert
 
 Arbeitszweig: feature/su-mimo-minimal
 
@@ -1013,19 +1014,20 @@ Priorität: hoch; Voraussetzung eines aussagekräftigen Vergleichs ohne Cache.
   Abgelaufene Einträge auch in inaktiven Links bei Zugriff/Statistiklesen
   deterministisch bereinigen und leere Buckets entfernen.
   Offen: Mobilitätshistorien und Allokatorpools gesondert messen.
-- Dimensionen, Antwortgrößen und Speicherbudgets vor gefährlichen
-  Allokationen mit überlaufgeprüfter Multiplikation validieren.
-  Benötigte gültige oder zukünftige Look-ahead-Snapshots nur verwerfen,
-  wenn exaktes Replay gesichert ist: Der zustandsbehaftete Server kann
-  ihre Zeit bereits überschritten haben. Zu große Batches vor dem
-  Raytracing klar ablehnen.
+- Implementiert in 7.21: konfigurierbare Dimensions-, Koeffizienten-, Antwort-,
+  Snapshot- und Nutzbytegrenzen vor CFR-/Cacheallokationen prüfen;
+  Multiplikation und Summen gegen Überlauf absichern. Zu große geplante
+  Serverbatches vor Mobilitätsfortschritt/RT ablehnen. Gültige und zukünftige
+  Snapshots niemals zur Budgetanpassung verdrängen. Verbleibende Grenzen:
+  keine Budgetaushandlung, keine Schranke für RT-Zwischenspeicher oder RSS.
 - Nach Messnachweis unnötige CFR-Kopien in Suche/Gettern reduzieren und
   vollständig validierte MU-Snapshots wiederverwenden, statt sie zweimal
   zu dekodieren. Lebensdauer, Richtung und atomare Übernahme erhalten.
 - Den vorhandenen IPC-Runner um Cache an/aus, fortschreitende Zeit,
   wechselnde aktive Links und Look-ahead-Tiefen 1/4/16 erweitern.
-  Die tatsächlich erzeugte Tiefe `floor(sub_mode/receiver_count)`
-  dokumentieren und Nulltiefen zurückweisen.
+  Implementiert in 7.21: tatsächliche Tiefe `floor(sub_mode/receiver_count)`
+  dokumentieren, Nulltiefen zurückweisen und kleiner fortschreitender IPC-Lauf
+  mit exaktem Speicherbudget. Breite Zeit-/Link-/Tiefensweeps bleiben offen.
 
 Abnahmekriterium: Ungecachte Anfragen liefern die neue Antwort; gespeicherte
 Nutzbytes bleiben in langen Läufen mit begrenzter Arbeitsmenge innerhalb
@@ -5228,6 +5230,143 @@ Allokationsbudgets, langfristige Grenzen für gültige/überlappende/zukünftige
 Snapshots, Mobilitätshistorien-/Allokatormessungen, CFR-Kopieroptimierungen
 und erweiterte Live-/Zeit-/Link-/Look-ahead-Sweeps. Die offenen R1-Pakete aus
 7.19 sowie weitere PHY-Profile, GPU- und neue Referenzvalidierung bleiben offen.
+
+### 7.21 Drittes R3-Inkrement: Budgets und Look-ahead-Tiefe
+
+Dieses begrenzte Inkrement ergänzt die vorhandenen Cache-/Serververträge,
+Statistiken und Tests. R3 ist weiterhin offen. Der referenzierte ausführliche
+Phase-5-Plan ist nicht vorhanden; der eingebettete R1-R6-Plan bleibt maßgeblich.
+Historische Exporte, aufgezeichnete Fixtures und Provenienz werden unverändert
+weiterverwendet. Neue Logs und Messungen bleiben ausschließlich lokal.
+
+Native `SionnaPropagationCache::ResourceLimits` werden mit
+`cache->SetResourceLimits(limits)` gesetzt. Python verwendet
+`SionnaEnv(resource_limits=ResourceLimits(...))`; die Server-CLI bietet die
+entsprechenden `--max_subcarriers`, `--max_rx_antennas`, `--max_tx_antennas`,
+`--max_coefficients_per_channel`, `--max_batch_coefficients`, `--max_reply_bytes`,
+`--max_snapshots` und `--max_payload_bytes`. Alle Grenzen sind positiv und
+inklusiv und wirken gleichzeitig. Die gemeinsamen Standardwerte lauten:
+
+| Größe | Native Feld / Python Feld | Standardgrenze |
+| --- | --- | --- |
+| Töne | `maxSubcarriers` / `max_subcarriers` | 4096 |
+| RX-/TX-Antennen | `maxRxAntennas`, `maxTxAntennas` / `max_rx_antennas`, `max_tx_antennas` | je 64 |
+| Koeffizienten je Link | `maxCoefficientsPerChannel` / `max_coefficients_per_channel` | 4194304 |
+| Koeffizienten je Antwortbatch | `maxBatchCoefficients` / `max_batch_coefficients` | 16777216 |
+| Antwortbytes | `maxReplyBytes` / `max_reply_bytes` | 268435456 (256 MiB) |
+| Link-Snapshots | `maxSnapshots` / `max_snapshots` | 65536 |
+| Zurückgehaltene Nutzbytes | `maxPayloadBytes` / `max_payload_bytes` | 536870912 (512 MiB) |
+
+Die bisherigen nativen Deserialisierer bleiben verfügbar und delegieren an
+neue Überladungen mit Standardgrenzen. Leere Legacy-CFRs bleiben unterstützt.
+Ein Link-Snapshot ist ein RX-Eintrag eines Zeitpunkts, nicht ein gesamtes
+`ChannelState` mit mehreren Empfängern. Die Snapshotgrenze begrenzt auch die
+Anzahl aller zu dekodierenden RX-Einträge einer Antwort, einschließlich bereits
+abgelaufener Einträge. Dimensionsgrenzen gelten für neue CFR-Dekodierungen.
+
+Für jeden CFR gilt \(C_e=N_{\mathrm{sc},e}N_{\mathrm{rx},e}N_{\mathrm{tx},e}\).
+Native Multiplikationen, Summen und Allokationsbytes werden vor Reserve,
+CFR-Konstruktion und Cacheeinfügung gegen Überlauf und Grenzen geprüft.
+Python verwendet beliebig große Ganzzahlen und prüft die CFR-Bytezahl gegen
+`sys.maxsize`. Der gesamte Antwortbatch wird vor seiner ersten CFR-Allokation
+geprüft. Nach der bestehenden Ablaufbereinigung gilt für die geplante Aufnahme
+\[
+ S_{\mathrm{alt}}+S_{\mathrm{neu}}\leq S_{\max},\qquad
+ B_{\mathrm{alt}}+\sum_{\mathrm{neue,\ nicht\ abgelaufene}\ e}
+ (16C_e+4N_{\mathrm{sc},e})\leq B_{\max}.
+\]
+Dies verwendet die logischen Nutzbytes aus 7.20. Bei Budgetverletzung wird die
+vollständige Antwort als `std::invalid_argument` verworfen, ohne gültiges
+Präfix aufzunehmen oder gültige/zukünftige Snapshots zu entfernen. Auch ein
+Absenken des Speicherbudgets unter die aktuelle gültige/zukünftige Belegung
+wird abgelehnt; die bisherige Konfiguration bleibt bestehen. Ein späterer Retry
+kann nach regulärem Ablauf Platz erhalten. Deaktivierter Cache behält keine
+Snapshots, unterliegt aber weiterhin den Antwort-/Dekodiergrenzen.
+
+Der native Empfang prüft die tatsächliche ZMQ-Antwortlänge vor Protobuf-Parsing
+und dessen `int`-Längenkonvertierung. Das bereits empfangene ZMQ-Buffer ist damit
+nicht begrenzt. Der Server prüft geplante Linkanzahl, Dimensionen und eine
+konservative Wire-Obergrenze vor Mobilitätsfortschritt, Platzierung und RT.
+Für \(R\) Empfänger, \(D\) Zeitpunkte, \(C=N_{\mathrm{sc}}N_{\mathrm{rx}}N_{\mathrm{tx}}\)
+und \(I\) UTF-8-Bytes der Array-Identitätsstrings verwendet er bei CFR-Ausgabe
+\[
+ B_{\mathrm{wire,plan}}=64+256D+RD(512+I+16C+10N_{\mathrm{sc}}).
+\]
+Zehn Bytes pro Frequenz decken negative Protobuf-`int32`-Varints ab; die übrigen
+Pauschalen decken Wrapper, Zeit-/Positions-/Identitätsfelder und Längen ab.
+Ohne CFR-Ausgabe entfallen die beiden CFR-/Frequenzterme; die internen
+CFR-Koeffizientengrenzen bleiben aktiv. Die Nutzbytegrenze prüft serverseitig
+nur den geplanten Batch, nativ zusätzlich die bestehende Cachebelegung.
+Die endgültige `ByteSize()` wird nochmals vor Serialisierung geprüft.
+Serverablehnungen liefern eine bestehende negative `sim_ack` mit Fehlertext;
+der native Client reicht ihn in seiner Ausnahme weiter. Es gibt keine neue
+Protobuf-Nachricht oder automatische Aushandlung der beiden Konfigurationen.
+
+Look-ahead erzeugt tatsächlich
+\[
+ D=\left\lfloor\frac{\mathrm{sub\_mode}}{\mathrm{receiver\_count}}\right\rfloor,
+ \qquad \mathrm{receiver\_count}=|\mathrm{nodes}|-1.
+\]
+`sub_mode` zählt parallele Links, nicht die gewünschte Tiefe. Für drei Empfänger
+liefern beispielsweise 5, 14 und 50 die Tiefen 1, 4 und 16. Keine Empfänger oder
+\(D=0\) werden bei Initialisierung bzw. Anfrage klar abgelehnt, statt einen
+leeren Antwortbatch zu erzeugen. Die Nulltiefenmeldung lautet
+`Zero look-ahead depth: sub_mode must be at least receiver_count`.
+
+Validierung am 2. Oktober 2026: Ein zusätzlicher nativer Socketfall prüft
+inklusive Dimensions-/Koeffizienten-/Wire-/Speichergrenzen, Überlauf,
+sechs atomare Budgetablehnungen, unveränderte Belegung/Spitzen, Ablehnung eines
+zu kleinen neuen Speicherbudgets, erfolgreichen Retry nach Ablauf und einen
+späteren Treffer im zuvor gespeicherten Zukunftssnapshot. Vier zusätzliche
+Pythonfälle prüfen Grenzen, Allokationsüberlauf, unveränderte Nachrichten nach
+abgelehnter CFR-Konvertierung und Recovery, Tiefen 1/4/16 mit Restdivision sowie
+Ablehnung vor Mobilitätsaufruf/PathSolver ohne gefüllte Antwort.
+
+Der bestehende IPC-Runner bietet zusätzlich `--storage-steps=1..128`; ohne diese
+Option bleiben die bisherigen Exportschemata erhalten. Der kleine Lauf nutzte
+64 Töne, TX 2/RX 4, vier Links und 16 zusätzliche Zeitfortschritte. Die 18 Fills
+inklusive erster Befüllung und bestehender Ablaufprüfung erreichten zuletzt
+85,000017 ms Simulationszeit. Aktuelle und maximale Belegung blieben bei genau
+vier Snapshots und 33792 Nutzbytes, jeweils der konfigurierten Grenze.
+Alle 43 tatsächlichen Kanal-RPCs, Zeitstempel und Koeffizienten wurden geprüft;
+`run.json` meldet `success` mit getrenntem bestandenem Validierungsstatus.
+Der Allokator-Deltaindikator betrug 33504 Byte; RSS mit dem gemessenen Cache
+betrug 27602944 Byte, Prozess-Lebenszeitspitze 52342784 Byte. Diese Größen sind
+keine Speicherbudget-Abnahmekriterien und keine CFR-/RSS-Gleichsetzung.
+
+Der inkrementelle Build im festgelegten ns-3.40-Checkout und die bestehende
+vollständige CPU-Auswahl bestanden mit 54 nativen Fällen in sieben Suites
+sowie 60 bestandenen Python-Tests unter 61 ausgewählten Tests. Ein optionaler
+Alterungsexporttest blieb ausgelassen; die drei frischen RT-Prüfungen bleiben
+separat. Python 3.12.12, pip 26.0.1 und alle 55 Paketpins wurden geprüft;
+`pip check` bestand, Backend `llvm_ad_mono_polarized`. Historische eingefrorene
+Export-/IPC-Regressionsprüfungen bestanden unverändert. Logs liegen unter
+`/tmp/r3-budget-*`, Build/Paketumgebung unter `/tmp/ns3-r1r3-*`.
+
+Reproduktion vom vorbereiteten ns-3-Verzeichnis aus, mit leerem Ausgabeordner:
+
+~~~sh
+python contrib/sionna/tools/run_cpu_regressions.py
+python contrib/sionna/tools/benchmark_cache_ipc.py --storage-steps=16 \
+  --output=/tmp/r3-budget-storage
+~~~
+
+Nach der letzten Dokumentationsänderung wird die PDF genau einmal regeneriert;
+Seitenzahl, Textextraktion, sämtliche Fußzeilen und ausgewählte Seiten werden
+lokal validiert. Neue Datensätze, Fixtures, Logs und Plots werden nicht committed.
+
+Offen bleiben Mobilitätshistorien, RT-/CIR-Zwischenspeicher, temporäre
+Protobuf-/CFR-Kopien, Allokatorpools und RSS; die Budgetgrenzen sind keine harte
+Prozessspeichergrenze. Budgetablehnung ist atomar, ein `bad_alloc` während der
+Cacheübernahme besitzt weiterhin keine vollständige Rollbackgarantie.
+Eine serverseitig passende Antwort kann wegen bereits zurückgehaltener
+Snapshots oder unterschiedlich konfigurierter Clientlimits dennoch abgelehnt
+werden; der zustandsbehaftete Server wird dadurch nicht automatisch
+zurückgespult. Kein erforderlicher gültiger oder zukünftiger Snapshot wird
+zur Freigabe von Platz verdrängt. Transporttimeouts, Budgetaushandlung,
+Kopieroptimierungen, lange wechselnde Arbeitsmengen, breite Live-/GPU- und
+Look-ahead-Sweeps sowie der gehostete CPU-Nachweis bleiben außerhalb dieses
+Inkrements. R3 und die übrigen offenen Phase-5-Pakete sind nicht abgeschlossen.
 
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 

@@ -19,7 +19,8 @@ import mitsuba as mi
 import math
 from millify import millify
 
-from mimo_data_contract import (RX_ARRAY_DEFAULTS, TX_ARRAY_DEFAULTS,
+from mimo_data_contract import (ResourceLimits, lookahead_depth, array_ports,
+                                RX_ARRAY_DEFAULTS, TX_ARRAY_DEFAULTS,
                                 append_cfr_to_message, append_user_channel_identity,
                                 extract_link_cfr,
                                 normalize_link_cfr, resolve_array_config,
@@ -55,7 +56,8 @@ class SionnaEnv:
     def __init__(self, model_folder='./models/', rt_fast=False, default_mode=MODE_P2P,
                  rt_max_parallel_links=256, est_csi=True, VERBOSE=True,
                  CHECKS_ENABLED=True, equidistant_walk_steps=0,
-                 mobility_bbox_margin=1.0, mobility_bbox_enabled=False):
+                 mobility_bbox_margin=1.0, mobility_bbox_enabled=False, resource_limits=None):
+        self.resource_limits = resource_limits or ResourceLimits()
         self.model_folder = model_folder
         self.rt_fast = rt_fast
         if rt_fast:
@@ -175,6 +177,22 @@ class SionnaEnv:
         print(f'Operating in mode: {self.mode}, sub_mode: {self.sub_mode}, time_evo_model: {self.time_evo_model}'
               f', fc: {sim_init_msg.frequency} MHz, B: {sim_init_msg.channel_bw} MHz, FFT size: {self.fft_size}')
 
+        # Missing messages deliberately reproduce the legacy 1x1 settings.
+        tx_array_msg = sim_init_msg.tx_array if sim_init_msg.HasField("tx_array") else None
+        rx_array_msg = sim_init_msg.rx_array if sim_init_msg.HasField("rx_array") else None
+        tx_array_config = resolve_array_config(tx_array_msg, TX_ARRAY_DEFAULTS)
+        rx_array_config = resolve_array_config(rx_array_msg, RX_ARRAY_DEFAULTS)
+        self.rx_array_config = rx_array_config
+
+        self.tx_array_config = tx_array_config
+        self.resource_limits.channel(self.fft_size, array_ports(rx_array_config),
+                                     array_ports(tx_array_config))
+        if self.mode == SionnaEnv.MODE_P2MP_LAH:
+            lookahead_depth(self.sub_mode, len(sim_init_msg.nodes) - 1)
+
+        self.scene.tx_array = PlanarArray(**tx_array_config)
+        self.scene.rx_array = PlanarArray(**rx_array_config)
+
         # Subcarrier frequencies
         self.frequencies = subcarrier_frequencies(num_subcarriers=self.fft_size, subcarrier_spacing=self.subcarrier_spacing)
 
@@ -206,17 +224,6 @@ class SionnaEnv:
                 self.chan_coh_time_mode3 = MAX_COHERENCE_TIME
 
             print(f'Running mode=3 w/ Tc: {self.chan_coh_time_mode3/1e6}ms')
-
-        # Missing messages deliberately reproduce the legacy 1x1 settings.
-        tx_array_msg = sim_init_msg.tx_array if sim_init_msg.HasField("tx_array") else None
-        rx_array_msg = sim_init_msg.rx_array if sim_init_msg.HasField("rx_array") else None
-        tx_array_config = resolve_array_config(tx_array_msg, TX_ARRAY_DEFAULTS)
-        rx_array_config = resolve_array_config(rx_array_msg, RX_ARRAY_DEFAULTS)
-        self.rx_array_config = rx_array_config
-
-        self.scene.tx_array = PlanarArray(**tx_array_config)
-        self.scene.rx_array = PlanarArray(**rx_array_config)
-
 
         # set current sim time to 0ns
         self.sim_time = 0
@@ -294,6 +301,12 @@ class SionnaEnv:
         return np.random.default_rng(seed)
 
 
+    def _check_batch_budget(self, receivers, depth=1):
+        config = self.rx_array_config
+        identity_bytes = len(config["pattern"].encode()) + len(config["polarization"].encode())
+        return self.resource_limits.plan(self.fft_size, array_ports(config),
+            array_ports(self.tx_array_config), receivers, depth, identity_bytes, self.est_csi)
+
     def compute_cfr(self, csi_req, reply_wrapper):
 
         tx_node_id = csi_req.tx_node
@@ -341,7 +354,8 @@ class SionnaEnv:
         nodes_to_update = sorted(self.node_info)
 
         # compute look-ahead
-        look_ahead = math.floor(self.sub_mode / (len(nodes_to_update) - 1))
+        look_ahead = lookahead_depth(self.sub_mode, len(nodes_to_update) - 1)
+        self._check_batch_budget(len(nodes_to_update) - 1, look_ahead)
 
         print(f'compute CFR to #RX={len(nodes_to_update) - 1} with LAH={look_ahead}')
 
@@ -442,7 +456,7 @@ class SionnaEnv:
                 lnk_delay = int(round(np.min(lnk_tau[lnk_tau >= 0] * 1e9), 0))
 
                 h = extract_link_cfr(h_raw, rx_id)
-                lnk_loss, h_normalized = normalize_link_cfr(h)
+                lnk_loss, h_normalized = normalize_link_cfr(h, self.resource_limits)
 
                 if self.CHECKS_ENABLED:
                     power_normalized = np.mean(np.abs(h_normalized) ** 2)
@@ -461,7 +475,7 @@ class SionnaEnv:
                 rx_node_info.wb_loss = lnk_loss
 
                 if self.est_csi:
-                    append_cfr_to_message(rx_node_info, self.frequencies, h_normalized)
+                    append_cfr_to_message(rx_node_info, self.frequencies, h_normalized, self.resource_limits)
                 if multi_user_snapshot:
                     append_user_channel_identity(rx_node_info, curr_rx_node,
                                                  tx_node_id, csi.start_time,
@@ -478,7 +492,7 @@ class SionnaEnv:
                 csi_tc_arr.append(tc)
 
             if multi_user_snapshot:
-                validate_multi_user_snapshot(csi)
+                validate_multi_user_snapshot(csi, self.resource_limits)
 
             # take the worst case Tc from all RX nodes
             Tc_p2mp = int(np.min(np.asarray(csi_tc_arr)))
@@ -575,7 +589,7 @@ class SionnaEnv:
             rx_node_info.wb_loss = lnk_loss[idx]
 
             if self.est_csi:
-                append_cfr_to_message(rx_node_info, self.frequencies, h_normalized[idx])
+                append_cfr_to_message(rx_node_info, self.frequencies, h_normalized[idx], self.resource_limits)
             if multi_user_snapshot:
                 append_user_channel_identity(rx_node_info, comp_rx_node_id,
                                              tx_node_id, csi.start_time,
@@ -594,7 +608,7 @@ class SionnaEnv:
             csi_tc_arr.append(tc)
 
         if multi_user_snapshot:
-            validate_multi_user_snapshot(csi)
+            validate_multi_user_snapshot(csi, self.resource_limits)
 
         # take the worst case Tc from all RX nodes
         Tc_p2mp = int(np.min(np.asarray(csi_tc_arr)))
@@ -749,6 +763,7 @@ class SionnaEnv:
             # both P2MP and P2MP_LAH
             nodes_to_update = sorted(self.node_info)
 
+        self._check_batch_budget(len(nodes_to_update) - 1)
         self._update_nodes_to_time(req_sim_time, nodes_to_update)
 
         # update time
@@ -799,7 +814,7 @@ class SionnaEnv:
             lnk_delay = int(round(np.min(lnk_tau[lnk_tau >= 0] * 1e9), 0))
 
             h = extract_link_cfr(h_raw, rx_id)
-            lnk_loss, h_normalized = normalize_link_cfr(h)
+            lnk_loss, h_normalized = normalize_link_cfr(h, self.resource_limits)
 
             if self.CHECKS_ENABLED:
                 power_normalized = np.mean(np.abs(h_normalized) ** 2)
@@ -905,7 +920,10 @@ class SionnaEnv:
             # Fill the reply message
             if ns3_msg.HasField("sim_init_msg"):
                 # handle SimInitMessage & send ACK
-                successful, error_msg = self.init_simulation_env(ns3_msg.sim_init_msg)
+                try:
+                    successful, error_msg = self.init_simulation_env(ns3_msg.sim_init_msg)
+                except ValueError as error:
+                    successful, error_msg = False, str(error)
                 resp_msg.sim_ack.no_error = successful
                 resp_msg.sim_ack.error_msg = error_msg
                 resp_msg.sim_ack.SetInParent()
@@ -919,7 +937,14 @@ class SionnaEnv:
             elif ns3_msg.HasField("channel_state_request"):
                 # handle ChannelStateRequest by sending ChannelStateResponse
                 start_time = time.time()
-                num_csi_req = self.compute_cfr(ns3_msg.channel_state_request, resp_msg)
+                try:
+                    num_csi_req = self.compute_cfr(ns3_msg.channel_state_request, resp_msg)
+                    self.resource_limits.check(resp_msg.ByteSize(), "reply_bytes")
+                except ValueError as error:
+                    resp_msg.Clear()
+                    resp_msg.sim_ack.no_error = False
+                    resp_msg.sim_ack.error_msg = str(error)
+                    num_csi_req = 0
                 total_num_csi_samples += num_csi_req
                 last_call_times.append(time.time() - start_time)
 
@@ -967,6 +992,9 @@ if __name__ == '__main__':
                         help="Reflect mobile nodes at the scene x/y bounding box")
     parser.add_argument("--mobility_bbox_margin", type=float, default=1.0,
                         help="Outward scene bounding-box margin in meters")
+    for name, value in vars(ResourceLimits()).items():
+        parser.add_argument("--" + name, type=int, default=value,
+                            help="Positive inclusive channel resource limit")
     args = parser.parse_args()
 
     print("ns3sionna v1.0")
@@ -978,7 +1006,9 @@ if __name__ == '__main__':
                         args.est_csi, VERBOSE=args.verbose,
                         equidistant_walk_steps=args.equidistant_walk_steps,
                         mobility_bbox_margin=args.mobility_bbox_margin,
-                        mobility_bbox_enabled=args.mobility_bbox_toggle)
+                        mobility_bbox_enabled=args.mobility_bbox_toggle,
+                        resource_limits=ResourceLimits(**{
+                            name: getattr(args, name) for name in vars(ResourceLimits())}))
         env.run()
 
         if args.single_run:

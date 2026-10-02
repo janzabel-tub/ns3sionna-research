@@ -1,6 +1,72 @@
 """Shape-safe conversion between Sionna CFR arrays and Protocol Buffers."""
 
+from dataclasses import dataclass
+import sys
+
 import numpy as np
+
+
+@dataclass(frozen=True)
+class ResourceLimits:
+    """Positive inclusive limits; wire planning is a conservative upper bound."""
+    max_subcarriers: int = 4096
+    max_rx_antennas: int = 64
+    max_tx_antennas: int = 64
+    max_coefficients_per_channel: int = 4194304
+    max_batch_coefficients: int = 16777216
+    max_reply_bytes: int = 268435456
+    max_snapshots: int = 65536
+    max_payload_bytes: int = 536870912
+
+    def __post_init__(self):
+        if any(type(value) is not int or value <= 0 for value in vars(self).values()):
+            raise ValueError("Channel resource limits must be positive integers")
+
+    def check(self, value, name):
+        if value > getattr(self, "max_" + name):
+            raise ValueError("Channel resource limit exceeded: " + name)
+        return value
+
+    def channel(self, sc, rx, tx):
+        for value, name in ((sc, "subcarriers"), (rx, "rx_antennas"), (tx, "tx_antennas")):
+            if value <= 0:
+                raise ValueError("Channel dimensions must be positive")
+            self.check(value, name)
+        count = sc * rx * tx  # Python integers do not wrap.
+        if count > sys.maxsize // 16:
+            raise ValueError("CFR allocation bytes overflow size_t")
+        return self.check(count, "coefficients_per_channel")
+
+    def plan(self, sc, rx, tx, receivers, depth=1, identity_bytes=0, est_csi=True):
+        count = self.channel(sc, rx, tx)
+        if receivers <= 0 or depth <= 0:
+            raise ValueError("Channel batch needs positive receivers and depth")
+        snapshots = self.check(receivers * depth, "snapshots")
+        batch_count = self.check(count * snapshots, "batch_coefficients")
+        if batch_count > sys.maxsize // 16:
+            raise ValueError("Batch CFR allocation bytes overflow size_t")
+        self.check(snapshots * (16 * count + 4 * sc) if est_csi else 0, "payload_bytes")
+        # Packed doubles: 16 bytes/coefficient; int32 frequencies can consume
+        # ten bytes each (negative varints). Include nested tags/lengths,
+        # positions, endpoints, times and optional array identity strings.
+        wire_bound = 64 + depth * 256 + snapshots * (
+            512 + identity_bytes + (16 * count + 10 * sc if est_csi else 0))
+        self.check(wire_bound, "reply_bytes")
+        return wire_bound
+
+
+def lookahead_depth(sub_mode, receiver_count):
+    """sub_mode limits parallel links, so actual depth is floor(sub_mode/R)."""
+    if receiver_count <= 0:
+        raise ValueError("Look-ahead requires at least one receiver")
+    depth = sub_mode // receiver_count
+    if depth <= 0:
+        raise ValueError("Zero look-ahead depth: sub_mode must be at least receiver_count")
+    return depth
+
+
+def array_ports(config):
+    return config["num_rows"] * config["num_cols"] * (2 if config["polarization"] == "VH" else 1)
 
 
 TX_ARRAY_DEFAULTS = {
@@ -98,13 +164,14 @@ def extract_link_cfr(cfr, link_index):
     return cfr[link_index, :, 0, :, 0, :]
 
 
-def normalize_link_cfr(cfr):
+def normalize_link_cfr(cfr, limits=None):
     """Separate wideband loss and normalize over sc/rx/tx coefficients."""
     cfr = np.asarray(cfr)
     if cfr.ndim != 3:
         raise ValueError("Expected CFR shape [rx, tx, sc], got {}".format(cfr.shape))
     if 0 in cfr.shape:
         raise ValueError("CFR antenna and subcarrier dimensions must be non-zero")
+    (limits or ResourceLimits()).channel(cfr.shape[2], cfr.shape[0], cfr.shape[1])
     if not np.all(np.isfinite(cfr)):
         raise ValueError("CFR contains non-finite coefficients")
 
@@ -116,13 +183,14 @@ def normalize_link_cfr(cfr):
     return wideband_loss_db, cfr / np.sqrt(mean_power)
 
 
-def append_cfr_to_message(rx_node_info, frequencies, cfr):
+def append_cfr_to_message(rx_node_info, frequencies, cfr, limits=None):
     """Serialize [rx, tx, sc] CFR in flat sc/rx/tx order."""
     cfr = np.asarray(cfr)
     if cfr.ndim != 3:
         raise ValueError("Expected CFR shape [rx, tx, sc], got {}".format(cfr.shape))
 
     num_rx_antennas, num_tx_antennas, num_subcarriers = cfr.shape
+    (limits or ResourceLimits()).channel(num_subcarriers, num_rx_antennas, num_tx_antennas)
     frequencies = np.asarray(frequencies).reshape(-1)
     if frequencies.size != num_subcarriers:
         raise ValueError("Frequency and CFR subcarrier counts do not match")
@@ -161,11 +229,18 @@ def append_user_channel_identity(
     array.polarization = rx_array_config["polarization"]
 
 
-def validate_multi_user_snapshot(channel_state):
+def validate_multi_user_snapshot(channel_state, limits=None):
     """Validate a complete Phase-4.1 snapshot and return users by stable ID."""
     if not channel_state.rx_nodes:
         raise ValueError("A multi-user snapshot needs at least one user")
 
+    limits = limits or ResourceLimits()
+    limits.check(len(channel_state.rx_nodes), "snapshots")
+    batch_count = 0
+    for node in channel_state.rx_nodes:
+        batch_count += limits.channel(len(node.frequencies), node.num_rx_antennas or 1,
+                                      node.num_tx_antennas or 1)
+    limits.check(batch_count, "batch_coefficients")
     users = sorted(channel_state.rx_nodes, key=lambda node: node.user_identity.user_id)
     seen = set()
     frequencies = None

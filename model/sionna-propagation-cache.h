@@ -91,6 +91,29 @@ class SionnaPropagationCache : public ns3::Object
         SionnaPropagationCache();
         ~SionnaPropagationCache();
 
+        /** Positive, inclusive resource limits. Payload excludes allocator/RSS overhead. */
+        struct ResourceLimits
+        {
+            uint64_t maxSubcarriers{4096};
+            uint64_t maxRxAntennas{64};
+            uint64_t maxTxAntennas{64};
+            uint64_t maxCoefficientsPerChannel{4194304};
+            uint64_t maxBatchCoefficients{16777216};
+            uint64_t maxReplyBytes{268435456};
+            uint64_t maxSnapshots{65536};
+            uint64_t maxPayloadBytes{536870912};
+        };
+        /** Reject lowering below current valid/future storage; never evict to fit. */
+        void SetResourceLimits(const ResourceLimits& limits);
+        static uint64_t ValidateChannelDimensions(uint64_t sc, uint64_t rx, uint64_t tx,
+                                                  const ResourceLimits& limits);
+        static MimoChannelMatrix DeserializeChannelMatrix(
+            const ns3sionna::ChannelStateResponse::ChannelState::RxNodeInfo& message,
+            const ResourceLimits& limits);
+        static MultiUserChannelSnapshot DeserializeMultiUserChannelSnapshot(
+            const ns3sionna::ChannelStateResponse::ChannelState& message,
+            const ResourceLimits& limits);
+
         // propagation delay between two nodes
         Time GetPropagationDelay(Ptr<MobilityModel> a, Ptr<MobilityModel> b) const;
         // average propagation loss
@@ -138,6 +161,7 @@ class SionnaPropagationCache : public ns3::Object
         void PrintStats();
 
     private:
+        ResourceLimits m_limits;
         struct CacheKey
         {
         /**

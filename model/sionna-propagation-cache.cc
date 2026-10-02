@@ -58,13 +58,41 @@ GetArrayAntennaCount(const ns3sionna::AntennaArrayConfig& array)
     {
         RejectSnapshot("invalid RX-array polarization");
     }
-    const uint64_t count = static_cast<uint64_t>(array.num_rows()) * array.num_cols() *
-                           polarizations;
-    if (count > std::numeric_limits<uint32_t>::max())
+    const uint64_t elements = static_cast<uint64_t>(array.num_rows()) * array.num_cols();
+    if (elements > std::numeric_limits<uint32_t>::max() / polarizations)
     {
         RejectSnapshot("RX-array antenna count overflows uint32_t");
     }
-    return static_cast<uint32_t>(count);
+    return static_cast<uint32_t>(elements * polarizations);
+}
+
+uint64_t
+CheckedProduct(uint64_t a, uint64_t b)
+{
+    if (b != 0 && a > std::numeric_limits<uint64_t>::max() / b)
+    {
+        throw std::invalid_argument("Channel budget arithmetic overflow");
+    }
+    return a * b;
+}
+
+uint64_t
+CheckedSum(uint64_t a, uint64_t b)
+{
+    if (a > std::numeric_limits<uint64_t>::max() - b)
+    {
+        throw std::invalid_argument("Channel budget arithmetic overflow");
+    }
+    return a + b;
+}
+
+void
+CheckLimit(uint64_t value, uint64_t limit, const char* name)
+{
+    if (limit == 0 || value > limit)
+    {
+        throw std::invalid_argument(std::string("Channel resource limit exceeded: ") + name);
+    }
 }
 
 } // namespace
@@ -205,9 +233,50 @@ SionnaPropagationCache::GetPropagationChannelMatrix(Ptr<const MobilityModel> a,
     return GetPropagationData(tmp_a, tmp_b).m_cfr;
 }
 
+void
+SionnaPropagationCache::SetResourceLimits(const ResourceLimits& limits)
+{
+    for (auto value : {limits.maxSubcarriers, limits.maxRxAntennas, limits.maxTxAntennas,
+                       limits.maxCoefficientsPerChannel, limits.maxBatchCoefficients,
+                       limits.maxReplyBytes, limits.maxSnapshots, limits.maxPayloadBytes})
+    {
+        if (value == 0) { throw std::invalid_argument("Channel resource limits must be positive"); }
+    }
+    const auto storage = GetStorageStatistics();
+    CheckLimit(storage.snapshots, limits.maxSnapshots, "retained snapshots");
+    CheckLimit(storage.payloadBytes, limits.maxPayloadBytes, "retained payload bytes");
+    m_limits = limits;
+}
+
+uint64_t
+SionnaPropagationCache::ValidateChannelDimensions(uint64_t sc, uint64_t rx, uint64_t tx,
+                                                 const ResourceLimits& limits)
+{
+    if (sc == 0 || rx == 0 || tx == 0)
+    {
+        throw std::invalid_argument("Channel dimensions must be positive");
+    }
+    const auto count = CheckedProduct(CheckedProduct(sc, rx), tx);
+    CheckLimit(sc, limits.maxSubcarriers, "subcarriers");
+    CheckLimit(rx, limits.maxRxAntennas, "RX antennas");
+    CheckLimit(tx, limits.maxTxAntennas, "TX antennas");
+    CheckLimit(count, limits.maxCoefficientsPerChannel, "coefficients per channel");
+    CheckLimit(count, std::numeric_limits<std::size_t>::max() / sizeof(std::complex<double>),
+               "CFR allocation bytes");
+    return count;
+}
+
 MimoChannelMatrix
 SionnaPropagationCache::DeserializeChannelMatrix(
     const ns3sionna::ChannelStateResponse::ChannelState::RxNodeInfo& message)
+{
+    return DeserializeChannelMatrix(message, ResourceLimits{});
+}
+
+MimoChannelMatrix
+SionnaPropagationCache::DeserializeChannelMatrix(
+    const ns3sionna::ChannelStateResponse::ChannelState::RxNodeInfo& message,
+    const ResourceLimits& limits)
 {
     const int coefficientCount = message.csi_real_size();
     if (message.csi_imag_size() != coefficientCount)
@@ -229,15 +298,8 @@ SionnaPropagationCache::DeserializeChannelMatrix(
     {
         throw std::invalid_argument("A non-empty CFR needs subcarrier frequencies");
     }
-    std::size_t expectedCount = numSubcarriers;
-    for (uint32_t dimension : {numRxAntennas, numTxAntennas})
-    {
-        if (dimension > std::numeric_limits<std::size_t>::max() / expectedCount)
-        {
-            throw std::invalid_argument("CFR dimensions overflow size_t");
-        }
-        expectedCount *= dimension;
-    }
+    const auto expectedCount = ValidateChannelDimensions(numSubcarriers, numRxAntennas,
+                                                         numTxAntennas, limits);
     if (static_cast<std::size_t>(coefficientCount) != expectedCount)
     {
         throw std::invalid_argument("CFR coefficient count does not match sc/rx/tx dimensions");
@@ -264,6 +326,24 @@ MultiUserChannelSnapshot
 SionnaPropagationCache::DeserializeMultiUserChannelSnapshot(
     const ns3sionna::ChannelStateResponse::ChannelState& message)
 {
+    return DeserializeMultiUserChannelSnapshot(message, ResourceLimits{});
+}
+
+MultiUserChannelSnapshot
+SionnaPropagationCache::DeserializeMultiUserChannelSnapshot(
+    const ns3sionna::ChannelStateResponse::ChannelState& message, const ResourceLimits& limits)
+{
+    CheckLimit(message.rx_nodes_size(), limits.maxSnapshots, "reply snapshots");
+    uint64_t batchCount = 0;
+    for (const auto& user : message.rx_nodes())
+    {
+        batchCount = CheckedSum(batchCount, ValidateChannelDimensions(user.frequencies_size(),
+            user.num_rx_antennas() == 0 ? 1 : user.num_rx_antennas(),
+            user.num_tx_antennas() == 0 ? 1 : user.num_tx_antennas(), limits));
+    }
+    CheckLimit(batchCount, limits.maxBatchCoefficients, "batch coefficients");
+    CheckLimit(batchCount, std::numeric_limits<std::size_t>::max() / sizeof(std::complex<double>),
+               "batch CFR allocation bytes");
     if (message.rx_nodes_size() == 0)
     {
         RejectSnapshot("no users");
@@ -308,8 +388,8 @@ SionnaPropagationCache::DeserializeMultiUserChannelSnapshot(
             RejectSnapshot("RX-array identity does not match the CFR dimension");
         }
         const int numSubcarriers = user.frequencies_size();
-        const uint64_t expectedCount = static_cast<uint64_t>(numSubcarriers) * numRxAntennas *
-                                       numTxAntennas;
+        const uint64_t expectedCount = ValidateChannelDimensions(numSubcarriers, numRxAntennas,
+                                                                numTxAntennas, limits);
         if (numSubcarriers == 0 || user.csi_real_size() != user.csi_imag_size() ||
             static_cast<uint64_t>(user.csi_real_size()) != expectedCount)
         {
@@ -376,7 +456,7 @@ SionnaPropagationCache::DeserializeMultiUserChannelSnapshot(
                                   std::vector<int>(user->frequencies().begin(),
                                                    user->frequencies().end()),
                                   user->wb_loss(),
-                                  DeserializeChannelMatrix(*user)});
+                                  DeserializeChannelMatrix(*user, limits)});
     }
     return snapshot;
 }
@@ -569,18 +649,59 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
     
     NS_ASSERT_MSG(result, "Failed to receive reply after propagation request message.");
 
+    // The wire buffer is already received, but reject before Protobuf parsing/copies.
+    CheckLimit(zmq_reply.size(), m_limits.maxReplyBytes, "reply bytes");
+    CheckLimit(zmq_reply.size(), std::numeric_limits<int>::max(), "Protobuf parse bytes");
     // Check if the reply message is a propagation response
     ns3sionna::Wrapper reply_wrapper;
     if (!reply_wrapper.ParseFromArray(zmq_reply.data(), zmq_reply.size()) ||
         !reply_wrapper.has_channel_state_response())
     {
-        throw std::invalid_argument("Invalid channel-state response wrapper");
+        throw std::invalid_argument("Invalid channel-state response wrapper: " +
+                                    reply_wrapper.sim_ack().error_msg());
     }
 
     // Extract the delay, loss and time to live value
     const ns3sionna::ChannelStateResponse& csi_response = reply_wrapper.channel_state_response();
 
     NS_LOG_INFO("ns3sionna::Req CSI data from sionna: #samples=" << csi_response.csi_size());
+
+    // Preflight the entire batch before any CFR/cache allocation. Expired samples
+    // still count toward decode limits; only retained samples count toward storage.
+    uint64_t batchCount = 0, batchEntries = 0, payload = 0, retained = 0;
+    for (const auto& state : csi_response.csi())
+    {
+        for (const auto& rx : state.rx_nodes())
+        {
+            const auto count = (rx.frequencies_size() == 0 && rx.csi_real_size() == 0 &&
+                                rx.csi_imag_size() == 0) ? 0 :
+                ValidateChannelDimensions(rx.frequencies_size(),
+                    rx.num_rx_antennas() == 0 ? 1 : rx.num_rx_antennas(),
+                    rx.num_tx_antennas() == 0 ? 1 : rx.num_tx_antennas(), m_limits);
+            batchCount = CheckedSum(batchCount, count);
+            batchEntries = CheckedSum(batchEntries, 1);
+            if (state.end_time() >= static_cast<uint64_t>(current_time.GetNanoSeconds()))
+            {
+                retained = CheckedSum(retained, 1);
+                payload = CheckedSum(payload, CheckedSum(
+                    CheckedProduct(count, sizeof(std::complex<double>)),
+                    CheckedProduct(rx.frequencies_size(), sizeof(int))));
+            }
+        }
+    }
+    CheckLimit(batchCount, m_limits.maxBatchCoefficients, "batch coefficients");
+    CheckLimit(batchCount, std::numeric_limits<std::size_t>::max() / sizeof(std::complex<double>),
+               "batch CFR allocation bytes");
+    CheckLimit(batchEntries, std::numeric_limits<std::size_t>::max() /
+               sizeof(std::pair<CacheKey, CacheEntry>), "batch entry allocation bytes");
+    CheckLimit(batchEntries, m_limits.maxSnapshots, "reply snapshots");
+    if (m_caching)
+    {
+        CheckLimit(CheckedSum(m_storage.snapshots, retained), m_limits.maxSnapshots,
+                   "retained snapshots");
+        CheckLimit(CheckedSum(m_storage.payloadBytes, payload), m_limits.maxPayloadBytes,
+                   "retained payload bytes");
+    }
 
     // Validate and decode every sample before committing any cache entry.
     std::vector<std::pair<CacheKey, CacheEntry>> pendingEntries;
@@ -600,7 +721,7 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
         }
         if (hasUserIdentity)
         {
-            DeserializeMultiUserChannelSnapshot(csiMessage);
+            DeserializeMultiUserChannelSnapshot(csiMessage, m_limits);
         }
 
         Time start_time = NanoSeconds(csi_response.csi(csi_i).start_time());
@@ -626,7 +747,7 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
 
             google::protobuf::uint32 rxId = rxMessage.id();
             auto rxPos = rxMessage.position();
-            MimoChannelMatrix channel = DeserializeChannelMatrix(rxMessage);
+            MimoChannelMatrix channel = DeserializeChannelMatrix(rxMessage, m_limits);
             uint32_t num_ofdm_subcarrier = channel.GetNumSubcarriers();
 
             NS_LOG_DEBUG("\t\t: Response (delay: " << delay << ", loss: " << wb_loss << ")"
