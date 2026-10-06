@@ -308,3 +308,9 @@ adds validity/direction/atomic-batch regressions, finite zero-lookup statistics,
 current/lifetime-peak storage counters and lazy expiry cleanup across inactive
 links. Future snapshots are retained. Existing IPC exports remain unchanged;
 long-run budgets, copy optimization and hosted CPU validation remain open.
+
+## TCP/MIMO experiment runner
+
+Use [performance-sionna-mimo](examples/performance-sionna-mimo.md) for configurable
+TCP downlinks with two AP/STA pairs on one channel, antenna/channel-width sweeps,
+ideal SVD beamforming, and 100 ms throughput and average PHY SNR summaries.
