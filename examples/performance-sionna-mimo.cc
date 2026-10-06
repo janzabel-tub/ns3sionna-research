@@ -274,8 +274,8 @@ main(int argc, char* argv[])
     std::string precoding{"open-loop"};
     std::string offeredRate{"1Gbps"};
     std::string tcpVariant{"ns3::TcpCubic"};
-    std::string apPositions{"-1,0.5,1.5;2,0.5,1.5"};
-    std::string staPositions{"-2,1.5,1.6;3,1.5,1.6"};
+    std::string apPositions{"-1,0.5,1.5;-1.5,5.5,1.5"};
+    std::string staPositions{"-2,1.5,1.6;-2.5,6.5,1.6"};
     double mobileSpeedMps{1}, txPowerDbm{20}, simulationTimeSeconds{10};
     double trafficStartSeconds{1}, reportIntervalMs{100}, noiseFigureDb{7};
     double antennaSpacingLambda{0.5}, fixedPathLossDb{50};

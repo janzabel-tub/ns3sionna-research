@@ -22,7 +22,7 @@ Other variables:
   SIMULATION_TIME_SECONDS=10  TRAFFIC_START_SECONDS=1  REPORT_INTERVAL_MS=100
   OFFERED_RATE=1Gbps     TCP_VARIANT=ns3::TcpCubic  ENABLE_SNR=true
   ENVIRONMENT=apartment/apartment.xml  SERVER_URL=tcp://localhost:5555
-  AP_POSITIONS='-1,0.5,1.5;2,0.5,1.5'  STA_POSITIONS='-2,1.5,1.6;3,1.5,1.6'
+  AP_POSITIONS='-1,0.5,1.5;-1.5,5.5,1.5'  STA_POSITIONS='-2,1.5,1.6;-2.5,6.5,1.6'
   ARRAY_ROWS=1  ANTENNA_SPACING_LAMBDA=0.5  NOISE_FIGURE_DB=7  RNG_RUN=1
   CACHING=true  COHERENCE_TIME_MS=0  MODE=1  SUB_MODE=1
   OUTPUT_BASE=<ns-3>/results/mimo/<timestamp>  BUILD=true  RUN_TIMEOUT_SECONDS=1800
@@ -183,8 +183,8 @@ for power in "${powers[@]}"; do
         "--offeredRate=${OFFERED_RATE:-1Gbps}" "--tcpVariant=${TCP_VARIANT:-ns3::TcpCubic}"
         "--snr=${ENABLE_SNR:-true}" "--caching=${CACHING:-true}"
         "--fixedCoherenceTimeMs=${COHERENCE_TIME_MS:-0}" "--mode=${MODE:-1}" "--subMode=${SUB_MODE:-1}"
-        "--apPositions=${AP_POSITIONS:--1,0.5,1.5;2,0.5,1.5}"
-        "--staPositions=${STA_POSITIONS:--2,1.5,1.6;3,1.5,1.6}"
+        "--apPositions=${AP_POSITIONS:--1,0.5,1.5;-1.5,5.5,1.5}"
+        "--staPositions=${STA_POSITIONS:--2,1.5,1.6;-2.5,6.5,1.6}"
         "--outputDirectory=$run_dir"
     )
     if [[ -n ${EESM_BETA_LINEAR:-} ]]; then args+=("--eesmBetaLinear=$EESM_BETA_LINEAR"); fi

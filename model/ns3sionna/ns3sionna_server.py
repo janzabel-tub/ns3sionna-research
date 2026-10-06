@@ -452,11 +452,9 @@ class SionnaEnv:
 
                 rx_id = lah_time_idx * len(rx_nodes) + curr_rx_id
 
-                lnk_tau = np.squeeze(tau[rx_id, :, :, :, :])
-                lnk_delay = int(round(np.min(lnk_tau[lnk_tau >= 0] * 1e9), 0))
-
                 h = extract_link_cfr(h_raw, rx_id)
-                lnk_loss, h_normalized = normalize_link_cfr(h, self.resource_limits)
+                lnk_delay, lnk_loss, h_normalized = self._extract_link_channel(
+                    tau[rx_id], h, tx_pos, self.node_info[curr_rx_node].get_pos_at(lah_time))
 
                 if self.CHECKS_ENABLED:
                     power_normalized = np.mean(np.abs(h_normalized) ** 2)
@@ -747,6 +745,28 @@ class SionnaEnv:
             self.placed_radio_node_names.append(rx_node_name)
 
 
+    def _extract_link_channel(self, tau_link, h, tx_pos, rx_pos):
+        """Keep links without RT paths unreachable, as on the janzabel branch."""
+        delays = np.asarray(tau_link)
+        valid_delays = delays[np.isfinite(delays) & (delays >= 0)]
+        if valid_delays.size and np.any(h):
+            loss, normalized = normalize_link_cfr(h, self.resource_limits)
+            return int(round(np.min(valid_delays) * 1e9)), loss, normalized
+
+        if not np.all(np.isfinite(h)):
+            raise ValueError("CFR contains non-finite coefficients")
+        # A finite unit-power placeholder preserves the wire contract and
+        # supports SVD with multiple streams. 300 dB loss makes it unreachable;
+        # these coefficients do not represent a measured propagation channel.
+        placeholder = np.broadcast_to(np.eye(h.shape[0], h.shape[1])[:, :, None], h.shape)
+        _, normalized = normalize_link_cfr(placeholder, self.resource_limits)
+        delay = int(round(np.linalg.norm(np.asarray(tx_pos) - np.asarray(rx_pos))
+                          / 299792458.0 * 1e9))
+        warnings.warn(f"No valid Sionna path; using unreachable 300 dB fallback. "
+                      f"tx_pos={tx_pos}, rx_pos={rx_pos}", UserWarning)
+        return delay, 300.0, normalized
+
+
     def _compute_cfr_via_position(self, req_sim_time, tx_node, rx_node, req_mode):
         '''
         Compute the link propagation delay, wideband loss and normalized CFR
@@ -810,11 +830,9 @@ class SionnaEnv:
         h_normalized_arr = []
 
         for rx_id, curr_rx_node in enumerate(rx_nodes):
-            lnk_tau = np.squeeze(tau[rx_id, :, :, :, :])
-            lnk_delay = int(round(np.min(lnk_tau[lnk_tau >= 0] * 1e9), 0))
-
             h = extract_link_cfr(h_raw, rx_id)
-            lnk_loss, h_normalized = normalize_link_cfr(h, self.resource_limits)
+            lnk_delay, lnk_loss, h_normalized = self._extract_link_channel(
+                tau[rx_id], h, self.node_info[tx_node].pos, self.node_info[curr_rx_node].pos)
 
             if self.CHECKS_ENABLED:
                 power_normalized = np.mean(np.abs(h_normalized) ** 2)

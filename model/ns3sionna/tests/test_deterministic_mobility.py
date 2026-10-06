@@ -3,6 +3,7 @@ import unittest
 import numpy as np
 
 from mobility import RandomWalkMobility
+from mimo_data_contract import ResourceLimits
 from ns3sionna_server import SionnaEnv
 
 
@@ -80,6 +81,47 @@ class DeterministicMobilityTest(unittest.TestCase):
         self.assertGreater(node.pos[0], 0.0)
         self.assertLess(node.velocity[0], 0.0)
         self.assertEqual(node.pos[2], 1.0)
+
+
+class NoPathChannelTest(unittest.TestCase):
+    def setUp(self):
+        self.env = SionnaEnv.__new__(SionnaEnv)
+        self.env.resource_limits = ResourceLimits()
+
+    def test_missing_paths_preserve_dimensions_and_remain_unreachable(self):
+        for antennas in (1, 2, 4):
+            for tau in (np.array([]), np.array([-1.0, np.nan])):
+                with self.subTest(antennas=antennas, tau=tau):
+                    h = np.zeros((antennas, antennas, 8), dtype=complex)
+                    with self.assertWarnsRegex(UserWarning, "unreachable"):
+                        delay, loss, normalized = self.env._extract_link_channel(
+                            tau, h, [0, 0, 1], [3, 4, 1])
+                    self.assertEqual(delay, 17)
+                    self.assertEqual(loss, 300.0)
+                    self.assertEqual(normalized.shape, h.shape)
+                    self.assertAlmostEqual(np.mean(np.abs(normalized) ** 2), 1.0)
+                    self.assertEqual(np.linalg.matrix_rank(normalized[:, :, 0]), antennas)
+                    # Even the maximum coherent array gain stays below PHY sensitivity.
+                    self.assertLess(20 - loss + 10 * np.log10(antennas ** 2), -200)
+
+    def test_zero_power_with_a_valid_delay_is_unreachable(self):
+        with self.assertWarns(UserWarning):
+            _, loss, _ = self.env._extract_link_channel(
+                [1e-8], np.zeros((2, 2, 8)), [0, 0, 1], [3, 4, 1])
+        self.assertEqual(loss, 300.0)
+
+    def test_valid_paths_keep_their_delay_and_channel(self):
+        h = np.full((2, 2, 8), 1e-4 + 1e-4j)
+        delay, loss, normalized = self.env._extract_link_channel(
+            [-1, np.nan, 20e-9, 10e-9], h, [0, 0, 1], [3, 4, 1])
+        self.assertEqual(delay, 10)
+        np.testing.assert_allclose(normalized * 10 ** (-loss / 20), h)
+
+    def test_nonfinite_coefficients_are_still_rejected(self):
+        for tau in ([], [1e-8]):
+            with self.assertRaisesRegex(ValueError, "non-finite"):
+                self.env._extract_link_channel(
+                    tau, np.full((2, 2, 8), np.nan), [0, 0, 1], [3, 4, 1])
 
 
 if __name__ == '__main__':
