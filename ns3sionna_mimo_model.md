@@ -1,12 +1,13 @@
 # ns3sionna: MIMO-Abstraktionsmodell für IEEE 802.11ax/be
 
-Stand: 2. Oktober 2026, Phase 4 einschließlich Unterphase 4.8 implementiert;
+Stand: 6. Oktober 2026, Phase 4 einschließlich Unterphase 4.8 implementiert;
 Unterphase 5.1 für HE MCS 0/BCC/32 Byte/1x1 anhand von Link-Level-Daten validiert;
 Unterphasen 5.2.1 bis 5.2.5 mit Kanal-, Konvergenz-, Cache-/IPC-, Arrayabstands- und CSI-Alterungssensitivität implementiert;
 verbleibender Phase-5-Implementierungsplan R1 bis R6 ergänzt;
 erstes R1/R3-Inkrement mit portabler Provenienz, CPU-CI und deaktiviertem Cache implementiert;
 zweites R3-Inkrement mit Cachekorrektheitsregressionen, Belegungszählern und inaktiver Linkbereinigung implementiert;
-drittes R3-Inkrement mit Allokations-/Antwort-/Speicherbudgets und Look-ahead-Tiefenprüfung implementiert
+drittes R3-Inkrement mit Allokations-/Antwort-/Speicherbudgets und Look-ahead-Tiefenprüfung implementiert;
+viertes R3-Inkrement mit gemessener CFR-Kopierreduktion und Getter-/MU-Eigentumsregressionen implementiert
 
 Arbeitszweig: feature/su-mimo-minimal
 
@@ -1020,9 +1021,12 @@ Priorität: hoch; Voraussetzung eines aussagekräftigen Vergleichs ohne Cache.
   Serverbatches vor Mobilitätsfortschritt/RT ablehnen. Gültige und zukünftige
   Snapshots niemals zur Budgetanpassung verdrängen. Verbleibende Grenzen:
   keine Budgetaushandlung, keine Schranke für RT-Zwischenspeicher oder RSS.
-- Nach Messnachweis unnötige CFR-Kopien in Suche/Gettern reduzieren und
-  vollständig validierte MU-Snapshots wiederverwenden, statt sie zweimal
-  zu dekodieren. Lebensdauer, Richtung und atomare Übernahme erhalten.
+- Implementiert in 7.22: interne Cacheeinträge ausschließlich innerhalb eines
+  Getters ausleihen, skalare Zugriffe ohne CFR-Kopie ausführen und vollständig
+  validierte MU-Snapshots einmal dekodieren und per Nutzer-ID übernehmen.
+  Öffentliche Vektor-/Matrixergebnisse besitzen weiterhin unabhängige Werte.
+  Getrennte Getterzeiten werden gegen dieselbe instrumentierte Baseline gemessen;
+  Lebensdauer, Richtung, Zeitwahl und atomare Datenvalidierung bleiben erhalten.
 - Den vorhandenen IPC-Runner um Cache an/aus, fortschreitende Zeit,
   wechselnde aktive Links und Look-ahead-Tiefen 1/4/16 erweitern.
   Implementiert in 7.21: tatsächliche Tiefe `floor(sub_mode/receiver_count)`
@@ -3442,6 +3446,90 @@ Die beiden lokalen Plots zeigen SINR-/MI-Verlust sowie Korrelation und
 native Laufzeit gegen Alter, als Median und Min-/Max-Spanne über Seeds und
 Wiederholungen bei 100000 Samples. Das sind keine Konfidenzintervalle.
 
+### 5.25 Eigentums- und Messvertrag des vierten R3-Inkrements
+
+Das Inkrement reduziert ausschließlich CFR-/Frequenzkopien in der nativen
+Datenhaltung. Sionna, Protobuf, Kanalnormalisierung, MMSE/EESM/PER,
+inklusive Zeitgültigkeit und die Reihenfolge überlappender Einträge bleiben
+semantisch identisch. Für einen Link gelten weiterhin
+\[
+ C=N_{\mathrm{sc}}N_{\mathrm{rx}}N_{\mathrm{tx}},\qquad
+ B_H=16C,\quad B_F=4N_{\mathrm{sc}},\quad B_{\mathrm{payload}}=B_H+B_F.
+\]
+Die Bytefaktoren beziehen sich auf die verwendete Plattform mit
+`complex<double>` und `int`; der Produktionscode verwendet `sizeof`.
+
+Zuvor kopierten die beiden Cache-Suchschleifen jeden besuchten `CacheEntry`,
+auch bei skalaren Delay-/Loss-Zugriffen und noch nicht passenden Zukunftseinträgen.
+Die Schleifen verwenden nun konstante Referenzen. Die private Suche liefert
+entweder eine Referenz auf den gespeicherten Eintrag oder verschiebt bei
+abgeschaltetem Cache das vollständig validierte Ergebnis in einen lokalen
+Scratch-Eintrag des aufrufenden Getters. Nach einem Miss wird die Referenz erst
+nach allen Cacheeinfügungen erneut ermittelt, weil Linkvektoren beim Einfügen
+reallokieren können. Keine solche Referenz verlässt den öffentlichen Getter.
+Der positionsaktualisierende Loss-Aufruf übernimmt seine skalaren Positions-/
+Loss-Werte vor den Settern; ein Cachewechsel in einer abgeleiteten
+Mobility-Implementierung kann damit keinen späteren Eintragszugriff invalidieren.
+
+Öffentliche Ergebnisse behalten ihre bisherige Wertsemantik. Ein gecachter
+Loss-/Delay-Aufruf benötigt keine CFR-/Frequenzkopie; Frequency kopiert nur
+\(B_F\), CSI und Matrix nur \(B_H\). Die zurückgegebenen Werte bleiben nach
+Mutation, Ablaufbereinigung, Cacheabschaltung und einer späteren Antwort gültig.
+Dies ist eine logische Kopierbeschreibung, keine harte Allokator-/Latenzgrenze.
+Der ungecachte öffentliche Vektor-/Matrixpfad erstellt weiterhin ein unabhängiges
+Ergebnis aus dem getterlokalen Scratch; Protobuf-/Transportkopien bleiben bestehen.
+
+Der Koeffizientenkonstruktor von `MimoChannelMatrix` nimmt seinen Vektor als
+Wert entgegen und verschiebt dessen Speicher direkt in die Matrix. Rvalues
+übertragen die Allokation; Lvalues erzeugen weiterhin eine unabhängige Kopie.
+Die bisherige zusätzliche Nullmatrixallokation entfällt. Der Deserialisierer
+füllt einen einmalig auf die vorgeprüfte Länge angelegten Koeffizientenvektor
+über indizierte Schreibzugriffe und verschiebt ihn; der Cachekonstruktor
+verschiebt die Matrix weiter. Der geplante Batch reserviert seine Eintragszahl
+innerhalb der bestehenden Überlauf-/Budgetprüfung. Ein Neuaufbau der nativen
+Bibliothek und ihrer Verbraucher ist wegen der Konstruktor-Signatur erforderlich.
+
+Ein MU-Snapshot wird weiterhin vollständig einschließlich Richtung, RX-Geometrie,
+Normalisierung und gemeinsamer Frequenz-/TX-Dimension geprüft. Seine einmalig
+dekodierten, stabil nach Nutzer-ID sortierten Matrizen und Frequenzen werden
+anschließend anhand der expliziten Nutzer-ID in die ursprüngliche
+Antwortreihenfolge überführt und verschoben. Eine abweichende Wire-Reihenfolge
+darf keine Kanäle vertauschen. Ein ungültiger späterer Nutzer oder Snapshot
+veröffentlicht weiterhin kein gültiges Präfix. `bad_alloc` während der eigentlichen
+Cacheübernahme besitzt unverändert keine vollständige Rollbackgarantie.
+
+`benchmark_cache_ipc.py --copy-profile` erweitert denselben Frozen-REP-/
+Produktionscachepfad. Die zwei vorab festgelegten Fälle sind 64 Töne/TX 2/RX 2/
+ein Link und 1024 Töne/TX 8/RX 8/16 Links, jeweils drei unabhängige native und
+Python-Prozesse. Synthetische Tensorgrößen bleiben Transportfixtures, keine
+physikalischen HE-Ressourcengitter. `cache_hit` misst weiterhin den Matrixgetter;
+`cache_hit_loss`, `cache_hit_delay`, `cache_hit_frequency` und `cache_hit_csi`
+messen separat. Alle Getter verwenden dieselbe Round-Robin-Linkreihenfolge,
+drei Warmups und 128 Messungen, einschließlich Ergebnisdestruktion.
+Bitprüfung und komplette Linkvalidierung liegen außerhalb der Timer.
+
+Jeder Prozess verlangt exakt
+\[
+ N_{\mathrm{hit}}=5(3+128)+1=656,\qquad N_{\mathrm{miss}}=2,
+ \qquad r_{\mathrm{hit}}=656/658.
+\]
+Die Speicherprüfung benötigt fünf Getter je Link plus einen initialen Miss;
+ihr Trefferverhältnis ist \(5L/(5L+1)\). Alle 27 tatsächlichen Kanal-RPCs
+(26 bei t=0, einer nach dem inklusiven 5-ms-Endrand) sowie ein bestätigter
+Close werden geprüft. Der vollständige Export enthält 4446 positive
+Zeitstichproben und 162 Kanalrequests. `plan.json` steht vor der ersten Messung;
+`run.json` trägt Quellen, Eingänge, Backend und den getrennten Ausführungs-/
+Validierungsstatus. Ohne die Option bleiben bestehende CSV-/JSON-Schemata,
+Messmatrix und historische Referenzen erhalten. Neue Messungen liegen lokal.
+
+Vergleichszeiten verwenden die monotone Prozessuhr. Drei Prozessmediane pro
+Operation werden nochmals durch ihren Median zusammengefasst; p95 und
+Prozessstreuung stehen separat im Export. Die vorher festgelegten lokalen
+Vergleichsziele sind mindestens 20 Prozent Medianverbesserung für den großen
+Matrix- und skalaren Fall sowie höchstens zehn Prozent Regression beim kleinen
+Default-Matrixfall. Nichterfüllung wird als solche berichtet. Diese Ziele
+belegen weder universelle Latenzgrenzen noch Live-RT-/PHY-/GPU-Skalierung.
+
 ## 6. High-Level-API-Vertrag bis Unterphase 4.8
 
 ### 6.1 Typen, Besitz und Defaults
@@ -3846,7 +3934,7 @@ Simulator-Timer, keine implizite CSI-Abfrage und keinen MAC-Feedbacktransport;
 diese Grenzen verhindern, dass das explizite Forschungsmodell eine
 vollständige 802.11-Soundingprozedur vortäuscht.
 
-## 7. Validierung bis Unterphase 5.2.5
+## 7. Validierung bis zum vierten Phase-5-R3-Inkrement
 
 Die native Suite sionna enthält die schnellen API-, Numerik- und Adapterfälle:
 
@@ -5368,6 +5456,115 @@ Kopieroptimierungen, lange wechselnde Arbeitsmengen, breite Live-/GPU- und
 Look-ahead-Sweeps sowie der gehostete CPU-Nachweis bleiben außerhalb dieses
 Inkrements. R3 und die übrigen offenen Phase-5-Pakete sind nicht abgeschlossen.
 
+### 7.22 Viertes R3-Inkrement: CFR-Kopierreduktion und Gettereigentum
+
+Dieses nächste begrenzte Phase-5-Inkrement setzt den Kopier-/Wiederverwendungspunkt
+von R3 um. Vier Produktionsdateien ändern ausschließlich Eigentum und Datenhaltung:
+`mimo-channel-matrix.{h,cc}` und `sionna-propagation-cache.{h,cc}`. Der vorhandene
+IPC-Benchmark und seine Tests werden erweitert; ein zweites Framework oder neue
+versionierte Messfixtures entstehen nicht. Der Vertrag steht in Abschnitt 5.25.
+R3 und Phase 5 insgesamt bleiben offen.
+
+Die Baseline ist die vor den Produktionsänderungen gebaute native Bibliothek zum
+Modulstand `11fd05c`. Sie wurde lokal gesichert und ihr SHA-256 gegen die bereits
+aufgezeichnete Buildidentität geprüft. Für den vollständigen Gettervergleich
+verwendeten Baseline und Kandidat dasselbe neue Benchmarkprogramm; nur die
+Sionna-Bibliothek wurde über `LD_LIBRARY_PATH` gewechselt. `ldd` bestätigte den
+Baselinepfad. Die alte Bibliothek wird damit nicht als Ergebnis neuer Quellen
+bezeichnet. Baseline-Buildidentität, Kriterien und Rohmessungen stehen in
+`/tmp/r3-copy-baseline/`; Kandidatprovenienz und vollständige Exporte in
+`/tmp/r3-copy-profile-final/`. Ein früherer Kandidatenlauf bleibt separat unter
+`/tmp/r3-copy-profile/`, Vergleiche unter `/tmp/r3-copy-comparison*.json` erhalten.
+Keine dieser Messungen oder Bibliotheken wird in Git aufgenommen.
+
+Gemessen wurde am 6. Oktober 2026 auf AMD Ryzen 5 PRO 2500U, x86_64,
+Linux 7.0.0-38 und glibc 2.39, mit dem lokalen ns-3.40-`default`-Build und
+aktiven Assertions. Die Vergleichsziele wurden vor Kandidatenmessungen
+festgehalten. Jeder Tabellenwert ist der Median dreier Prozessmediane;
+Zeitstreuung und p95 bleiben separat verfügbar. Für 1024 Töne, TX/RX 8/8
+und 16 Links ergeben sich:
+
+| Operation | Baseline (µs) | Finaler Kandidat (µs) | Medianreduktion |
+| --- | ---: | ---: | ---: |
+| Matrixgetter | 75,289 | 71,667 | 4,81 Prozent |
+| Konstanter Lossgetter | 73,365 | 0,831 | 98,87 Prozent |
+| Delaygetter | 73,135 | 0,922 | 98,74 Prozent |
+| Frequenzgetter | 72,889 | 1,022 | 98,60 Prozent |
+| CSI-Vektorgetter | 126,807 | 73,716 | 41,87 Prozent |
+| Einzel-CFR-Dekodierung | 258,033 | 81,676 | 68,35 Prozent |
+| Kalter vollständiger Cache-Miss | 23321,386 | 17319,350 | 25,74 Prozent |
+
+Das vorab gesetzte 20-Prozent-Ziel für den großen Matrixgetter wurde ausdrücklich
+**nicht** erreicht. Dessen notwendige öffentliche CFR-Wertkopie bleibt bestehen;
+keine allgemein schnellere Matrix-API wird behauptet. Die skalaren Getter erfüllen
+das 20-Prozent-Ziel deutlich; die Frequenzausgabe kopiert nur noch Frequenzen.
+Der erste Kandidat machte gleichzeitig eine langsamere Einzeldekodierung sichtbar.
+Die abschließende Anpassung verwendet eine einmalig vorgeprüfte Vektorlänge und
+indizierte Schreibzugriffe; der finale Decodervergleich ist oben ausgewiesen.
+Alle früheren Beobachtungen bleiben lokal erhalten.
+
+Beim kleinen Profilfall mit 64 Tönen, TX/RX 2/2 und einem Link sinkt der
+Matrix-Prozessmedian von 2,975 auf 1,563 µs, die Einzeldekodierung von 1,714
+auf 0,536 µs. Ein separat gemessener unveränderter Default-Matrixpfad prüft das
+vorab gesetzte Höchstens-zehn-Prozent-Regressionsziel: 2,265 µs Baseline und
+1,493 µs finaler Prozessmedian entsprechen Verhältnis 0,659 und bestehen die
+Grenze 1,10. Alle drei finalen Default-Prozesse bestanden dieselben Daten-/
+Requestprüfungen; der Vergleich steht in `/tmp/r3-copy-default-final.json`. Profilmodus und Defaultmodus werden nicht zu
+einem gepoolten Zeitdatensatz zusammengefasst.
+
+Die großen Matrix-Prozessmediane streuen von 70,510 bis 75,024 µs;
+die prozessweisen p95 liegen zwischen 90,807 und 153,668 µs. Die Lossmediane
+liegen bei 0,812 bis 0,842 µs und p95 bei 0,980 bis 1,102 µs. Kleine CPU-Zeiten
+und die Verteilungen belegen keine harte Latenzgrenze. Die aufgezeichneten
+Live-Heap-Deltas des großen Falls liegen bei rund 16,068 MiB, Linux-RSS mit
+Cache bei 106,352 bis 106,492 MiB. Die logischen Nutzbytes betragen unverändert
+16842752 Byte (klein: 4352 Byte). Allokatorpools, Map-/Protobuf-/Socketbedarf und
+RSS bleiben getrennte Beobachtungen; keine Gleichsetzung mit dem Cachebudget.
+
+Der finale Profilrunner validierte sechs unabhängige native/REP-Prozesspaare,
+4446 Zeitstichproben, 162 Kanal-RPCs und sechs bestätigte Close-Anfragen. Alle
+Koeffizienten, Dimensionen, Frequenzen, Delay-/Loss-Felder, Zeitränder,
+Trefferverhältnisse und Requesttranskripte bestanden. Die deterministischen
+Felder waren innerhalb jedes Falls identisch. `run.json` meldet `success`,
+Backend `frozen-protobuf-local-zmq` und separat `validation.status=passed`.
+Die zehn bestehenden/erweiterten IPC-Tests bestanden zusätzlich gegen diesen
+neuen Export einschließlich aller Statistiken, Hashes und frischer Replays.
+
+Der neue native Eigentumstest prüft die unveränderte Allokationsadresse bei
+Rvalue-Matrixaufbau und die unabhängige Lvalue-Kopie. Er variiert die Wire-
+Nutzerreihenfolge mit unterschiedlichen gerichteten MU-CFRs, mutiert öffentliche
+Ergebnisse und prüft die alten Werte nach Ablauf, Bereinigung, Cacheabschaltung
+und Wiederaktivierung. Ein korrektes MU-Präfix mit fehlerhaftem späteren Snapshot
+wird vollständig verworfen; Belegung und Spitzen bleiben erhalten, vorherige
+Kanäle bleiben nutzbar. Wiederholte Getterhits verursachen keine zusätzlichen RPCs.
+
+Der abschließende Zielbuild für `sionna-test` und die Benchmark-/SU-/MU-Beispiele
+bestand. Die bestehende vollständige Auswahl `run_cpu_regressions.py` wurde nach
+Stabilisierung einmal ausgeführt: 55 native Fälle in sieben Suites bestanden,
+sowie 65 bestandene Python-Tests unter 66 ausgewählten Tests. Nur der optionale
+lokale Alterungsexporttest wurde ausgelassen; die drei frischen RT-Prüfungen bleiben
+separat. Die früheren eingefrorenen Messungen und ihre Quellenhashes wurden nicht
+umgeschrieben. Python 3.12.12, sämtliche 55 Paketpins und `pip check` bestanden;
+der Serverimport bestätigte `llvm_ad_mono_polarized`.
+
+Zusätzlich bestanden sechs vorhandene Beispiel-Suites mit 13 Fällen für
+SU-MIMO, Helper-Konfiguration/-Laufzeit, Precoding/Feedback/Alterung und MU-MIMO,
+einschließlich der bestehenden Negativtests. Der MU-End-to-End-Vergleich prüfte
+vier Downlinkmethoden, zwei Kanäle, aktuelles/verzögertes CSI und drei
+Uplinkmethoden; seine vorhandene Referenzausgabe blieb exakt erhalten.
+
+Build-, CPU-, Export- und Beispielprotokolle liegen unter `/tmp/r3-copy-*.log`.
+Nach der letzten Dokumentationsänderung wird die PDF genau einmal erzeugt und
+auf Seitenzahl, vollständige Textextraktion, alle Fußzeilen und ausgewählte Seiten
+geprüft. Neue Rohdaten, Zeitmessungen und Fixtures bleiben ausschließlich lokal.
+
+Offen bleiben die breiten Zeit-/Arbeitsmengen-/Look-ahead-Sweeps, Mobilitätshistorien,
+RT-/CIR-Zwischenspeicher und Allokatorpools, temporäre Protobuf-/Transportkopien,
+Transporttimeouts und Budgetaushandlung sowie Live-/GPU-/gehostete CPU-Evidenz.
+Der ungecachte Getter behält seine unabhängige öffentliche Wertkopie. Dieses
+Inkrement reduziert keine MU-PHY-Gruppenrechnung und erweitert weder die
+HE-MCS-0/BCC/32-Byte/1x1-Kalibrierung noch den physikalischen CSI-Vertrag.
+
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 
 - SionnaMimoHelper überträgt eine gemeinsame TX- und RX-Geometrie für die
@@ -5565,6 +5762,20 @@ Die Tests verwenden die versionierte Referenz unter `data/phase5_2_cache_ipc/`;
 Alle Fixture-, Cache- und IPC-Validierungen bleiben von PER-Kalibrierung
 unabhängig. Native/RPC-Zeitstichproben und speicherbezogene Diagnosen stehen
 in CSV; die drei generierten PNG-Plots bleiben unversioniert.
+
+Viertes Phase-5-R3-Inkrement, mit leerem Ausgabeordner:
+
+    ./ns3 build -j 2 sionna-test ns3_sionna_cache_ipc_benchmark
+    python contrib/sionna/tools/run_cpu_regressions.py
+    python contrib/sionna/tools/benchmark_cache_ipc.py --copy-profile \
+      --output=/tmp/r3-copy-profile
+    cd contrib/sionna/tools
+    CACHE_IPC_BENCHMARK_RESULTS=/tmp/r3-copy-profile \
+      python -m unittest -v test_benchmark_cache_ipc
+
+Es gilt das dokumentierte CPU-Environment. Ohne `--copy-profile` bleibt die
+bisherige Messmatrix aktiv; ohne Exportoverride prüfen die Tests weiterhin
+die historische eingefrorene Referenz.
 
 Phase 5.2.4 verwendet denselben Runner mit optionalem kleinem Sweep:
 

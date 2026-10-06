@@ -141,7 +141,8 @@ SionnaPropagationCache::GetPropagationDelay(Ptr<MobilityModel> a, Ptr<MobilityMo
         // signal is too strong and delay need to be computed with ray tracing
     }
 
-    return GetPropagationData(a, b).m_delay;
+    CacheEntry uncached;
+    return GetPropagationData(a, b, uncached).m_delay;
 }
 
 double
@@ -164,20 +165,27 @@ SionnaPropagationCache::GetPropagationLoss(Ptr<MobilityModel> a, Ptr<MobilityMod
     Vector pos_b = b->GetPosition();
 
     // update position on mobility models to reflect node position in Sionna
-    CacheEntry ce = GetPropagationData(a, b);
+    CacheEntry uncached;
+    const auto& ce = GetPropagationData(a, b, uncached);
+    // Position setters may invoke trace callbacks which reenter and clear the cache.
+    // Keep only scalar/position values across those callbacks, never a borrowed entry.
+    const double loss = ce.m_loss;
+    const uint32_t cachedTxId = ce.m_a;
+    const Vector cachedTxPosition = ce.m_a_position;
+    const Vector cachedRxPosition = ce.m_b_position;
 
     Ptr<Node> node_a = a->GetObject<Node>();
     Ptr<Node> node_b = b->GetObject<Node>();
 
     // needed as the cache assumes channel reciprocity
-    if (node_a->GetId() == ce.m_a)
+    if (node_a->GetId() == cachedTxId)
     {
-        a->SetPosition(ce.m_a_position);
-        b->SetPosition(ce.m_b_position);
+        a->SetPosition(cachedTxPosition);
+        b->SetPosition(cachedRxPosition);
     } else
     {
-        a->SetPosition(ce.m_b_position);
-        b->SetPosition(ce.m_a_position);
+        a->SetPosition(cachedRxPosition);
+        b->SetPosition(cachedTxPosition);
     }
 
     Time current_time = Simulator::Now();
@@ -195,7 +203,7 @@ SionnaPropagationCache::GetPropagationLoss(Ptr<MobilityModel> a, Ptr<MobilityMod
             ": (" << b->GetPosition().x << "," << b->GetPosition().y << "," << b->GetPosition().z << ")");
     }
 
-    return ce.m_loss;
+    return loss;
 }
 
 double
@@ -204,7 +212,8 @@ SionnaPropagationCache::GetPropagationLoss(Ptr<const MobilityModel> a, Ptr<const
     Ptr<MobilityModel> tmp_a = ConstCast<MobilityModel>(a);
     Ptr<MobilityModel> tmp_b = ConstCast<MobilityModel>(b);
 
-    return GetPropagationData(tmp_a, tmp_b).m_loss;
+    CacheEntry uncached;
+    return GetPropagationData(tmp_a, tmp_b, uncached).m_loss;
 }
 
 std::vector<int>
@@ -212,7 +221,8 @@ SionnaPropagationCache::GetPropagationFreq(Ptr<const MobilityModel> a, Ptr<const
 {
     Ptr<MobilityModel> tmp_a = ConstCast<MobilityModel>(a);
     Ptr<MobilityModel> tmp_b = ConstCast<MobilityModel>(b);
-    return GetPropagationData(tmp_a, tmp_b).m_freq;
+    CacheEntry uncached;
+    return GetPropagationData(tmp_a, tmp_b, uncached).m_freq;
 }
 
 
@@ -221,7 +231,8 @@ SionnaPropagationCache::GetPropagationCSI(Ptr<const MobilityModel> a, Ptr<const 
 {
     Ptr<MobilityModel> tmp_a = ConstCast<MobilityModel>(a);
     Ptr<MobilityModel> tmp_b = ConstCast<MobilityModel>(b);
-    return GetPropagationData(tmp_a, tmp_b).m_cfr.GetCoefficients();
+    CacheEntry uncached;
+    return GetPropagationData(tmp_a, tmp_b, uncached).m_cfr.GetCoefficients();
 }
 
 MimoChannelMatrix
@@ -230,7 +241,8 @@ SionnaPropagationCache::GetPropagationChannelMatrix(Ptr<const MobilityModel> a,
 {
     Ptr<MobilityModel> tmp_a = ConstCast<MobilityModel>(a);
     Ptr<MobilityModel> tmp_b = ConstCast<MobilityModel>(b);
-    return GetPropagationData(tmp_a, tmp_b).m_cfr;
+    CacheEntry uncached;
+    return GetPropagationData(tmp_a, tmp_b, uncached).m_cfr;
 }
 
 void
@@ -305,21 +317,22 @@ SionnaPropagationCache::DeserializeChannelMatrix(
         throw std::invalid_argument("CFR coefficient count does not match sc/rx/tx dimensions");
     }
 
-    std::vector<std::complex<double>> coefficients;
-    coefficients.reserve(expectedCount);
+    // Allocate once at the preflighted size; indexed writes avoid a capacity
+    // branch per coefficient before transferring the buffer into the matrix.
+    std::vector<std::complex<double>> coefficients(expectedCount);
     for (int i = 0; i < coefficientCount; ++i)
     {
         if (!std::isfinite(message.csi_real(i)) || !std::isfinite(message.csi_imag(i)))
         {
             throw std::invalid_argument("Non-finite CFR coefficient");
         }
-        coefficients.emplace_back(message.csi_real(i), message.csi_imag(i));
+        coefficients[i] = std::complex<double>(message.csi_real(i), message.csi_imag(i));
     }
 
     return MimoChannelMatrix(numSubcarriers,
                              numRxAntennas,
                              numTxAntennas,
-                             coefficients);
+                             std::move(coefficients));
 }
 
 MultiUserChannelSnapshot
@@ -582,8 +595,9 @@ SionnaPropagationCache::GetStorageStatistics() const
 }
 
 
-SionnaPropagationCache::CacheEntry
-SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityModel> b) const
+const SionnaPropagationCache::CacheEntry&
+SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityModel> b,
+                                           CacheEntry& uncached) const
 {
     NS_ASSERT_MSG(m_sionnaHelper, "SionnaPropagationCache must have reference to SionnaHelper.");
     Ptr<SionnaMobilityModel> sionna_a = DynamicCast<SionnaMobilityModel> (a);
@@ -609,14 +623,14 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
         if (it != m_cache.end())
         {
             // iterate over all stored entries for that link
-            for (CacheEntry c_entry : it->second) {
+            for (const auto& c_entry : it->second) {
                 //NS_LOG_INFO(" " << c_entry.m_start_time << " " << c_entry.m_end_time << " " << current_time);
                 // If delay and loss exist in the cache, check if the entry is not outdated
                 if (Matches(c_entry, node_a->GetId(), node_b->GetId(), current_time))
                 {
                     NS_LOG_DEBUG("\t: Cache hit for lnk: " << node_a->GetId() << " to " << node_b->GetId());
                     m_cache_hits += 1;
-                    // Return cache entry as the value is still fresh
+                    // Borrow the live entry only until the public getter returns.
                     return c_entry;
                 }
             }
@@ -705,6 +719,7 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
 
     // Validate and decode every sample before committing any cache entry.
     std::vector<std::pair<CacheKey, CacheEntry>> pendingEntries;
+    pendingEntries.reserve(batchEntries);
     for (int csi_i=0; csi_i < csi_response.csi_size(); csi_i++) {
         const auto& csiMessage = csi_response.csi(csi_i);
         if (csiMessage.start_time() > csiMessage.end_time() ||
@@ -719,9 +734,11 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
         {
             hasUserIdentity = hasUserIdentity || rxMessage.has_user_identity();
         }
+        std::vector<MultiUserChannel> decodedUsers;
         if (hasUserIdentity)
         {
-            DeserializeMultiUserChannelSnapshot(csiMessage, m_limits);
+            // Complete MU validation decodes each CFR once, ordered by user ID.
+            decodedUsers = DeserializeMultiUserChannelSnapshot(csiMessage, m_limits).users;
         }
 
         Time start_time = NanoSeconds(csi_response.csi(csi_i).start_time());
@@ -747,7 +764,22 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
 
             google::protobuf::uint32 rxId = rxMessage.id();
             auto rxPos = rxMessage.position();
-            MimoChannelMatrix channel = DeserializeChannelMatrix(rxMessage, m_limits);
+            MimoChannelMatrix channel;
+            std::vector<int> frequencies;
+            if (hasUserIdentity)
+            {
+                const auto decoded = std::lower_bound(decodedUsers.begin(), decodedUsers.end(), rxId,
+                    [](const auto& user, uint32_t id) { return user.userId < id; });
+                // Identity validation guarantees exactly one matching user, even if
+                // the wire receivers are in a different order from the sorted snapshot.
+                channel = std::move(decoded->channel);
+                frequencies = std::move(decoded->frequencies);
+            }
+            else
+            {
+                channel = DeserializeChannelMatrix(rxMessage, m_limits);
+                frequencies.assign(rxMessage.frequencies().begin(), rxMessage.frequencies().end());
+            }
             uint32_t num_ofdm_subcarrier = channel.GetNumSubcarriers();
 
             NS_LOG_DEBUG("\t\t: Response (delay: " << delay << ", loss: " << wb_loss << ")"
@@ -760,15 +792,12 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
 
             // Add the info from all other receivers to the cache
             CacheKey otherkey = CacheKey(txId, rxId);
-            CacheEntry entry = CacheEntry(delay, wb_loss, start_time, end_time, channel,
+            CacheEntry entry = CacheEntry(delay, wb_loss, start_time, end_time, std::move(channel),
                 txId, rxId, Vector(txPos.x(), txPos.y(), txPos.z()),
                 Vector(rxPos.x(), rxPos.y(), rxPos.z()), rxMessage.has_user_identity());
 
             // Frequencies remain one value per subcarrier, independent of antennas.
-            for (int i = 0; i < rxMessage.frequencies_size(); i++)
-            {
-                entry.m_freq.emplace_back(rxMessage.frequencies(i));
-            }
+            entry.m_freq = std::move(frequencies);
 
             pendingEntries.emplace_back(otherkey, std::move(entry));
         }
@@ -784,7 +813,8 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
     }
     if (!m_caching)
     {
-        return fresh->second; // Fully validated; retain no snapshots.
+        uncached = std::move(fresh->second);
+        return uncached; // Fully validated; owned by this getter, retain no snapshots.
     }
     for (auto& pending : pendingEntries)
     {
@@ -811,11 +841,11 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
     if (cache_it != m_cache.end())
     {
         // iterate over all stored entries for that link
-        for (CacheEntry c_entry : cache_it->second) {
+        for (const auto& c_entry : cache_it->second) {
             // If delay and loss exist in the cache, check if the entry is not outdated
             if (Matches(c_entry, node_a->GetId(), node_b->GetId(), current_time))
             {
-                // Return cache entry as the value is still fresh
+                // Reacquire after all insertions, which may reallocate link vectors.
                 return c_entry;
             }
         }

@@ -8,6 +8,8 @@
 
 #include "ns3/abort.h"
 
+#include <utility>
+
 namespace ns3
 {
 
@@ -35,12 +37,18 @@ MimoChannelMatrix::MimoChannelMatrix(
     uint32_t numSubcarriers,
     uint32_t numRxAntennas,
     uint32_t numTxAntennas,
-    const std::vector<std::complex<double>>& coefficients)
-    : MimoChannelMatrix(numSubcarriers, numRxAntennas, numTxAntennas)
+    std::vector<std::complex<double>> coefficients)
+    : m_numSubcarriers(numSubcarriers),
+      m_numRxAntennas(numRxAntennas),
+      m_numTxAntennas(numTxAntennas),
+      m_coefficients(std::move(coefficients))
 {
-    NS_ABORT_MSG_IF(coefficients.size() != m_coefficients.size(),
+    NS_ABORT_MSG_IF(numSubcarriers == 0, "A MIMO channel needs at least one subcarrier");
+    NS_ABORT_MSG_IF(numRxAntennas == 0, "A MIMO channel needs at least one receive antenna");
+    NS_ABORT_MSG_IF(numTxAntennas == 0, "A MIMO channel needs at least one transmit antenna");
+    NS_ABORT_MSG_IF(m_coefficients.size() !=
+                        static_cast<std::size_t>(numSubcarriers) * numRxAntennas * numTxAntennas,
                     "CFR coefficient count does not match its dimensions");
-    m_coefficients = coefficients;
 }
 
 uint32_t

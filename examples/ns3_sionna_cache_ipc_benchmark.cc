@@ -152,7 +152,8 @@ MakeCache(SionnaHelper& helper)
 uint64_t
 ValidateCache(Ptr<SionnaPropagationCache> cache,
               const std::vector<Ptr<SionnaMobilityModel>>& radios,
-              const ns3sionna::ChannelStateResponse::ChannelState& state)
+              const ns3sionna::ChannelStateResponse::ChannelState& state,
+              bool copyProfile)
 {
     uint64_t digest = 0;
     uint64_t index = 0;
@@ -185,12 +186,26 @@ ValidateCache(Ptr<SionnaPropagationCache> cache,
         const auto frequencies = cache->GetPropagationFreq(radios[0], radios[link + 1]);
         Require(std::vector<int>(rx.frequencies().begin(), rx.frequencies().end()) == frequencies,
                 "Cache changed frequency order");
-        Require(cache->GetPropagationLoss(Ptr<const MobilityModel>(radios[0]),
-                                         Ptr<const MobilityModel>(radios[link + 1])) == rx.wb_loss(),
+        const double loss = cache->GetPropagationLoss(Ptr<const MobilityModel>(radios[0]),
+                                                     Ptr<const MobilityModel>(radios[link + 1]));
+        Require(copyProfile ? Bits(loss) == Bits(rx.wb_loss()) : loss == rx.wb_loss(),
                 "Cache changed wideband loss");
         Require(cache->GetPropagationDelay(radios[0], radios[link + 1]).GetNanoSeconds() ==
                     static_cast<int64_t>(rx.delay()),
                 "Cache changed delay");
+        if (copyProfile)
+        {
+            // Validate every owning CSI result outside the measured getter loops.
+            const auto csi = cache->GetPropagationCSI(radios[0], radios[link + 1]);
+            Require(csi.size() == static_cast<std::size_t>(rx.csi_real_size()),
+                    "Cache changed CSI dimensions");
+            for (std::size_t i = 0; i < csi.size(); ++i)
+            {
+                Require(Bits(csi[i].real()) == Bits(rx.csi_real(i)) &&
+                            Bits(csi[i].imag()) == Bits(rx.csi_imag(i)),
+                        "Cache changed CSI coefficient or flattened order");
+            }
+        }
     }
     return digest;
 }
@@ -200,6 +215,7 @@ int
 main(int argc, char* argv[])
 {
     std::string input, output, timings, endpoint;
+    bool copyProfile = false;
     uint32_t storageSteps = 0;
     uint32_t links = 1, iterations = 16, hitIterations = 128, missIterations = 5, warmup = 3;
     CommandLine command(__FILE__);
@@ -213,6 +229,7 @@ main(int argc, char* argv[])
     command.AddValue("missIterations", "Measured cold-cache miss iterations", missIterations);
     command.AddValue("warmup", "Warmup iterations for non-miss measurements", warmup);
     command.AddValue("storageSteps", "Additional advancing-time refreshes (0..128)", storageSteps);
+    command.AddValue("copyProfile", "Also measure const loss, delay, frequency and CSI hits", copyProfile);
     command.Parse(argc, argv);
     try
     {
@@ -262,7 +279,7 @@ main(int argc, char* argv[])
         request.mutable_channel_state_request()->set_rx_node(1);
         const std::string requestWire = request.SerializeAsString();
         std::vector<Sample> samples;
-        samples.reserve(4 * iterations + hitIterations + missIterations);
+        samples.reserve(4 * iterations + (copyProfile ? 5 : 1) * hitIterations + missIterations);
         // Real cross-process transport. Request serialization and byte comparison
         // are outside this timer; there is no echo or in-process socket substitute.
         for (uint32_t i = 0; i < warmup + iterations; ++i)
@@ -305,7 +322,7 @@ main(int argc, char* argv[])
             const auto channel = memoryCache->GetPropagationChannelMatrix(radios[0], radios[1]);
             sink = channel.Get(0, 0, 0).real();
         }
-        const uint64_t digest = ValidateCache(memoryCache, radios, state);
+        const uint64_t digest = ValidateCache(memoryCache, radios, state, copyProfile);
         // Check logical occupancy independently of allocator/RSS measurements.
         const auto storage = memoryCache->GetStorageStatistics();
         const uint64_t payloadBytes = static_cast<uint64_t>(links) *
@@ -319,7 +336,8 @@ main(int argc, char* argv[])
                     storage.peakCapacityBytes == storage.capacityBytes,
                 "Cache occupancy does not match the frozen payload");
         const double memoryHitRatio = memoryCache->GetStats();
-        Require(std::abs(memoryHitRatio - (4.0 * links) / (4.0 * links + 1)) <= 1e-12,
+        const double validationHits = (copyProfile ? 5.0 : 4.0) * links;
+        Require(std::abs(memoryHitRatio - validationHits / (validationHits + 1)) <= 1e-12,
                 "A batched cache fill failed to retain all links");
         const uint64_t rssLive = RssBytes();
         const uint64_t heapLive = HeapBytes();
@@ -342,6 +360,34 @@ main(int argc, char* argv[])
             sink = channel.Get(0, 0, 0).real();
             ++hitIndex;
         });
+        if (copyProfile)
+        {
+            // Use the same round-robin links for each public getter. Validation
+            // stays outside these timers; destruction of owning results is included.
+            hitIndex = 0;
+            Measure(samples, "cache_hit_loss", hitIterations, warmup, [&] {
+                sink = cache->GetPropagationLoss(Ptr<const MobilityModel>(radios[0]),
+                    Ptr<const MobilityModel>(radios[1 + hitIndex % links]));
+                ++hitIndex;
+            });
+            hitIndex = 0;
+            Measure(samples, "cache_hit_delay", hitIterations, warmup, [&] {
+                sink = cache->GetPropagationDelay(radios[0], radios[1 + hitIndex % links]).GetNanoSeconds();
+                ++hitIndex;
+            });
+            hitIndex = 0;
+            Measure(samples, "cache_hit_frequency", hitIterations, warmup, [&] {
+                const auto frequencies = cache->GetPropagationFreq(radios[0], radios[1 + hitIndex % links]);
+                sink = frequencies.front();
+                ++hitIndex;
+            });
+            hitIndex = 0;
+            Measure(samples, "cache_hit_csi", hitIterations, warmup, [&] {
+                const auto csi = cache->GetPropagationCSI(radios[0], radios[1 + hitIndex % links]);
+                sink = csi.front().real();
+                ++hitIndex;
+            });
+        }
         // Every miss uses a new cache, avoiding duplicate snapshot accumulation.
         for (uint32_t i = 0; i < missIterations; ++i)
         {
@@ -385,7 +431,7 @@ main(int argc, char* argv[])
                     refreshed.payloadBytes == payloadBytes && refreshed.peakSnapshots == links,
                 "Expiry refresh retained obsolete snapshots or lost inactive links");
         const double hitRatio = cache->GetStats();
-        const uint32_t hits = warmup + hitIterations + 1;
+        const uint32_t hits = (copyProfile ? 5 : 1) * (warmup + hitIterations) + 1;
         Require(std::abs(hitRatio - static_cast<double>(hits) / (hits + 2 + storageSteps)) <= 1e-12,
                 "Incorrect hit/miss or inclusive-expiry behavior");
         helper.Destroy();
@@ -412,6 +458,11 @@ main(int argc, char* argv[])
             {"cache_fill_heap_delta_bytes", static_cast<double>(heapLive) - heapBefore},
             {"cpp_protobuf_version", GOOGLE_PROTOBUF_VERSION},
             {"verified_links", links}, {"boundary_hit", 1}, {"expired_miss", 1}};
+        if (copyProfile)
+        {
+            fields["copy_profile"] = 1;
+            fields["verified_csi_links"] = links;
+        }
         if (storageSteps > 0)
         {
             fields["storage_steps"] = storageSteps;

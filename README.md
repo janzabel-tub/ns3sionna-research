@@ -309,6 +309,25 @@ current/lifetime-peak storage counters and lazy expiry cleanup across inactive
 links. Future snapshots are retained. Existing IPC exports remain unchanged;
 long-run budgets, copy optimization and hosted CPU validation remain open.
 
+The next [R3 increment](ns3sionna_mimo_model.md#722-viertes-r3-inkrement-cfr-kopierreduktion-und-gettereigentum)
+removes internal CFR copies from scalar/cache lookups, moves decoded storage, and
+reuses each validated MU CFR by explicit user ID. Public matrix/vector results
+remain independent values. To measure matrix, const loss, delay, frequency and
+CSI getters separately for two fixed shapes and three processes per shape, run
+from ns-3 with an empty output directory:
+
+```shell
+python contrib/sionna/tools/benchmark_cache_ipc.py --copy-profile --output=/tmp/r3-copy-profile
+cd contrib/sionna/tools
+CACHE_IPC_BENCHMARK_RESULTS=/tmp/r3-copy-profile python -m unittest -v test_benchmark_cache_ipc
+```
+
+The existing default sweep and frozen exports remain compatible. Profile exports
+check all five getters, exact payloads, 656 hits/2 misses per process and no hidden
+hit RPCs. Performance observations use frozen channels and local process IPC;
+long working-set/look-ahead sweeps, transport timeouts and Live/GPU evidence remain
+open Phase-5 work.
+
 ## TCP/MIMO experiment runner
 
 Use [performance-sionna-mimo](examples/performance-sionna-mimo.md) for configurable

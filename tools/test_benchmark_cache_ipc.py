@@ -2,6 +2,8 @@
 
 Run in the documented Python environment after building the native example.
 CACHE_IPC_BENCHMARK_RESULTS overrides the checked-in reference directory.
+It can also point to a --copy-profile export (six processes, 4446 timing rows,
+162 channel requests); the historical default export remains unchanged.
 """
 import copy
 import csv
@@ -68,6 +70,28 @@ class TestFrozenFixtures(unittest.TestCase):
 
 
 class TestNativeCacheIpc(unittest.TestCase):
+    def test_optional_copy_profile_all_getters_and_strict_counts(self):
+        fixture = benchmark.batch(benchmark.template(64, 2, 2), 1)
+        record, samples, server = benchmark.measure(benchmark.executable(), fixture, copy_profile=True)
+        self.assertEqual(record["cache_hit_count"], 656)
+        self.assertEqual(record["cache_miss_count"], 2)
+        self.assertEqual(len(samples), 741)
+        self.assertEqual(server["channel_requests"], 27)
+        for key in ("copy_profile", "verified_csi_links", "cache_hit_count", "memory_validation_hit_ratio"):
+            changed = copy.deepcopy(record)
+            changed[key] += 1
+            with self.subTest(key=key), self.assertRaises(AssertionError):
+                benchmark.validate_record(changed, fixture, server, samples, copy_profile=True)
+        for operation in benchmark.COPY_PROFILE_OPERATIONS:
+            incomplete = [row for row in samples if row["operation"] != operation]
+            with self.subTest(operation=operation), self.assertRaises(AssertionError):
+                benchmark.validate_record(record, fixture, server, incomplete, copy_profile=True)
+        hidden_rpc = copy.deepcopy(server)
+        hidden_rpc["channel_requests"] += 1
+        hidden_rpc["requests"].insert(0, hidden_rpc["requests"][0])
+        with self.assertRaises(AssertionError):
+            benchmark.validate_record(record, fixture, hidden_rpc, samples, copy_profile=True)
+
     def test_actual_native_cache_ipc_repeatability_and_corruption_detection(self):
         fixture = benchmark.batch(benchmark.template(64, 2, 4), 16)
         first, samples, server = benchmark.measure(benchmark.executable(), fixture)
@@ -118,6 +142,7 @@ class TestCacheIpcExport(unittest.TestCase):
         cls.output = Path(os.environ.get("CACHE_IPC_BENCHMARK_RESULTS",
                          benchmark.base.MODULE / "data/phase5_2_cache_ipc"))
         cls.manifest = json.loads((cls.output / "manifest.json").read_text())
+        cls.copy_profile = cls.manifest.get("copy_profile", False)
         cls.policy = json.loads((cls.output / "plan.json").read_text())
         cls.summaries, cls.samples, cls.requests = [], [], []
         for filename, target in (("summary.csv", cls.summaries), ("timings.csv", cls.samples),
@@ -135,19 +160,24 @@ class TestCacheIpcExport(unittest.TestCase):
                 for key, value in row.items() if key not in ("case_id", "repetition")}
 
     def test_predefined_policy_complete_matrix_and_exact_memory_scaling(self):
-        expected_policy = json.loads(json.dumps(benchmark.plan()))
+        expected_policy = json.loads(json.dumps(benchmark.plan(self.copy_profile)))
         for key, value in expected_policy.items():
             self.assertEqual(self.policy[key], value)
             self.assertEqual(self.manifest[key], value)
         self.assertEqual(benchmark.base.sha256(self.output / "plan.json"), self.manifest["plan_sha256"])
-        expected = set(itertools.product(benchmark.SUBCARRIERS, benchmark.ANTENNAS, benchmark.LINKS, range(3)))
+        cases = (benchmark.COPY_PROFILE_CASES if self.copy_profile else
+                 tuple(itertools.product(benchmark.SUBCARRIERS, benchmark.ANTENNAS, benchmark.LINKS)))
+        expected = {(nsc, antennas, links, repetition) for nsc, antennas, links in cases
+                    for repetition in range(3)}
         actual = {(int(row["subcarriers"]), (int(row["num_tx_antennas"]), int(row["num_rx_antennas"])),
                    int(row["links"]), int(row["repetition"])) for row in self.summaries}
         self.assertEqual(actual, expected)
-        self.assertEqual(len(self.summaries), 135)
-        self.assertEqual(len(self.samples), 135 * 229)
-        self.assertEqual(len(self.requests), 135 * 27)
-        self.assertEqual(len(self.manifest["configurations"]), 45)
+        self.assertEqual(len(self.summaries), len(cases) * 3)
+        self.assertEqual(len(self.samples), len(cases) * 3 * (741 if self.copy_profile else 229))
+        self.assertEqual(len(self.requests), len(cases) * 3 * 27)
+        self.assertEqual(len(self.manifest["configurations"]), len(cases))
+        if self.copy_profile:
+            self.assertTrue((self.output / "run.json").is_file())
         for row in self.summaries:
             coefficients = int(row["links"]) * int(row["subcarriers"]) * int(row["num_rx_antennas"]) * int(row["num_tx_antennas"])
             self.assertEqual(float(row["cache_cfr_bytes"]), 16 * coefficients)
@@ -178,7 +208,7 @@ class TestCacheIpcExport(unittest.TestCase):
                     "peak_rss_bytes": record["rep_server_peak_rss_bytes"],
                     "requests": [{key: int(row[key]) for key in ("tx_node", "rx_node", "time_ns")}
                                  for row in requests]}
-                benchmark.validate_record(record, fixture, server, samples)
+                benchmark.validate_record(record, fixture, server, samples, copy_profile=self.copy_profile)
                 if first is None:
                     first = benchmark.deterministic_fields(record)
                 else:
@@ -195,11 +225,14 @@ class TestCacheIpcExport(unittest.TestCase):
                     self.assertEqual(float(row[f"{operation}_{statistic}_ns"]), expected)
 
     def test_fresh_process_replay_across_shapes_and_link_counts(self):
-        for nsc, antennas, links in ((64, (1, 1), 1), (256, (2, 4), 16), (1024, (8, 8), 64)):
+        cases = (benchmark.COPY_PROFILE_CASES if self.copy_profile else
+                 ((64, (1, 1), 1), (256, (2, 4), 16), (1024, (8, 8), 64)))
+        for nsc, antennas, links in cases:
             configuration = next(row for row in self.manifest["configurations"]
                 if row["subcarriers"] == nsc and (row["num_tx_antennas"], row["num_rx_antennas"]) == antennas
                 and row["links"] == links)
-            result, _, _ = benchmark.measure(benchmark.executable(), self.fixture(configuration))
+            result, _, _ = benchmark.measure(benchmark.executable(), self.fixture(configuration),
+                                           copy_profile=self.copy_profile)
             expected = next(row for row in self.summaries if row["case_id"] == configuration["case_id"])
             self.assertEqual(benchmark.deterministic_fields(result),
                              benchmark.deterministic_fields(self.native_record(expected)))

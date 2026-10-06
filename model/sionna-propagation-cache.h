@@ -30,6 +30,7 @@
 
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <ns3/propagation-delay-model.h>
@@ -202,7 +203,7 @@ class SionnaPropagationCache : public ns3::Object
             * @param channel the dimensioned channel frequency response
             */
             CacheEntry(Time delay, double loss, Time start_time, Time end_time,
-                const MimoChannelMatrix& channel, uint32_t a, uint32_t b,
+                MimoChannelMatrix channel, uint32_t a, uint32_t b,
                 Vector a_position, Vector b_position, bool directed)
                 : m_delay(delay),
                   m_loss(loss),
@@ -213,7 +214,7 @@ class SionnaPropagationCache : public ns3::Object
                   m_directed(directed),
                   m_a_position(a_position),
                   m_b_position(b_position),
-                  m_cfr(channel)
+                  m_cfr(std::move(channel))
             {
             }
 
@@ -235,7 +236,9 @@ class SionnaPropagationCache : public ns3::Object
             MimoChannelMatrix m_cfr; // channel frequency response
         };
 
-        CacheEntry GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityModel> b) const;
+        /** Borrow only inside one getter. An uncached reply belongs to its caller's scratch. */
+        const CacheEntry& GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityModel> b,
+                                             CacheEntry& uncached) const;
 
         static bool Matches(const CacheEntry& entry, uint32_t tx, uint32_t rx, Time now);
         static uint64_t PayloadBytes(const CacheEntry& entry);

@@ -48,6 +48,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 using namespace ns3;
 
@@ -4640,6 +4641,192 @@ class CacheContractTest : public TestCase
     unsigned m_scenario;
 };
 
+// Public getters own their results even when the underlying snapshot is moved,
+// expired, or discarded. Distinct MU channels also catch positional remapping.
+class CacheGetterOwnershipTest : public TestCase
+{
+  public:
+    CacheGetterOwnershipTest()
+        : TestCase("cache getter ownership, MU identity mapping and atomic rejection")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        using Coefficients = std::vector<std::complex<double>>;
+        const Coefficients bCoefficients{{1, 0}, {0, 1}, {-1, 0}, {0, -1}};
+        const Coefficients cCoefficients{{0, -1}, {-1, 0}, {0, 1}, {1, 0}};
+
+        auto movable = bCoefficients;
+        const auto* allocation = movable.data();
+        MimoChannelMatrix moved(2, 1, 2, std::move(movable));
+        NS_TEST_ASSERT_MSG_EQ(moved.GetCoefficients().data(), allocation,
+                              "Rvalue construction copied the CFR allocation");
+        auto source = cCoefficients;
+        MimoChannelMatrix copied(2, 1, 2, source);
+        source.at(0) = {7, 8};
+        NS_TEST_ASSERT_MSG_EQ(copied.Get(0, 0, 0), cCoefficients.at(0),
+                              "Lvalue construction shares caller-owned coefficients");
+
+        auto a = MakeCacheRadio(), b = MakeCacheRadio(), c = MakeCacheRadio();
+        auto d = MakeCacheRadio(), e = MakeCacheRadio(), f = MakeCacheRadio();
+        auto addUser = [&](ChannelStateMessage& state, auto tx, auto rx,
+                           uint64_t start, uint64_t end, double loss, uint64_t delay,
+                           const Coefficients& coefficients) {
+            ns3sionna::Wrapper temporary;
+            AddCacheState(temporary, tx, rx, start, end, loss, true);
+            auto* user = state.add_rx_nodes();
+            *user = temporary.channel_state_response().csi(0).rx_nodes(0);
+            state.set_start_time(start);
+            state.set_end_time(end);
+            state.mutable_tx_node()->set_id(CacheRadioId(tx));
+            user->set_delay(delay);
+            user->set_num_tx_antennas(2);
+            user->add_frequencies(156250);
+            user->clear_csi_real();
+            user->clear_csi_imag();
+            for (const auto& coefficient : coefficients)
+            {
+                user->add_csi_real(coefficient.real());
+                user->add_csi_imag(coefficient.imag());
+            }
+        };
+        ns3sionna::Wrapper initial;
+        auto* initialState = initial.mutable_channel_state_response()->add_csi();
+        // Wire order differs from the stable order of decoded MU user IDs.
+        addUser(*initialState, a, c, 0, 10, 20, 7, cCoefficients);
+        addUser(*initialState, a, b, 0, 10, 10, 3, bCoefficients);
+
+        ns3sionna::Wrapper malformed;
+        auto* validPrefix = malformed.mutable_channel_state_response()->add_csi();
+        addUser(*validPrefix, d, f, 0, 100, 50, 9, cCoefficients);
+        addUser(*validPrefix, d, e, 0, 100, 40, 8, bCoefficients);
+        auto* invalidSuffix = malformed.mutable_channel_state_response()->add_csi();
+        addUser(*invalidSuffix, a, c, 0, 100, 90, 7, bCoefficients);
+        addUser(*invalidSuffix, a, b, 0, 100, 80, 3, cCoefficients);
+        invalidSuffix->mutable_rx_nodes(1)->clear_csi_imag();
+
+        auto freshReply = [&](double loss, const Coefficients& coefficients) {
+            ns3sionna::Wrapper reply;
+            addUser(*reply.mutable_channel_state_response()->add_csi(),
+                    a, b, 11, 100, loss, 5, coefficients);
+            return reply.SerializeAsString();
+        };
+        const std::vector<std::string> replies{initial.SerializeAsString(),
+                                               malformed.SerializeAsString(),
+                                               freshReply(31, cCoefficients),
+                                               freshReply(32, bCoefficients),
+                                               freshReply(33, bCoefficients)};
+        CachePeer peer(replies);
+        SionnaHelper helper("in-memory-cache-ownership", peer.endpoint);
+        helper.m_zmq_socket.set(zmq::sockopt::linger, 0);
+        helper.m_zmq_socket.set(zmq::sockopt::rcvtimeo, 3000);
+        auto cache = CreateObject<SionnaPropagationCache>();
+        cache->SetSionnaHelper(helper);
+        cache->SetOptimize(false);
+
+        const auto heldMatrix = cache->GetPropagationChannelMatrix(a, b);
+        const auto heldCsi = cache->GetPropagationCSI(a, b);
+        const auto heldFrequencies = cache->GetPropagationFreq(a, b);
+        const auto heldLoss = cache->GetPropagationLoss(a, b);
+        const auto heldDelay = cache->GetPropagationDelay(a, b);
+        auto changedMatrix = cache->GetPropagationChannelMatrix(a, b);
+        auto changedCsi = cache->GetPropagationCSI(a, b);
+        auto changedFrequencies = cache->GetPropagationFreq(a, b);
+        changedMatrix.Set(0, 0, 0, {7, 8});
+        changedCsi.at(1) = {9, 10};
+        changedFrequencies.at(0) = -1;
+
+        auto checkHit = [&](auto rx, double loss, int64_t delay,
+                            const Coefficients& coefficients) {
+            NS_TEST_ASSERT_MSG_EQ(cache->GetPropagationLoss(a, rx), loss,
+                                  "MU scalar associated with the wrong user");
+            NS_TEST_ASSERT_MSG_EQ(cache->GetPropagationDelay(a, rx).GetNanoSeconds(), delay,
+                                  "Cached delay changed");
+            const auto matrix = cache->GetPropagationChannelMatrix(a, rx);
+            const auto csi = cache->GetPropagationCSI(a, rx);
+            const auto frequencies = cache->GetPropagationFreq(a, rx);
+            NS_TEST_ASSERT_MSG_EQ(matrix.GetNumSubcarriers(), 2, "Subcarrier dimension changed");
+            NS_TEST_ASSERT_MSG_EQ(matrix.GetNumRxAntennas(), 1, "RX dimension changed");
+            NS_TEST_ASSERT_MSG_EQ(matrix.GetNumTxAntennas(), 2, "TX dimension changed");
+            NS_TEST_ASSERT_MSG_EQ(csi.size(), coefficients.size(), "CSI dimension changed");
+            for (std::size_t i = 0; i < coefficients.size(); ++i)
+            {
+                NS_TEST_ASSERT_MSG_EQ(matrix.GetCoefficients().at(i), coefficients.at(i),
+                                      "MU CFR mapped by sorted position or returned copy mutated cache");
+                NS_TEST_ASSERT_MSG_EQ(csi.at(i), coefficients.at(i), "Cached CSI changed");
+            }
+            NS_TEST_ASSERT_MSG_EQ(frequencies.size(), 2, "Frequency count changed");
+            NS_TEST_ASSERT_MSG_EQ(frequencies.at(0), 78125, "Returned frequency mutated cache");
+            NS_TEST_ASSERT_MSG_EQ(frequencies.at(1), 156250, "Frequency order changed");
+        };
+        for (unsigned hit = 0; hit < 3; ++hit)
+        {
+            checkHit(b, 10, 3, bCoefficients);
+            checkHit(c, 20, 7, cCoefficients);
+        }
+        const auto beforeRejection = cache->GetStorageStatistics();
+        bool rejected = false;
+        try { cache->GetPropagationLoss(d, e); }
+        catch (const std::invalid_argument&) { rejected = true; }
+        NS_TEST_ASSERT_MSG_EQ(rejected, true, "Malformed MU batch accepted");
+        const auto afterRejection = cache->GetStorageStatistics();
+        NS_TEST_ASSERT_MSG_EQ(afterRejection.snapshots, 2, "Valid MU prefix leaked into cache");
+        NS_TEST_ASSERT_MSG_EQ(afterRejection.payloadBytes, beforeRejection.payloadBytes,
+                              "Rejected MU batch changed payload");
+        NS_TEST_ASSERT_MSG_EQ(afterRejection.capacityBytes, beforeRejection.capacityBytes,
+                              "Rejected MU batch changed capacity");
+        NS_TEST_ASSERT_MSG_EQ(afterRejection.peakSnapshots, beforeRejection.peakSnapshots,
+                              "Rejected MU batch changed lifetime peak");
+        checkHit(b, 10, 3, bCoefficients);
+        checkHit(c, 20, 7, cCoefficients);
+
+        auto checkHeld = [&]() {
+            for (std::size_t i = 0; i < bCoefficients.size(); ++i)
+            {
+                NS_TEST_ASSERT_MSG_EQ(heldMatrix.GetCoefficients().at(i), bCoefficients.at(i),
+                                      "Held matrix invalidated by cache lifetime");
+                NS_TEST_ASSERT_MSG_EQ(heldCsi.at(i), bCoefficients.at(i),
+                                      "Held CSI invalidated by cache lifetime");
+            }
+            NS_TEST_ASSERT_MSG_EQ(heldFrequencies.at(0), 78125, "Held frequency changed");
+            NS_TEST_ASSERT_MSG_EQ(heldFrequencies.at(1), 156250, "Held frequency changed");
+            NS_TEST_ASSERT_MSG_EQ(heldLoss, 10, "Held scalar changed");
+            NS_TEST_ASSERT_MSG_EQ(heldDelay.GetNanoSeconds(), 3, "Held delay changed");
+            NS_TEST_ASSERT_MSG_EQ(changedMatrix.Get(0, 0, 0), std::complex<double>(7, 8),
+                                  "Caller matrix mutation was lost");
+            NS_TEST_ASSERT_MSG_EQ(changedCsi.at(1), std::complex<double>(9, 10),
+                                  "Caller CSI mutation was lost");
+            NS_TEST_ASSERT_MSG_EQ(changedFrequencies.at(0), -1, "Caller frequency mutation lost");
+        };
+        Simulator::Schedule(NanoSeconds(11), [&]() {
+            NS_TEST_ASSERT_MSG_EQ(cache->GetStorageStatistics().snapshots, 0,
+                                  "Expired MU entries were not purged");
+            checkHeld();
+            cache->SetCaching(false);
+            const auto disabledMatrix = cache->GetPropagationChannelMatrix(a, b);
+            const auto disabledCsi = cache->GetPropagationCSI(a, b);
+            NS_TEST_ASSERT_MSG_EQ(cache->GetStorageStatistics().snapshots, 0,
+                                  "Disabled getters retained snapshots");
+            checkHeld();
+            cache->SetCaching(true);
+            checkHit(b, 33, 5, bCoefficients);
+            NS_TEST_ASSERT_MSG_EQ(disabledMatrix.Get(0, 0, 0), cCoefficients.at(0),
+                                  "Disabled matrix invalidated by next reply or re-enable");
+            NS_TEST_ASSERT_MSG_EQ(disabledCsi.at(0), bCoefficients.at(0),
+                                  "Disabled CSI invalidated by re-enable");
+            cache->SetCaching(false); // Discard a live snapshot while results remain held.
+            checkHeld();
+        });
+        Simulator::Run();
+        NS_TEST_ASSERT_MSG_EQ(peer.Finish().size(), replies.size(),
+                              "Repeated cached getters issued extra RPCs");
+        helper.m_zmq_socket.close();
+        Simulator::Destroy();
+    }
+};
+
 class CacheBudgetTest : public TestCase
 {
   public:
@@ -4748,6 +4935,7 @@ class SionnaTestSuite : public TestSuite
         : TestSuite("sionna", UNIT)
     {
         AddTestCase(new DisabledCacheFreshReplyTest, TestCase::QUICK);
+        AddTestCase(new CacheGetterOwnershipTest, TestCase::QUICK);
         AddTestCase(new CacheBudgetTest, TestCase::QUICK);
         for (unsigned scenario = 0; scenario < 3; ++scenario)
         {

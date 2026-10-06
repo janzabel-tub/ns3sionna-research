@@ -47,11 +47,12 @@ class MimoChannelMatrix
 
     /**
      * Create a CFR tensor from coefficients in the documented flat layout.
+     * Lvalues are copied; an rvalue transfers its coefficient storage.
      */
     MimoChannelMatrix(uint32_t numSubcarriers,
                       uint32_t numRxAntennas,
                       uint32_t numTxAntennas,
-                      const std::vector<std::complex<double>>& coefficients);
+                      std::vector<std::complex<double>> coefficients);
 
     uint32_t GetNumSubcarriers() const;
     uint32_t GetNumRxAntennas() const;

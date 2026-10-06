@@ -4,6 +4,11 @@
 The REP peer returns preencoded channels, never ray traces. Larger tensors are
 transport fixtures tiled from one frozen 2x2 reference, not physical predictions.
 All acceptance criteria are written before the first native measurement.
+
+--copy-profile restricts the sweep to 64/2x2/1 and 1024/8x8/16 and adds
+loss (const overload), delay, frequency and CSI hit timers. cache_hit remains
+the channel-matrix timer. Each case uses three independent native processes;
+the optional mode writes the tabular exports and its predefined policy/run.json.
 """
 from __future__ import annotations
 
@@ -29,6 +34,8 @@ import benchmark_sumimo as base
 SUBCARRIERS = (64, 256, 1024)
 ANTENNAS = ((1, 1), (2, 2), (4, 4), (2, 4), (8, 8))  # (TX, RX)
 LINKS = (1, 16, 64)
+COPY_PROFILE_CASES = ((64, (2, 2), 1), (1024, (8, 8), 16))
+COPY_PROFILE_OPERATIONS = ("cache_hit_loss", "cache_hit_delay", "cache_hit_frequency", "cache_hit_csi")
 CONTROLS = {"seed_ns3": 42, "run_ns3": 1, "fixture_seed": 42,
     "repetitions": 3, "iterations": 16, "hit_iterations": 128, "miss_iterations": 5,
     "warmup": 3, "transport": "local ipc:// REQ/REP, separate Python process",
@@ -61,11 +68,24 @@ def executable():
     return paths[0]
 
 
-def plan():
-    return {"schema_version": 1, "subphase": "5.2.3", "controls": CONTROLS,
+def plan(copy_profile=False):
+    result = {"schema_version": 1, "subphase": "5.2.3", "controls": CONTROLS,
             "sweep": {"subcarriers": SUBCARRIERS, "antenna_pairs_tx_rx": ANTENNAS, "links": LINKS},
             "acceptance": ACCEPTANCE, "anchor": str(ANCHOR.relative_to(base.MODULE)),
             "anchor_sha256": base.sha256(ANCHOR)}
+    if copy_profile:
+        result.update(subphase="r3-cfr-copy", copy_profile=True,
+            controls={**CONTROLS, "cache_hit_timer": "public getters with scoped output cleanup; "
+                "cache_hit=channel matrix; const loss, delay, frequency and CSI measured separately"},
+            sweep={"cases": [{"subcarriers": nsc, "antenna_pairs_tx_rx": antennas, "links": links}
+                              for nsc, antennas, links in COPY_PROFILE_CASES]},
+            acceptance={**ACCEPTANCE, "copy_profile": {
+                "additional_operations": COPY_PROFILE_OPERATIONS,
+                "samples_per_additional_operation": CONTROLS["hit_iterations"],
+                "cache_hit_count": 5 * (CONTROLS["warmup"] + CONTROLS["hit_iterations"]) + 1,
+                "cache_miss_count": 2, "channel_requests_per_process": 27,
+                "memory_validation": "5L hits, one miss; CSI coefficients also bit-exact for every link"}})
+    return result
 
 
 def template(subcarriers, tx, rx):
@@ -175,7 +195,7 @@ def deterministic_fields(record):
         token in key for token in ("rss", "heap", "_ns", "seconds"))}
 
 
-def validate_record(record, fixture, server, samples, storage_steps=0):
+def validate_record(record, fixture, server, samples, storage_steps=0, copy_profile=False):
     state = fixture.channel_state_response.csi[0]
     radio = state.rx_nodes[0]
     nsc, rx, tx, links = len(radio.frequencies), radio.num_rx_antennas, radio.num_tx_antennas, len(state.rx_nodes)
@@ -184,14 +204,19 @@ def validate_record(record, fixture, server, samples, storage_steps=0):
         "cache_frequency_bytes": 4 * links * nsc,
         "response_bytes": len(fixture.SerializeToString(deterministic=True)),
         "request_bytes": 4, "coefficient_digest": coefficient_digest(fixture),
-        "cache_hit_count": CONTROLS["warmup"] + CONTROLS["hit_iterations"] + 1,
+        "cache_hit_count": (5 if copy_profile else 1) * (
+            CONTROLS["warmup"] + CONTROLS["hit_iterations"]) + 1,
         "cache_miss_count": 2 + storage_steps, "expected_channel_requests": 27 + storage_steps, "verified_links": links,
         "boundary_hit": 1, "expired_miss": 1}
+    if copy_profile:
+        expected.update(copy_profile=1, verified_csi_links=links)
     for key, value in expected.items():
         if record[key] != value:
             raise AssertionError(f"Incorrect native {key}: {record[key]} != {value}")
-    np.testing.assert_allclose(record["cache_hit_ratio"], 132 / (134 + storage_steps), rtol=0, atol=1e-12)
-    np.testing.assert_allclose(record["memory_validation_hit_ratio"], 4 * links / (4 * links + 1),
+    hits = expected["cache_hit_count"]
+    np.testing.assert_allclose(record["cache_hit_ratio"], hits / (hits + 2 + storage_steps), rtol=0, atol=1e-12)
+    getters = 5 if copy_profile else 4
+    np.testing.assert_allclose(record["memory_validation_hit_ratio"], getters * links / (getters * links + 1),
                                rtol=0, atol=1e-12)
     expected_requests = [{"tx_node": 0, "rx_node": 1, "time_ns": 0}] * 26 + [
                          {"tx_node": 0, "rx_node": 1, "time_ns": 5000001}]
@@ -206,6 +231,8 @@ def validate_record(record, fixture, server, samples, storage_steps=0):
     assert server["requests"] == expected_requests
     operations = {"ipc_roundtrip": 16, "cpp_serialize": 16, "cpp_parse": 16, "matrix_decode": 16,
                   "cache_hit": 128, "cache_miss": 5, "python_serialize": 16, "python_parse": 16}
+    if copy_profile:
+        operations.update({operation: CONTROLS["hit_iterations"] for operation in COPY_PROFILE_OPERATIONS})
     assert set(row["operation"] for row in samples) == set(operations)
     for operation, count in operations.items():
         rows = [row for row in samples if row["operation"] == operation]
@@ -235,7 +262,7 @@ def python_timings(fixture, wire):
     return samples
 
 
-def measure(binary, fixture, storage_steps=0):
+def measure(binary, fixture, storage_steps=0, copy_profile=False):
     """One fresh native process and one fresh Python REP peer, both bounded/cleaned."""
     wire = fixture.SerializeToString(deterministic=True)
     with tempfile.TemporaryDirectory(prefix="cache-ipc-") as temporary:
@@ -256,11 +283,13 @@ def measure(binary, fixture, storage_steps=0):
                         raise RuntimeError("Frozen REP peer failed to become ready: " + log.read())
                     time.sleep(0.01)
                 started = time.perf_counter()
+                optional = {"copyProfile": 1} if copy_profile else {}
                 base.native(binary, input=input_path, output=path / "native.json",
                     timings=path / "timings.csv", endpoint=endpoint,
                     links=len(fixture.channel_state_response.csi[0].rx_nodes),
                     iterations=CONTROLS["iterations"], hitIterations=CONTROLS["hit_iterations"],
-                    missIterations=CONTROLS["miss_iterations"], warmup=CONTROLS["warmup"], storageSteps=storage_steps)
+                    missIterations=CONTROLS["miss_iterations"], warmup=CONTROLS["warmup"], storageSteps=storage_steps,
+                    **optional)
                 native_seconds = time.perf_counter() - started
                 process.wait(timeout=10)
                 if process.returncode:
@@ -280,7 +309,7 @@ def measure(binary, fixture, storage_steps=0):
                         process.kill()
                         process.wait()
     samples.extend(python_timings(fixture, wire))
-    validate_record(record, fixture, server, samples, storage_steps)
+    validate_record(record, fixture, server, samples, storage_steps, copy_profile)
     for operation in sorted({row["operation"] for row in samples}):
         values = [row["nanoseconds"] for row in samples if row["operation"] == operation]
         for statistic, value in (("median", np.median(values)), ("p95", np.percentile(values, 95)),
@@ -326,15 +355,16 @@ def plots(output, summaries):
         plt.close(fig)
 
 
-@base.provenance.benchmark_run(lambda a: plan(), inputs=(ANCHOR,))
-def run(output, binary):
+@base.provenance.benchmark_run(lambda a: plan(a["copy_profile"]), inputs=(ANCHOR,))
+def run(output, binary, copy_profile=False):
     base.provenance.backend_selected("frozen-protobuf-local-zmq")
-    policy = {**plan(), "defined_before_measurements_utc": datetime.now(timezone.utc).isoformat()}
+    policy = {**plan(copy_profile), "defined_before_measurements_utc": datetime.now(timezone.utc).isoformat()}
     (output / "plan.json").write_text(json.dumps(policy, indent=2) + "\n")
     started = time.perf_counter()
     summaries, timings, requests, configurations = [], [], [], []
     (output / "fixtures").mkdir()
-    for index, (nsc, antennas, links) in enumerate(itertools.product(SUBCARRIERS, ANTENNAS, LINKS)):
+    cases = COPY_PROFILE_CASES if copy_profile else itertools.product(SUBCARRIERS, ANTENNAS, LINKS)
+    for index, (nsc, antennas, links) in enumerate(cases):
         tx, rx = antennas
         case_id = f"case_{index:02d}"
         fixture_path = output / "fixtures" / f"nsc{nsc}_tx{tx}_rx{rx}.pb"
@@ -350,7 +380,7 @@ def run(output, binary):
                   "coefficient_digest": coefficient_digest(frozen)}
         first = None
         for repetition in range(CONTROLS["repetitions"]):
-            result, samples, server = measure(binary, frozen)
+            result, samples, server = measure(binary, frozen, copy_profile=copy_profile)
             identity = {"case_id": case_id, "repetition": repetition}
             if first is None:
                 first = deterministic_fields(result)
@@ -367,7 +397,8 @@ def run(output, binary):
     elapsed = time.perf_counter() - started
     for filename, rows in (("summary.csv", summaries), ("timings.csv", timings), ("requests.csv", requests)):
         base.write_csv(output / filename, rows)
-    plots(output, summaries)
+    if not copy_profile:
+        plots(output, summaries)
     paths = [Path(__file__), Path(__file__).with_name("test_benchmark_cache_ipc.py"), Path(base.__file__),
              base.MODULE / "examples/ns3_sionna_cache_ipc_benchmark.cc", base.MODULE / "examples/CMakeLists.txt",
              base.MODULE / "model/message.proto", base.MODULE / "model/mimo-channel-matrix.cc",
@@ -413,18 +444,22 @@ def main():
     parser.add_argument("--output", type=Path)
     parser.add_argument("--executable", type=Path)
     parser.add_argument("--storage-steps", type=int, default=0)
+    parser.add_argument("--copy-profile", action="store_true",
+        help="Profile five public hit getters for two fixed shapes, three fresh processes each")
     parser.add_argument("--serve", action="store_true")
     parser.add_argument("--input", type=Path)
     parser.add_argument("--endpoint")
     parser.add_argument("--ready", type=Path)
     parser.add_argument("--stats", type=Path)
     args = parser.parse_args()
+    if args.copy_profile and (args.storage_steps or args.serve):
+        parser.error("--copy-profile cannot be combined with --storage-steps or --serve")
     if args.serve:
         serve(args.input, args.endpoint, args.ready, args.stats)
     elif args.output:
         binary = (args.executable or executable()).resolve()
         manifest = (run_storage(args.output.resolve(), binary, args.storage_steps) if args.storage_steps
-                    else run(args.output.resolve(), binary))
+                    else run(args.output.resolve(), binary, copy_profile=args.copy_profile))
         print(json.dumps(manifest["validation"]))
     else:
         parser.error("Provide --output=<empty directory>")
