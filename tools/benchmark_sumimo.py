@@ -75,8 +75,9 @@ def native(binary: Path, **arguments) -> None:
 
 def export_configuration(binary: Path, output: Path, spacing: float,
                          tx_angles=(0.0, 0.0, 0.0), rx_angles=(0.0, 0.0, 0.0), seed=42,
-                         rx_spacing=None):
-    arguments = dict(action="config", output=output, spacingLambda=spacing, seed=seed)
+                         rx_spacing=None, run=1, stream=0):
+    arguments = dict(action="config", output=output, spacingLambda=spacing, seed=seed,
+                     run=run, stream=stream)
     if rx_spacing is not None:
         arguments["rxSpacingLambda"] = rx_spacing
     for endpoint, angles in (("tx", tx_angles), ("rx", rx_angles)):
@@ -85,6 +86,7 @@ def export_configuration(binary: Path, output: Path, spacing: float,
     native(binary, **arguments)
     config = message_pb2.SimInitMessage.FromString(output.read_bytes())
     validate_configuration(config, spacing, tx_angles, rx_angles, seed, rx_spacing)
+    provenance.randomness_selected(config)
     return config
 
 
@@ -164,7 +166,9 @@ def trace(config, env_class, samples_per_src=None):
                        "diffuse_reflection", "refraction", "diffraction",
                        "edge_diffraction", "diffraction_lit_region", "samples_per_src"):
             assert getattr(env, "rt_" + option) == controls[option]
-        assert env.my_seed == config.seed
+        from random_streams import resolve_randomness
+        assert env.my_seed == resolve_randomness(config)["rt_seed"]
+        provenance.randomness_selected(config)
         request = message_pb2.ChannelStateRequest(tx_node=0, rx_node=1, time=0)
         wrapper = message_pb2.Wrapper()
         cfr_start = time.perf_counter()

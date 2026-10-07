@@ -10,6 +10,7 @@ import zmq
 import gc
 
 from common import message_pb2
+from random_streams import resolve_randomness, mobility_rng
 from common.message_debug import *
 
 from collections import deque
@@ -132,6 +133,11 @@ class SionnaEnv:
         if self.VERBOSE:
             print_sim_init(sim_init_msg)
 
+        try:
+            self.randomness = resolve_randomness(sim_init_msg)
+        except ValueError as error:
+            return False, str(error)
+
         # Load the sionna scene
         filepath = os.path.join(self.model_folder, sim_init_msg.scene_fname)
         try:
@@ -197,8 +203,8 @@ class SionnaEnv:
         self.frequencies = subcarrier_frequencies(num_subcarriers=self.fft_size, subcarrier_spacing=self.subcarrier_spacing)
 
         # Set the random seed for reproducibility
-        np.random.seed(sim_init_msg.seed)
-        self.my_seed = sim_init_msg.seed
+        np.random.seed(self.randomness["mobility_seed"])
+        self.my_seed = self.randomness["rt_seed"]
 
         # configure mobility models
         self._init_mobility(sim_init_msg)
@@ -297,8 +303,9 @@ class SionnaEnv:
 
 
     def _make_mobility_rng(self, node_id):
-        seed = np.random.SeedSequence([int(self.my_seed), int(node_id), 0x51A0])
-        return np.random.default_rng(seed)
+        # Legacy inputs retain their original node generator exactly.
+        mapping = getattr(self, "randomness", {"mobility_seed": self.my_seed})
+        return mobility_rng(mapping, node_id)
 
 
     def _check_batch_budget(self, receivers, depth=1):
@@ -903,7 +910,8 @@ class SionnaEnv:
                     direction_params = (random_walk_model.direction.normal.mean,
                                         random_walk_model.direction.normal.variance)
 
-                rng = self._make_mobility_rng(node_info.id) if self.absolute_time_mobility else None
+                rng = self._make_mobility_rng(node_info.id) if (self.absolute_time_mobility or
+                    self.randomness["mapping_version"] == 1) else None
                 self.node_info[node_info.id] = RandomWalkMobility(node_info.id, [pos.x, pos.y, pos.z],
                                                                   mode, mode_params, speed, speed_params,
                                                                   direction, direction_params, rng=rng)

@@ -66,7 +66,8 @@ WriteConfiguration(const std::string& output,
                    double txSpacingLambda,
                    double rxSpacingLambda,
                    const SionnaMimoOrientation& txOrientation,
-                   const SionnaMimoOrientation& rxOrientation)
+                   const SionnaMimoOrientation& rxOrientation,
+                   int64_t rngStream)
 {
     SionnaMimoConfiguration configuration;
     configuration.mode = SionnaMimoMode::SU_MIMO_SPATIAL_MULTIPLEXING;
@@ -82,6 +83,7 @@ WriteConfiguration(const std::string& output,
     configuration.nodeOrientations.emplace(1, rxOrientation);
 
     SionnaHelper sionna("simple_room/simple_room.xml", "inproc://sumimo-benchmark");
+    sionna.AssignStreams(rngStream);
     sionna.Configure(5180, 20, 256, 78125, 5);
     sionna.SetMode(SionnaHelper::MODE_P2P);
     sionna.SetSubMode(SionnaHelper::SUB_MODE_IGNORED);
@@ -327,6 +329,8 @@ main(int argc, char* argv[])
     double spacingLambda = 0.5;
     std::string txSpacingOverride, rxSpacingOverride;
     uint32_t seed = 42;
+    uint64_t run = 1;
+    int64_t stream = 0;
     double csiAgeMs = 0.0, transmissionMs = 5.0, rotationRate = 9.0;
     SionnaMimoOrientation txOrientation;
     SionnaMimoOrientation rxOrientation;
@@ -340,7 +344,9 @@ main(int argc, char* argv[])
     cmd.AddValue("spacingLambda", "TX/RX horizontal antenna spacing in wavelengths", spacingLambda);
     cmd.AddValue("txSpacingLambda", "Override TX spacing; otherwise use spacingLambda", txSpacingOverride);
     cmd.AddValue("rxSpacingLambda", "Override RX spacing; otherwise use spacingLambda", rxSpacingOverride);
-    cmd.AddValue("seed", "ns-3 and exported Sionna RT seed (run stays 1)", seed);
+    cmd.AddValue("seed", "ns-3 seed; mapping v1 preserves RT seed at run=1/stream=0", seed);
+    cmd.AddValue("run", "ns-3 run mapped to independent Python RNG domains", run);
+    cmd.AddValue("stream", "First of two reserved streams: RT, mobility", stream);
     cmd.AddValue("txAzimuth", "TX azimuth in degrees", txOrientation.azimuthDegrees);
     cmd.AddValue("txElevation", "TX elevation in degrees", txOrientation.elevationDegrees);
     cmd.AddValue("txRoll", "TX roll in degrees", txOrientation.rollDegrees);
@@ -353,7 +359,8 @@ main(int argc, char* argv[])
     {
         Require(seed > 0, "Seed must be positive");
         RngSeedManager::SetSeed(seed);
-        RngSeedManager::SetRun(1);
+        Require(run > 0, "Run must be positive");
+        RngSeedManager::SetRun(run);
         Require(!output.empty(), "Provide --output=<path>");
         if (action == "config")
         {
@@ -368,7 +375,7 @@ main(int argc, char* argv[])
                 return value; // The existing helper validates positive, finite geometry.
             };
             WriteConfiguration(output, spacing(txSpacingOverride), spacing(rxSpacingOverride),
-                               txOrientation, rxOrientation);
+                               txOrientation, rxOrientation, stream);
         }
         else if (action == "analyze" || action == "aging")
         {

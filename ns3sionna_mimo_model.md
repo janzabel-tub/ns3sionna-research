@@ -1,9 +1,9 @@
 # ns3sionna: MIMO-Abstraktionsmodell für IEEE 802.11ax/be
 
-Stand: 6. Oktober 2026, Phase 4 einschließlich Unterphase 4.8 implementiert;
+Stand: 7. Oktober 2026, Phase 4 einschließlich Unterphase 4.8 implementiert;
 Unterphase 5.1 für HE MCS 0/BCC/32 Byte/1x1 anhand von Link-Level-Daten validiert;
 Unterphasen 5.2.1 bis 5.2.5 mit Kanal-, Konvergenz-, Cache-/IPC-, Arrayabstands- und CSI-Alterungssensitivität implementiert;
-verbleibender Phase-5-Implementierungsplan R1 bis R6 ergänzt;
+R1 als eine native CPU-Unterphase mit Seed-/Run-/Streams und portablen Bundles abgeschlossen;
 erstes R1/R3-Inkrement mit portabler Provenienz, CPU-CI und deaktiviertem Cache implementiert;
 zweites R3-Inkrement mit Cachekorrektheitsregressionen, Belegungszählern und inaktiver Linkbereinigung implementiert;
 drittes R3-Inkrement mit Allokations-/Antwort-/Speicherbudgets und Look-ahead-Tiefenprüfung implementiert;
@@ -904,50 +904,54 @@ Die bestehenden Werkzeuge `calibrate_eesm.py`, `benchmark_sumimo.py`,
 Gemeinsame kleine Hilfsfunktionen sollen doppelte Manifest-/Prozesslogik
 reduzieren; ein zweites Benchmarkframework ist nicht erforderlich.
 
-##### R1: Provenienz, portable Reproduzierbarkeit und CPU-CI
+##### R1: Native Reproduzierbarkeit (abgeschlossen)
 
-Priorität: zuerst; vorhandene Exporte und Referenzen bilden die Basis.
+**R1: native Reproduzierbarkeit (abgeschlossen).** Der feste Umfang umfasst
+Seed/Run/Random-Streams, vollständige portable Studienbundles und leichte
+Lock-/Systemprüfungen im bestehenden Conda-CPU-Environment. Abnahme: ein
+verschobenes Bundle verifiziert und reproduziert einen kleinen RT-/Native-Fall;
+Seedwiederholung und die etablierten CPU-Regressionen bestehen. Container/Docker,
+Resume, neue Studien und GPU-Abnahme gehören nicht dazu; R2 bleibt geschlossen.
 
-- Einen gemeinsamen versionierten Manifestvertrag für Fall-ID,
-  Konfiguration, Quellrevision und lokale Änderungen, Seeds/Run/Streams,
-  tatsächliches Backend, Hardware-, Build- und Paketversionen, Befehle,
-  Eingangshashes und Laufstatus festlegen. Bestehende Exporte über eine
-  dokumentierte Schemamigration erhalten.
-- Erfolgreiche, fehlgeschlagene und unvollständige Läufe eindeutig markieren,
-  Abschlussmarker atomar schreiben und Fehlerlogs erhalten. Wiederaufnahme
-  nur bei passenden Konfigurations-/Eingangshashes erlauben; der bestehende
-  Schutz nichtleerer Ausgabeverzeichnisse bleibt erhalten.
-- Einen expliziten Hashvertrag für Textdateien festlegen: LF über
-  `.gitattributes` sichern oder einen versionierten kanonischen Textdigest
-  neben dem Rohbytedigest speichern. Binäre Protobufs bleiben rohbytegeprüft.
-  Der aktuelle Windows-Checkout verändert vier geprüfte CSV-/JSON-Hashes
-  ausschließlich durch CRLF; nach LF-Normalisierung stimmen sie mit den
-  Messhashes überein. Andere Änderungen dürfen nicht dadurch verdeckt werden.
-- Die lokal gehaltenen Exporte von 5.2.4/5.2.5 vom ursprünglichen Host
-  sichern oder reproduzieren. Einen versionierten Artefaktindex mit
-  Prüfsummen und einem kleinen verteilbaren Prüfsatz bereitstellen; die
-  vorhandene Entscheidung, diese Rohdatensätze nicht in Git abzulegen,
-  wird durch reproduzierbaren externen Zugriff ergänzt.
-- CPU-Abhängigkeiten einschließlich transitiver Pakete exakt sperren.
-  Docker/Singularity den aktuellen Checkout oder eine explizite Revision
-  mit Tests bauen lassen; derzeit klonen sie Upstream und mehrere
-  Requirements bleiben offen. CPU-CI mit frisch generierten Bindings,
-  nativen SU-/DL-/UL-Suites, Kalibrier-, Vertrags-, Policy- und eingefrorenen
-  Benchmarkprüfungen einrichten. Teure vollständige RT-Läufe separat planen.
-- Seed und Run tatsächlich übertragen beziehungsweise versioniert ableiten.
-  Gegenwärtig verwenden die Benchmarks Run 1; `SionnaHelper` sendet nur
-  `GetSeed()`. Getrennte Mobilitäts-, RT- und Paketstreams sowie unveränderte
-  Fallidentitäten bei vertauschter Reihenfolge/paralleler Ausführung prüfen.
-  Den vorhandenen knotenbezogenen Mobilitätsgenerator weiterverwenden und
-  globale NumPy-Ziehungen vor der Serverinitialisierung auditieren.
-- Unveränderliche Quellhashes zum Messzeitpunkt von den Identitäten späterer
-  Test-/Replayversionen unterscheiden. Historische Messungen dürfen weder
-  ihre Provenienz verlieren noch als Ergebnisse neuer Quellen erscheinen.
+`SionnaHelper::AssignStreams(s)` reserviert RT-ID $s$ und Mobilitäts-ID $s+1$
+(Default 0/1, Rückgabewert 2). Andere ns-3-Zufallsobjekte benötigen disjunkte IDs.
+`SimInitMessage.randomness` überträgt Mappingversion 1, tatsächlichen ns-3-Seed,
+Run und beide IDs. Für Domäne $q$ (`rt` oder `mobility`) gilt
 
-Abnahmekriterium: Eine saubere gesperrte Linux-Umgebung prüft den bestehenden
-Referenzsatz; Text-/Binärhashes sind portabel dokumentiert, lokale Studien
-wieder zugänglich und jeder Lauf besitzt einen nachvollziehbaren Endstatus.
-Fehlgeschlagene CI-Läufe liefern verwertbare Logs.
+\[
+ D_q=\operatorname{SHA256}(\operatorname{ASCII}(
+ \texttt{ns3sionna-rng-v1:seed:run:stream:q})),\qquad
+ s_q=\operatorname{uint32be}(D_q[0:4]).
+\]
+
+Alle Zahlen sind dezimal, ohne Leerzeichen/Endzeile. RT bei Run 1/Stream 0
+verwendet direkt den ns-3-Seed: 42/43/44 bleiben erhalten. Beide PathSolver-Pfade
+verwenden $s_{rt}$; jeder Mobilitätsknoten verwendet
+`SeedSequence([s_mobility,node_id,0x51A0])`. Ziehungen anderer Knoten/RT verändern
+diesen Generator nicht. Das emuliert keine ns-3-Zufallsfolge und beweist keine
+statistische Unabhängigkeit. Wiederholte gleiche Tupel sind gepaarte Wiederholungen.
+Ohne neue Felder bleibt der Legacyvertrag (Version 0) erhalten; unbekannte
+Versionen/ungültige Tupel scheitern. Sidecars erfassen Tupel und effektive Seeds.
+
+`experiment_bundle.py` kopiert Konfigurationen, notwendige Szenen-/Mesh-/Material-
+und Laufinputs sowie Ergebnisse/Logs unverändert. Der externe
+[Artefaktkatalog](experiments/r1/catalog.json) hält den vertrauenswürdigen Indexhash
+und relative lokale Zugriffspfade; ein gehosteter Download wird nicht behauptet.
+Verifikation prüft das vollständige Inventar, relative Pfade, Referenzabschluss
+und Rohbinär-/LF-Texthashes. Historische Messzeitpunkt-Quellhashes bleiben erhalten;
+fehlende Ausführungsprovenienz bleibt unbekannt. Reproduktion schreibt neue
+Ausführungs-/Validierungsnachweise außerhalb des unveränderten Bundles.
+Native Metriken werden mit rtol $10^{-4}$ und atol $10^{-7}$ verglichen;
+Rang, Tonindex und Frequenz sind exakt. Laufzeit und maschinenübergreifende
+Bytegleichheit gehören nicht zur numerischen Abnahme. `--mode rt` rechnet frisch,
+`--mode frozen` analysiert den gespeicherten Kanal. 10000 Samples sind ein
+Reproduktionsprüfsatz, kein Konvergenznachweis.
+
+`check_cpu_environment.py --strict` prüft Python 3.12.12, pip 26.0.1, alle
+55 bestehenden Paketpins, `pip check`, Compiler/CMake/Protobuf/ZMQ/LLVM, aktuelle
+Bindings und tatsächliche LLVM-Ausführung. Systemversionen sind dokumentiert,
+nicht hermetisch gesperrt. Befehle und Format stehen im
+[nativen Vertrag](doc/provenance-cpu-increment.md).
 
 ##### R2: Vollständiger Kalibrierprofilvertrag und erweiterte PER-Validierung
 
@@ -1154,11 +1158,11 @@ bereits geleistete Arbeit wird damit nicht rückwirkend bewertet.
 versioniertem Laufmanifest, erste CPU-CI sowie Regression und Korrektur des
 deaktivierten Caches. Vertrag, Schemamigration und verbleibende Grenzen stehen
 in [der Inkrementdokumentation](doc/provenance-cpu-increment.md), Prüfergebnisse
-in Abschnitt 7.19. R1/R3 sind damit nicht vollständig abgeschlossen. Der oben
+in Abschnitt 7.19. R1 ist nun durch die native Abnahme in 7.23 abgeschlossen. Der oben
 referenzierte ausführliche Phase-5-Plan war im aktuellen Checkout und im
 durchsuchten Arbeitsbereich nicht vorhanden; maßgeblich war der hier enthaltene
-Restplan. Weitere R1-/R3-Arbeit bleibt offen; R2, R4 und R5 folgen innerhalb
-ihrer jeweiligen Abhängigkeiten. Korrektheit, Provenienz, Kalibrierung und
+Restplan. Weitere R3-/R4-/R5-/R6-Arbeit bleibt außerhalb der R1-Abnahme.
+R2 wird durch R1 nicht erweitert. Korrektheit, Provenienz, Kalibrierung und
 Optimierung bleiben getrennt prüfbare Änderungen.
 
 Die Prüfung vom 1. Oktober bestätigte acht Kalibrier-Unit-Tests sowie alle
@@ -5139,7 +5143,7 @@ HE MCS 0/BCC/32 Byte/1x1 und wird nicht auf diese 2x2-Fälle übertragen.
 
 Dieses Inkrement erweitert die vorhandenen Runner und korrigiert ausschließlich
 den deaktivierten Cachepfad. Die historischen Messmanifeste, Exporte und
-Messzeitpunkt-Quellhashes bleiben erhalten; R1 und R3 bleiben offene Pakete.
+Messzeitpunkt-Quellhashes bleiben erhalten; R1/R3 waren zu diesem Zeitpunkt offen.
 Der vollständige Vertrag steht in `doc/provenance-cpu-increment.md`.
 
 Neue Benchmarkläufe besitzen ein additives `run.json` mit
@@ -5233,7 +5237,7 @@ Die nachfolgende Cachearbeit ist getrennt in Abschnitt 7.20 dokumentiert.
 Dieses Inkrement ergänzt den vorhandenen nativen Sockettest und IPC-Runner.
 Die historischen Exportdateien, Fixtures, Manifeste und Messzeitpunkt-Hashes
 bleiben erhalten; ihre früheren Laufzeiten werden nicht als neue Messung
-interpretiert. R1 und R3 sind weiterhin nicht vollständig abgeschlossen.
+interpretiert. R1/R3 waren zum Zeitpunkt dieses Inkrements nicht vollständig abgeschlossen.
 Der ausführliche referenzierte Phase-5-Plan fehlt weiterhin im Checkout;
 der eingebettete R1-R6-Plan bleibt die verwendete Anforderungsgrundlage.
 
@@ -5564,6 +5568,29 @@ Transporttimeouts und Budgetaushandlung sowie Live-/GPU-/gehostete CPU-Evidenz.
 Der ungecachte Getter behält seine unabhängige öffentliche Wertkopie. Dieses
 Inkrement reduziert keine MU-PHY-Gruppenrechnung und erweitert weder die
 HE-MCS-0/BCC/32-Byte/1x1-Kalibrierung noch den physikalischen CSI-Vertrag.
+
+### 7.23 Native R1-Abnahme
+
+Am 7. Oktober 2026 bestanden im bestehenden nativen Conda-CPU-Environment:
+
+- gezielte Neubauten von Tests und beiden betroffenen Benchmarks nach
+  Protobuf-/C++-Konfigurationsänderungen;
+- strikte Umgebungsprüfung ohne Pinabweichung und tatsächliches
+  `llvm_ad_mono_polarized`;
+- sieben frische 10000-Sample-Traces: wiederholte Tupel (Run 1 und Run 2)
+  liefern byteidentische Kanäle; alternative Runs/Streambereiche leiten andere
+  Seeds ab; Run 1/RT-ID 0 erhält 42/43/44;
+- verschobener repräsentativer Bundle: 20 Dateien verifiziert, frisches RT
+  und eingefrorener Replay mit unabhängiger NumPy-Referenz bestanden; der
+  ursprüngliche Szenenpfad war für den RT-Replay nicht verfügbar;
+- Bundle der lokalen 5.2.4/5.2.5-Studien: 129 Dateien unverändert verifiziert,
+  je ein nativer Replay bestanden; historische Ausführung bleibt unbekannt;
+- etablierte CPU-Regressionen sequenziell: sieben native Suites, 58 Fälle;
+  98 Python-Tests, davon 96 bestanden und zwei optionale Exporttests ausgelassen.
+
+Die vollständigen lokalen Pakete und unveränderlichen Indexidentitäten stehen
+im versionierten Artefaktkatalog. Neue Messdaten bleiben außerhalb von Git;
+historische Messhashes, Datensätze und R2 wurden nicht verändert.
 
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 

@@ -17,6 +17,7 @@
 #include "ns3/mimo-precoding-matrix.h"
 #include "ns3/multi-model-spectrum-channel.h"
 #include "ns3/simulator.h"
+#include "ns3/rng-seed-manager.h"
 #include "ns3/sionna-helper.h"
 #include "ns3/sionna-mobility-model.h"
 #include "ns3/sionna-mimo-helper.h"
@@ -5182,12 +5183,48 @@ class CacheBudgetTest : public TestCase
     }
 };
 
+class SionnaRandomStreamsTest : public TestCase
+{
+  public:
+    SionnaRandomStreamsTest() : TestCase("explicit seed, run and stream export and atomic rejection") {}
+    void DoRun() override
+    {
+        const auto oldSeed = RngSeedManager::GetSeed();
+        const auto oldRun = RngSeedManager::GetRun();
+        RngSeedManager::SetSeed(43);
+        RngSeedManager::SetRun(7);
+        SionnaHelper helper("", "inproc://rng-contract");
+        NS_TEST_ASSERT_MSG_EQ(helper.AssignStreams(12), 2, "Reserve RT and mobility IDs");
+        ns3sionna::SimInitMessage message;
+        helper.PopulateRandomness(message);
+        const auto& rng = message.randomness();
+        NS_TEST_ASSERT_MSG_EQ(rng.mapping_version(), 1, "Mapping version");
+        NS_TEST_ASSERT_MSG_EQ(rng.ns3_seed(), 43, "Export actual global seed");
+        NS_TEST_ASSERT_MSG_EQ(rng.ns3_run(), 7, "Export actual global run");
+        NS_TEST_ASSERT_MSG_EQ(rng.rt_stream(), 12, "RT stream");
+        NS_TEST_ASSERT_MSG_EQ(rng.mobility_stream(), 13, "Mobility stream");
+        const auto before = message.SerializeAsString();
+        for (int64_t invalid : std::array<int64_t, 2>{-1, std::numeric_limits<int64_t>::max()})
+        {
+            bool rejected = false;
+            try { helper.AssignStreams(invalid); }
+            catch (const std::invalid_argument&) { rejected = true; }
+            NS_TEST_ASSERT_MSG_EQ(rejected, true, "Invalid stream range accepted");
+            helper.PopulateRandomness(message);
+            NS_TEST_ASSERT_MSG_EQ(message.SerializeAsString(), before, "Rejection changed assignment");
+        }
+        RngSeedManager::SetSeed(oldSeed);
+        RngSeedManager::SetRun(oldRun);
+    }
+};
+
 class SionnaTestSuite : public TestSuite
 {
   public:
     SionnaTestSuite()
         : TestSuite("sionna", UNIT)
     {
+        AddTestCase(new SionnaRandomStreamsTest, TestCase::QUICK);
         AddTestCase(new DisabledCacheFreshReplyTest, TestCase::QUICK);
         AddTestCase(new CacheGetterOwnershipTest, TestCase::QUICK);
         AddTestCase(new CacheBudgetTest, TestCase::QUICK);

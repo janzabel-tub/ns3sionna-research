@@ -7,3 +7,7 @@
 /data/phase5_2_independent_spacing/
 # Phase 5.2.5 raw channels, measurements, plots and validation logs stay local.
 /data/phase5_2_csi_aging/
+
+# Portable R1 payloads stay local; their trusted catalog is versioned.
+/experiments/r1/*
+!/experiments/r1/catalog.json

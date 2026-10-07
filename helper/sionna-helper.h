@@ -110,6 +110,13 @@ public:
      */
     void PopulateMimoConfiguration(ns3sionna::SimInitMessage& simulationInfo) const;
 
+    /** Reserve two consecutive nonnegative RNG stream IDs (RT, mobility).
+     * Callers must allocate other ns-3 objects outside this reserved range.
+     * The mapping snapshots RngSeedManager seed/run when the message is built.
+     */
+    int64_t AssignStreams(int64_t stream);
+    void PopulateRandomness(ns3sionna::SimInitMessage& simulationInfo) const;
+
     /**
      * Connect ns3 to Sionna.
      */
@@ -182,6 +189,8 @@ private:
     AntennaArrayConfiguration m_txArray;
     AntennaArrayConfiguration m_rxArray;
     std::map<uint32_t, NodeOrientation> m_nodeOrientations;
+    uint64_t m_rtStream{0};
+    uint64_t m_mobilityStream{1};
     std::string m_time_evo_model; // position or doppler based
 
 public:

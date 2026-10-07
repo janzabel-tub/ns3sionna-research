@@ -11,3 +11,6 @@
 *.cc whitespace=cr-at-eol
 *.h whitespace=cr-at-eol
 /patches/*.patch text eol=lf whitespace=-blank-at-eol
+
+# New fields retain the legacy Protobuf source line endings.
+*.proto whitespace=cr-at-eol

@@ -7,6 +7,8 @@
  */
 
 #include "sionna-helper.h"
+#include <limits>
+#include <stdexcept>
 #include "ns3/core-module.h"
 #include "ns3/mobility-module.h"
 #include "ns3/network-module.h"
@@ -203,9 +205,33 @@ SionnaHelper::ClearNodeOrientations()
     m_nodeOrientations.clear();
 }
 
+int64_t
+SionnaHelper::AssignStreams(int64_t stream)
+{
+    if (stream < 0 || stream == std::numeric_limits<int64_t>::max())
+    {
+        throw std::invalid_argument("SionnaHelper: two nonnegative stream IDs required");
+    }
+    m_rtStream = static_cast<uint64_t>(stream);
+    m_mobilityStream = m_rtStream + 1;
+    return 2;
+}
+
+void
+SionnaHelper::PopulateRandomness(ns3sionna::SimInitMessage& simulationInfo) const
+{
+    auto* randomness = simulationInfo.mutable_randomness();
+    randomness->set_mapping_version(1);
+    randomness->set_ns3_seed(RngSeedManager::GetSeed());
+    randomness->set_ns3_run(RngSeedManager::GetRun());
+    randomness->set_rt_stream(m_rtStream);
+    randomness->set_mobility_stream(m_mobilityStream);
+}
+
 void
 SionnaHelper::PopulateMimoConfiguration(ns3sionna::SimInitMessage& simulationInfo) const
 {
+    PopulateRandomness(simulationInfo);
     auto writeArrayConfig = [](const AntennaArrayConfiguration& source,
                                ns3sionna::AntennaArrayConfig* target) {
         target->set_num_rows(source.numRows);

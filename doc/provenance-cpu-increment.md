@@ -1,10 +1,11 @@
-# Portable provenance and initial CPU CI (R1/R3 increment)
+# Portable provenance and native CPU reproduction
 
-This increment extends the existing tools. It does not complete R1 or R3.
-The model's referenced `doc/phase-5-implementation-plan.md` was absent from
-this checkout and the searched workspace; the embedded R1/R3 requirements in
-`ns3sionna_mimo_model.md` define this increment.
-
+R1 completes one native CPU subphase: explicit seed/run/stream mapping,
+relocatable experiment bundles and lightweight lock/system checks. Acceptance
+requires a relocated bundle to verify and a small RT/native experiment to
+reproduce in the existing Conda CPU environment, followed by sequential CPU
+regressions. Containers, Docker, resume and GPU validation are outside this scope.
+Historical measurement hashes and the closed R2 scope remain unchanged.
 ## Run manifest v1 and migration
 
 New benchmark runs add `run.json` (`schema: ns3sionna.run`, `schema_version: 1`).
@@ -28,12 +29,28 @@ and scientific verdicts, and identify the legacy manifest's version/subphase.
 Relative source and output paths support relocation; absolute command/build/input
 paths are descriptive host provenance, not portable identity keys.
 
-The existing seed/run contracts remain unchanged: ns-3 Run 1; convergence seeds
-42/43/44; seed transfer and stream independence are not extended. The sidecar
-explicitly reports that separate streams are not assigned. RT records the actual
-Mitsuba variant before the existing strict CPU check, including rejection. Frozen IPC and offline
-calibration use descriptive backend identities, not an RT-backend claim.
-The interrupted optional GPU selector was removed; GPU validation belongs to R6.
+## Seed/run/stream mapping v1
+
+`SionnaHelper::AssignStreams(s)` reserves two consecutive nonnegative int64 IDs:
+RT `s`, mobility `s+1`, returning 2. The default is 0/1; callers reserve a disjoint
+range for other ns-3 random objects. `PopulateRandomness` snapshots the actual
+`RngSeedManager` seed/run into `SimInitMessage.randomness`; the benchmark exposes
+`--seed`, `--run`, `--stream`. Distinct IDs and positive seed/run are validated.
+Python consumes that tuple before loading the scene. This maps RNG domains;
+it does not emulate ns-3's MRG32k3a or assert statistical independence.
+
+For domain `rt` or `mobility`, the derived uint32 is the first four SHA-256 bytes,
+big endian, of ASCII `ns3sionna-rng-v1:<seed>:<run>:<stream>:<domain>` (decimal
+integers, no newline). RT at Run 1/stream 0 uses the ns-3 seed directly, preserving
+42/43/44. Both PathSolver paths receive the effective RT seed. Mobility uses its
+own effective seed and per-node `SeedSequence([mobility_seed,node_id,0x51A0])`;
+other-node draws and RT draws cannot advance this generator. Repeated traces of
+the same tuple intentionally share randomness; they are not independent samples.
+Absent fields mean legacy mapping v0, retaining old RT and mobility behavior.
+Unknown versions/invalid tuples fail. New `run.json` records actual tuples and
+effective seeds separately from historical configuration/measurement hashes.
+RT records the actual Mitsuba variant, including backend rejection. GPU validation
+belongs to R6; frozen replay and calibration never claim a fresh RT backend.
 
 Statuses are `incomplete`, `failed`, `success`. Before setup, an atomic JSON
 replacement creates `incomplete` with no finish time. Normal completion seals
@@ -63,6 +80,50 @@ are rejected. Protobufs are always verified against raw bytes and never normaliz
 `.gitattributes` fixes historical CSV/JSON checkouts to LF and disables text
 conversion for Protobuf/PDF files. Historical raw hashes retain their original
 meaning; they are not silently reinterpreted as canonical hashes.
+
+## Relocatable bundles
+
+`tools/experiment_bundle.py export --study <export> --output <empty-directory>`
+copies original configurations, channels, results, manifests and logs verbatim.
+It includes scene XML/includes, meshes/materials/textures and all recorded run
+inputs; missing or incompatible inputs fail (supply recovered bytes with `--input`).
+Recorded configuration/channel and raw measurement identities are checked without
+replacing historical source hashes. `index.json` contains only relative payload
+locators and the complete hash inventory. Keep its printed raw SHA-256 outside
+the bundle: [the trusted catalog](../experiments/r1/catalog.json) records local
+artifact access. It claims no hosted download. Copy the entire bundle directory
+and retain the catalog separately; original host paths remain descriptive only.
+
+`verify --bundle <relocated> --index-sha256 <trusted-hash>` authenticates the index,
+checks dependency closure and rejects path escapes, symlinks, missing/extra files
+and changed content. LF-text matches may differ in raw bytes and report those
+paths; binary hashes must match exactly. Index JSON itself requires its trusted
+raw hash. Verification does not promote unknown/failed historical execution.
+
+`representative --output <bundle> --samples 10000` reuses the established native
+configuration, CPU trace and NumPy/native diagnostics for one fixed 2x2 link.
+`reproduce --bundle <relocated> --index-sha256 <hash> --mode rt --output <empty>`
+loads only bundled inputs and compares one indexed experiment's scientific
+metrics at rtol 1e-4/atol 1e-7; rank, tone index and frequency are exact. Runtime
+and cross-machine byte equality are not acceptance criteria. `--mode frozen`
+replays the saved channel; `--record` selects another channel, including aging.
+New execution/validation sidecars belong to replay output; the bundle is unchanged.
+Creation failures retain a partial failed study, never a complete bundle marker.
+The representative budget demonstrates reproduction, not sample convergence.
+
+## Native CPU environment
+
+Use the existing `sionna-venv` Conda environment. System dependencies are GCC/G++,
+CMake, pkg-config, patch, libzmq3-dev, cppzmq-dev, libprotobuf-dev,
+protobuf-compiler and a loadable LLVM library (Ubuntu: `llvm`). Python 3.12.12,
+pip 26.0.1 and the existing exact lock define the reference environment; install
+with `python -m pip install --no-deps -r requirements_cpu_ci.lock`, then `pip check`.
+`tools/check_cpu_environment.py --strict` reports JSON and fails on pin deviations,
+missing tools/libraries/bindings or an actual non-LLVM backend. Without `--strict`,
+version deviations are reported while dependency/backend failures still fail.
+Binding freshness is timestamp evidence; the targeted native build must regenerate
+bindings and rebuild benchmarks after C++/Protobuf changes. No packages are installed
+by the checker. System package versions are recorded, not hermetically locked.
 
 ## CPU CI and local reproduction
 
@@ -127,10 +188,10 @@ PNG hashes remain raw-byte hashes. The model records the details.
 Builds, logs and generated measurements remain under `/tmp`; no new datasets or
 recorded fixtures are committed. Existing historical exports are reused.
 
-R1 still needs an external artifact index/access for local 5.2.4/5.2.5 studies,
-seed/run/stream changes and independence tests, resume validation if resume is
-introduced, wheel/system dependency locking, and container recipes building the
-current revision (existing Docker/Singularity recipes still clone upstream).
+R1 now provides native seed/run/streams, complete local study bundles and their
+trusted catalog, representative relocation/reproduction and lock/system checks.
+Resume remains unsupported. Container recipes and GPU validation are outside this
+native CPU scope. The initial CI results above remain historical.
 At completion of this first increment, R3 still needed broader time/direction/
 atomic-batch regressions, cache occupancy and zero-access statistics,
 inactive-link cleanup, overflow/allocation budgets,
@@ -140,3 +201,13 @@ GPU/RT/reference validation and other R2/R4/R5/R6 work remain outside this incre
 The subsequent [R3 cache increment](../ns3sionna_mimo_model.md#720-zweites-r3-inkrement-cachekorrektheit-und-belegungsstatistik)
 implements those correctness regressions, counters and lazy inactive-link cleanup.
 It records new validation separately; the first increment's results above remain historical.
+
+## R1 native acceptance, 7 October 2026
+
+The strict check matched all 55 pins, Python/pip and actual LLVM execution.
+Seven fresh seed/run/stream traces retained default 42/43/44 and repeated tuple
+channel bytes. The relocated representative verified 20 files and passed fresh
+RT/native and frozen replay with the original scene root unavailable. The local
+5.2.4/5.2.5 bundle verified 129 files and passed one frozen replay per study.
+Seven native suites (58 cases) and 98 Python tests passed sequentially (96 passed,
+two optional exports skipped). Historical measurements and R2 remain unchanged.

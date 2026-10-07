@@ -79,13 +79,22 @@ def tool_versions():
 def source_identity():
     def git(*args):
         return subprocess.check_output(['git', '-C', str(MODULE), *args], timeout=10)
-    paths = git('ls-files', '--cached', '--others', '--exclude-standard', '-z').decode().split('\0')
-    sources = {name: digest(MODULE / name) for name in paths
+    try:
+        if Path(git('rev-parse', '--show-toplevel').decode().strip()).resolve() != MODULE.resolve():
+            raise ValueError('Module is a source snapshot inside another repository')
+        paths = git('ls-files', '--cached', '--others', '--exclude-standard', '-z').decode().split('\0')
+        revision = git('rev-parse', 'HEAD').decode().strip()
+        changes = git('status', '--porcelain').decode().splitlines()
+        delta_hash = hashlib.sha256(git('diff', 'HEAD', '--binary')).hexdigest()
+    except (OSError, ValueError, subprocess.SubprocessError):
+        # A copied module is a source snapshot, not a pristine Git checkout.
+        paths = [str(p.relative_to(MODULE)) for p in MODULE.rglob('*') if p.is_file()
+                 and not any(part in ('__pycache__', '.git', '.idea') for part in p.parts)]
+        revision, changes, delta_hash = None, None, None
+    sources = {name: digest(MODULE / name) for name in sorted(paths)
                if name and not name.startswith('data/') and Path(name).suffix in TEXT_SUFFIXES}
-    delta = git('diff', 'HEAD', '--binary')
-    return {'revision': git('rev-parse', 'HEAD').decode().strip(),
-            'local_changes': git('status', '--porcelain').decode().splitlines(),
-            'tracked_diff_sha256': hashlib.sha256(delta).hexdigest(), 'files': sources}
+    return {'revision': revision, 'local_changes': changes,
+            'tracked_diff_sha256': delta_hash, 'files': sources}
 
 
 def ns3_identity():
@@ -125,7 +134,8 @@ class Run:
                      'command': [sys.executable, *sys.argv], 'native_commands': [],
                      'backend': None, 'inputs': {}, 'artifacts': {},
                      'randomness': {'run_ns3': self.configuration.get('controls', {}).get('run_ns3'),
-                         'streams': 'not independently assigned; see configuration'},
+                         'configurations': [],
+                         'contract': 'per-configuration mapping; absent Protobuf fields mean legacy v0'},
                      'environment': {'platform': platform.platform(), 'machine': platform.machine(),
                          'processor': cpu_model(), 'python': platform.python_version(),
                          'cpu_count': os.cpu_count(), 'tools': tool_versions(),
@@ -178,6 +188,16 @@ class Run:
         finally:
             ACTIVE_RUN.reset(self.token)
         return False
+
+
+def randomness_selected(config):
+    """Record actual exported tuples and derived seeds without rewriting legacy data."""
+    run = ACTIVE_RUN.get()
+    if run:
+        from random_streams import resolve_randomness
+        record = resolve_randomness(config)
+        if record not in run.data['randomness']['configurations']:
+            run.data['randomness']['configurations'].append(record)
 
 
 def backend_selected(name):

@@ -119,6 +119,17 @@ message SimInitMessage {
     repeated NodeInfo nodes = 11;
     AntennaArrayConfig tx_array = 12;
     AntennaArrayConfig rx_array = 13;
+
+    // Absent means legacy seed-only behavior. Explicit stream IDs reserve
+    // independent RT and Python mobility domains, not bit-identical ns-3 RNGs.
+    message Randomness {
+        uint32 mapping_version = 1;
+        uint32 ns3_seed = 2;
+        uint64 ns3_run = 3;
+        uint64 rt_stream = 4;
+        uint64 mobility_stream = 5;
+    }
+    Randomness randomness = 14;
 }
 
 // sent my Sioanna to confirm reception of SimInitMessage or CloseRequest

@@ -349,3 +349,27 @@ small, idempotent ns-3.40 payload-context patch. Details and formulas are in
 Use [performance-sionna-mimo](examples/performance-sionna-mimo.md) for configurable
 TCP downlinks with two AP/STA pairs on one channel, antenna/channel-width sweeps,
 ideal SVD beamforming, and 100 ms throughput and average PHY SNR summaries.
+
+## Native CPU reproduction (Phase 5 R1)
+
+Use the existing Conda `sionna-venv` environment and the
+[lock/system checks and bundle contract](doc/provenance-cpu-increment.md).
+From ns-3, rebuild configuration consumers before running tests:
+
+```sh
+./ns3 build -j 2 sionna-test ns3_wifi_sumimo_benchmark ns3_sionna_cache_ipc_benchmark
+conda run --no-capture-output -n sionna-venv python contrib/sionna/tools/check_cpu_environment.py --strict
+conda run --no-capture-output -n sionna-venv python contrib/sionna/tools/experiment_bundle.py representative --output=/tmp/r1-bundle
+mv /tmp/r1-bundle /tmp/r1-relocated
+# Set R1_INDEX_SHA256 to the printed index_sha256, retained outside the bundle.
+conda run --no-capture-output -n sionna-venv python contrib/sionna/tools/experiment_bundle.py verify --bundle=/tmp/r1-relocated --index-sha256="$R1_INDEX_SHA256"
+conda run --no-capture-output -n sionna-venv python contrib/sionna/tools/experiment_bundle.py reproduce --bundle=/tmp/r1-relocated --index-sha256="$R1_INDEX_SHA256" --mode=rt --output=/tmp/r1-replay
+conda run --no-capture-output -n sionna-venv python contrib/sionna/tools/run_cpu_regressions.py
+```
+
+The [artifact catalog](experiments/r1/catalog.json) identifies packaged local
+5.2.4/5.2.5 studies. Export additional studies with `export --study <directory>`;
+copy the entire bundle to relocate it. Historical hashes/statuses are preserved.
+`SionnaHelper::AssignStreams(s)` reserves RT/mobility IDs `s`/`s+1`; native
+configuration accepts `--seed`, `--run`, `--stream`. Run 1/RT stream 0 preserves
+RT seeds 42/43/44. This subphase requires no containers or Docker.

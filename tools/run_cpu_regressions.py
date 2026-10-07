@@ -43,7 +43,7 @@ def main():
     # Import checks must establish the actual RT backend in this process too.
     import benchmark_sumimo
     benchmark_sumimo.runtime()
-    modules = ('test_provenance', 'test_calibrate_eesm', 'test_benchmark_sumimo',
+    modules = ('test_cpu_environment', 'test_random_streams', 'test_experiment_bundle', 'test_provenance', 'test_calibrate_eesm', 'test_benchmark_sumimo',
                'test_benchmark_rt_convergence', 'test_benchmark_cache_ipc',
                'test_mimo_data_contract', 'test_deterministic_mobility', 'test_coherence_time_units')
     tests = unittest.TestLoader().loadTestsFromNames(modules)

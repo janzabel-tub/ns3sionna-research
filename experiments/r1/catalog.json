@@ -1,0 +1,59 @@
+{
+  "acceptance": {
+    "native_cases": 58,
+    "native_suites": 7,
+    "optional_skips": 2,
+    "python_tests": 98,
+    "reports": {
+      "experiments/r1/checks/cpu-regressions.log": {
+        "bytes": 21752,
+        "raw_sha256": "9a2f5d7e510e9182ffdf8088dfa0eb207ea7d099113ab3f97aaf415d9a3224fc"
+      },
+      "experiments/r1/checks/environment.json": {
+        "bytes": 14181,
+        "lf_sha256": "48adf400ffda096eb0e5ca5bb2279e6dbfa03f7e06846519bbf5b26ef63ac80e",
+        "raw_sha256": "48adf400ffda096eb0e5ca5bb2279e6dbfa03f7e06846519bbf5b26ef63ac80e",
+        "text_hash_version": 1
+      },
+      "experiments/r1/seed-check/validation.json": {
+        "bytes": 2134,
+        "lf_sha256": "10b22a2f0a9d77084159653ea074e6e2e34235fff3aaf8ece8da16009744660e",
+        "raw_sha256": "10b22a2f0a9d77084159653ea074e6e2e34235fff3aaf8ece8da16009744660e",
+        "text_hash_version": 1
+      }
+    },
+    "seed_traces": 7,
+    "strict_environment": "passed"
+  },
+  "access": "Complete bundles are local workspace artifacts at the relative paths below. Copy the whole directory to another CPU environment and retain this catalog separately as the trusted index identity. No hosted download is claimed.",
+  "artifacts": [
+    {
+      "historical_execution_status": "unknown; original exports have no run.json",
+      "index": "experiments/r1/local-studies/index.json",
+      "index_sha256": "65e39918b341f8239e342c26f9b710d0b0e2234c77d888ebedcf6800e0026d59",
+      "path": "experiments/r1/local-studies",
+      "semantics": "Original measurements, configuration and channel identities, verdicts, source hashes and raw bytes are retained. Packaging checks recorded identities and does not rerun historical scientific acceptance. Required scene assets are included.",
+      "studies": [
+        "5.2.4",
+        "5.2.5"
+      ]
+    },
+    {
+      "index": "experiments/r1/representative-relocated/index.json",
+      "index_sha256": "bc450151002baafc8aec912a85e316704b6f7eb8d3c3732a573c9bb4657228fe",
+      "path": "experiments/r1/representative-relocated",
+      "replay_outputs": [
+        "experiments/r1/representative-rt-replay",
+        "experiments/r1/representative-frozen-replay"
+      ],
+      "samples_per_src": 10000,
+      "studies": [
+        "R1.representative"
+      ],
+      "validation": "relocated inventory verified; fresh RT and frozen native reproduction passed; original scene root unavailable for RT replay"
+    }
+  ],
+  "path_base": "module root",
+  "schema": "ns3sionna.experiment-catalog",
+  "schema_version": 1
+}
