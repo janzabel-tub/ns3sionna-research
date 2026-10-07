@@ -595,6 +595,78 @@ SionnaPropagationCache::GetStorageStatistics() const
 }
 
 
+void
+SionnaPropagationCache::SetBatchPoolLimit(uint64_t capacityBytes)
+{
+    m_batchPoolLimit = capacityBytes;
+    const auto bytes = m_batchPool.capacity() * sizeof(PendingEntries::value_type);
+    if (bytes > capacityBytes)
+    {
+        PendingEntries{}.swap(m_batchPool);
+    }
+}
+
+SionnaPropagationCache::PoolStatistics
+SionnaPropagationCache::GetPoolStatistics() const
+{
+    auto stats = m_pool;
+    stats.buffers = m_batchPool.capacity() == 0 ? 0 : 1;
+    stats.capacityBytes = m_batchPool.capacity() * sizeof(PendingEntries::value_type);
+    return stats;
+}
+
+SionnaPropagationCache::PendingBatch::~PendingBatch()
+{
+    owner.ReleaseBatchStorage(entries);
+}
+
+void
+SionnaPropagationCache::AcquireBatchStorage(PendingEntries& entries, uint64_t count) const
+{
+    if (count == 0)
+    {
+        return;
+    }
+    const auto requestedBytes = count * sizeof(PendingEntries::value_type);
+    if (m_batchPoolLimit == 0 || requestedBytes > m_batchPoolLimit)
+    {
+        // An oversized temporary must not consume the useful smaller idle slot.
+        ++m_pool.misses;
+        ++m_pool.bypasses;
+    }
+    else
+    {
+        entries.swap(m_batchPool);
+        if (entries.capacity() >= count)
+        {
+            ++m_pool.hits;
+            return;
+        }
+        ++m_pool.misses;
+    }
+    const auto oldCapacity = entries.capacity();
+    entries.reserve(count);
+    if (entries.capacity() > oldCapacity)
+    {
+        ++m_pool.allocations;
+    }
+}
+
+void
+SionnaPropagationCache::ReleaseBatchStorage(PendingEntries& entries) const noexcept
+{
+    // Destroy every moved-from, expired, or rejected entry before retaining memory.
+    // This pool owns only raw vector capacity, including when caching is disabled.
+    entries.clear();
+    const auto bytes = entries.capacity() * sizeof(PendingEntries::value_type);
+    if (bytes <= m_batchPoolLimit && entries.capacity() > m_batchPool.capacity())
+    {
+        entries.swap(m_batchPool);
+        m_pool.peakCapacityBytes = std::max(m_pool.peakCapacityBytes,
+            static_cast<uint64_t>(bytes));
+    }
+}
+
 const SionnaPropagationCache::CacheEntry&
 SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityModel> b,
                                            CacheEntry& uncached) const
@@ -718,8 +790,9 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
     }
 
     // Validate and decode every sample before committing any cache entry.
-    std::vector<std::pair<CacheKey, CacheEntry>> pendingEntries;
-    pendingEntries.reserve(batchEntries);
+    PendingBatch pendingBatch(*this);
+    auto& pendingEntries = pendingBatch.entries;
+    AcquireBatchStorage(pendingEntries, batchEntries);
     for (int csi_i=0; csi_i < csi_response.csi_size(); csi_i++) {
         const auto& csiMessage = csi_response.csi(csi_i);
         if (csiMessage.start_time() > csiMessage.end_time() ||

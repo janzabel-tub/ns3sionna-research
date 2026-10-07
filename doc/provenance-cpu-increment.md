@@ -192,11 +192,13 @@ R1 now provides native seed/run/streams, complete local study bundles and their
 trusted catalog, representative relocation/reproduction and lock/system checks.
 Resume remains unsupported. Container recipes and GPU validation are outside this
 native CPU scope. The initial CI results above remain historical.
-At completion of this first increment, R3 still needed broader time/direction/
-atomic-batch regressions, cache occupancy and zero-access statistics,
-inactive-link cleanup, overflow/allocation budgets,
-long-run memory limits, copy optimizations and extended cache/IPC sweeps.
-GPU/RT/reference validation and other R2/R4/R5/R6 work remain outside this increment.
+R3 now closes the remaining mobility-history and native staging-pool work.
+History arrays and one empty staging allocation have explicit retention bounds
+and actual reuse counters; history-free look-ahead clones restore committed
+mobility and RNGs after forecast failures. The existing actual-time motion update
+precedes forecasting and is not transactional. Cache correctness/budget/copy
+measurements below remain historical; live scaling, Doppler and GPU evidence
+remain R4–R6 work. R2 stays closed.
 
 The subsequent [R3 cache increment](../ns3sionna_mimo_model.md#720-zweites-r3-inkrement-cachekorrektheit-und-belegungsstatistik)
 implements those correctness regressions, counters and lazy inactive-link cleanup.
@@ -211,3 +213,23 @@ RT/native and frozen replay with the original scene root unavailable. The local
 5.2.4/5.2.5 bundle verified 129 files and passed one frozen replay per study.
 Seven native suites (58 cases) and 98 Python tests passed sequentially (96 passed,
 two optional exports skipped). Historical measurements and R2 remain unchanged.
+
+## R3 storage acceptance, 7 October 2026
+
+The fixed 15-case plan compared 300000 updates at caps 0/1/8/64/1024 and
+WALL/TIME/DISTANCE (Run 1, seeds 42/43/44, streams 0/1). All trajectories,
+control values and RNG states matched; slot IDs were reused and retained array
+bytes stayed at 48 per position/velocity pair (49152 bytes at cap 1024).
+The existing native fixture served 512 uncached RPCs with one staging allocation,
+511 hits and 336 bytes retained within 1 MiB. Forecast tests and six small real
+LLVM traces preserved serialized responses to the pre-R3 implementation.
+Seven native suites (60 cases) and 122 Python tests passed sequentially
+(120 passed, two optional local exports skipped); the strict lock/backend check
+passed. The relocated 39-file bundle verified from /tmp using system Python;
+a fresh native CPU storage run reproduced all deterministic result fields.
+
+The [R3 catalog](../experiments/r3/catalog.json) retains the trusted index hash
+and local relative paths. Existing Run status/validation separation and raw/LF
+hash conventions are unchanged. New measurements stay local; historical hashes
+and R1/R2 are preserved. Commands and byte-accounting exclusions are in the
+[module README](../README.md#bounded-mobility-storage-phase-5-r3).

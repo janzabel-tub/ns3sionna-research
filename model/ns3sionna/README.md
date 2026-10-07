@@ -43,3 +43,14 @@ Run `python ../../tools/check_cpu_environment.py --strict` in the existing Conda
 environment after rebuilding configuration consumers. Explicit seed/run/stream
 fields select mapping v1; absent fields preserve historical seed-only behavior.
 The general server requirements remain unchanged; R1 needs no container.
+
+## Bounded mobility history
+
+`--mobility_history_limit` defaults to 1024 position/velocity pairs per node;
+zero disables retention. Filled histories reuse arrays; getters and exported
+histories return copies, while old evicted RandomWalk timestamps raise `KeyError`.
+Look-ahead retains explicit epoch poses on history-free motion/RNG clones and
+restores committed state after forecast failures. Actual-time motion precedes
+forecasting. `mobility_storage_statistics()` reports NumPy data separately from
+Python/RT overhead. The [R3 storage command](../../README.md#bounded-mobility-storage-phase-5-r3)
+records a fixed plan, CSV checkpoints and existing Run/bundle provenance.

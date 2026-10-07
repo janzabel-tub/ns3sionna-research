@@ -1003,45 +1003,24 @@ Kriterien müssen vor Einsicht in neue finale Testdaten begründet werden.
 Das vorhandene Ergebnis 0,054886 wird nicht nachträglich als Bestehen von
 0,05 ausgegeben; Nullfehlerpunkte werden als obere Schranke behandelt.
 
-##### R3: Cachekorrektheit und langfristig begrenzte Speicherung
+##### R3: Cachekorrektheit und begrenzte Speicherung (abgeschlossen)
 
-Priorität: hoch; Voraussetzung eines aussagekräftigen Vergleichs ohne Cache.
+Die bestehenden Abnahmen umfassen neue ungecachte Antworten, inklusive
+Gültigkeitsränder, atomare Batchvalidierung, inaktive Linkbereinigung,
+Belegungs-/Kapazitätszähler, Dimensions-/Koeffizienten-/Antwort-/Snapshotbudgets
+und unabhängige Getterwerte (7.19–7.22). Die lokalen Zeit-/Link-/Tiefensweeps
+bleiben als getrennte historische Messungen erhalten.
 
-- Implementiert in 7.19/7.20: Regressionen für wiederholte deaktivierte
-  Anfragen mit unterschiedlichen noch gültigen Antworten, Gültigkeitsränder,
-  überlappende Snapshots, Richtung, kalte Linkeinträge und atomare
-  Ablehnung fehlerhafter Batches.
-- Implementiert in 7.19: Bei deaktiviertem Cache die neue dekodierte Antwort
-  direkt verwenden; frühere Akkumulation und Auswahl älterer Antworten
-  beseitigen. Wiederaktivierung beginnt kalt.
-- Implementiert in 7.20: Belegungs-, logische Speicher-/Kapazitäts- und
-  Spitzenzähler; `GetStats()` liefert vor dem ersten Zugriff null.
-  Abgelaufene Einträge auch in inaktiven Links bei Zugriff/Statistiklesen
-  deterministisch bereinigen und leere Buckets entfernen.
-  Offen: Mobilitätshistorien und Allokatorpools gesondert messen.
-- Implementiert in 7.21: konfigurierbare Dimensions-, Koeffizienten-, Antwort-,
-  Snapshot- und Nutzbytegrenzen vor CFR-/Cacheallokationen prüfen;
-  Multiplikation und Summen gegen Überlauf absichern. Zu große geplante
-  Serverbatches vor Mobilitätsfortschritt/RT ablehnen. Gültige und zukünftige
-  Snapshots niemals zur Budgetanpassung verdrängen. Verbleibende Grenzen:
-  keine Budgetaushandlung, keine Schranke für RT-Zwischenspeicher oder RSS.
-- Implementiert in 7.22: interne Cacheeinträge ausschließlich innerhalb eines
-  Getters ausleihen, skalare Zugriffe ohne CFR-Kopie ausführen und vollständig
-  validierte MU-Snapshots einmal dekodieren und per Nutzer-ID übernehmen.
-  Öffentliche Vektor-/Matrixergebnisse besitzen weiterhin unabhängige Werte.
-  Getrennte Getterzeiten werden gegen dieselbe instrumentierte Baseline gemessen;
-  Lebensdauer, Richtung, Zeitwahl und atomare Datenvalidierung bleiben erhalten.
-- Den vorhandenen IPC-Runner um Cache an/aus, fortschreitende Zeit,
-  wechselnde aktive Links und Look-ahead-Tiefen 1/4/16 erweitern.
-  Implementiert in 7.21: tatsächliche Tiefe `floor(sub_mode/receiver_count)`
-  dokumentieren, Nulltiefen zurückweisen und kleiner fortschreitender IPC-Lauf
-  mit exaktem Speicherbudget. Breite Zeit-/Link-/Tiefensweeps bleiben offen.
-
-Abnahmekriterium: Ungecachte Anfragen liefern die neue Antwort; gespeicherte
-Nutzbytes bleiben in langen Läufen mit begrenzter Arbeitsmenge innerhalb
-eines erklärten Budgets. Richtung, Zeitwahl und atomare Validierung bleiben
-korrekt. Allokator-/RSS-Verhalten wird separat ausgewiesen; freigegebene
-logische Bytes müssen nicht sofort an das Betriebssystem zurückkehren.
+Die verbleibende Arbeit wird als eine vollständige Unterphase abgeschlossen:
+begrenzte knotenbezogene Mobilitätshistorien mit Arraywiederverwendung,
+historiesparende Look-ahead-Checkpoints mit Wiederherstellung bei Vorhersagefehlern
+und ein begrenzter nativer Pool für leere Batch-Staging-Slots. Feste Abnahme:
+unveränderte deterministische Trajektorien und Look-ahead-Werte, endliche
+Retention bei Langläufen, tatsächliche Allokationswiederverwendung, unabhängige
+Getterwerte, atomare Datenvalidierung bei Fehlern und sequenzielle CPU-Regressionen.
+R1/R2 bleiben geschlossen. Live-RT/PHY-Skalierung, allgemeine CFR-/Protobuf-
+Allokatorersetzung und GPU-Nachweise gehören nicht dazu. Methoden stehen in 5.26,
+die Abschlussabnahme in 7.24. Logische Bytes sind keine harte RSS-Schranke.
 
 ##### R4: Live-Server-/PHY-Skalierung und gemessene Optimierungen
 
@@ -3534,6 +3513,40 @@ Matrix- und skalaren Fall sowie höchstens zehn Prozent Regression beim kleinen
 Default-Matrixfall. Nichterfüllung wird als solche berichtet. Diese Ziele
 belegen weder universelle Latenzgrenzen noch Live-RT-/PHY-/GPU-Skalierung.
 
+### 5.26 R3-Vertrag für Mobilitätshistorien und nativen Stagingpool
+
+**R3: begrenzte Mobilitäts- und Pool-Speicherung (abgeschlossen).**
+`--mobility_history_limit H` begrenzt die gemeinsam gespeicherten Positions-/
+Geschwindigkeitspaare pro Knoten (Default 1024; 0 oder `collect_history=False`
+deaktiviert die Historie). Bei gleicher Zeit werden bestehende Arrays überschrieben;
+nach Füllung werden die ältesten zwei Arrays mit `np.copyto` wiederverwendet.
+Getter und Historienexport liefern unabhängige Werte; nicht mehr gespeicherte
+RandomWalk-Zeitpunkte erzeugen `KeyError`. Direkte Historienarrays sind geliehene,
+wiederverwendete Slots. Für N Knoten gilt für die NumPy-Nutzdaten
+\(B_{hist} \le 48NH\): zwei float64-Vektoren mit je drei Komponenten.
+
+Look-ahead schreibt keine Zukunftshistorie: `clone_for_prediction()` kopiert nur
+veränderlichen Bewegungszustand und lokale RNGs. Pro Empfänger und Epoche werden
+Position/Geschwindigkeit explizit gespeichert, unabhängig von H. Mit R Empfängern
+und D budgetgeprüften Epochen gilt \(B_{forecast}=48RD\), zusätzlich 48N Byte
+Positions-/Geschwindigkeitszustand der Klone. Nach jeder Vorhersage, auch nach
+Platzierungs-/CFR-Fehlern, werden die ursprünglichen Knoten, ihre Historien und RNGs
+wieder verwendet; das globale NumPy-RNG wird ebenfalls zurückgesetzt.
+Bewegung bis zur tatsächlichen Anfragezeit wird vorher wie bisher ausgeführt;
+diese Aktualisierung ist keine Transaktion. Python-/RNG-/RT-/CIR-Overhead und RSS
+sind nicht in diesen Arraybytes enthalten. `mobility_storage_statistics()` trennt
+Historien, vorübergehende Epochen-/Klonzustände und Spitzen.
+
+`SetBatchPoolLimit(bytes)` begrenzt unabhängig von Cachebudgets einen leeren
+nativen Stagingvektor (Default 1 MiB; 0 deaktiviert). Ganze Batches durchlaufen
+zuerst die bestehenden Budgetprüfungen, dann Datenvalidierung vor Übernahme.
+Ein RAII-Lease löscht alle Einträge auch bei Fehlern; nur leere strukturelle
+Kapazität wird wiederverwendet. Übergrößen umgehen den Pool, kleinere Grenzen
+geben übergroße freie Kapazität sofort frei. `GetPoolStatistics()` trennt Hits,
+Misses, echte Reserve-Vergrößerungen, Bypässe und freie Kapazität vom CSI-Cache.
+Es werden keine CFR-, Frequenz-, Protobuf- oder Transportpuffer gepoolt;
+ungecachte CSI-Belegung bleibt null. Dies ist kein RSS- oder Latenzversprechen.
+
 ## 6. High-Level-API-Vertrag bis Unterphase 4.8
 
 ### 6.1 Typen, Besitz und Defaults
@@ -3938,7 +3951,7 @@ Simulator-Timer, keine implizite CSI-Abfrage und keinen MAC-Feedbacktransport;
 diese Grenzen verhindern, dass das explizite Forschungsmodell eine
 vollständige 802.11-Soundingprozedur vortäuscht.
 
-## 7. Validierung bis zum vierten Phase-5-R3-Inkrement
+## 7. Validierung bis zum R3-Abschluss
 
 Die native Suite sionna enthält die schnellen API-, Numerik- und Adapterfälle:
 
@@ -5326,7 +5339,7 @@ und erweiterte Live-/Zeit-/Link-/Look-ahead-Sweeps. Die offenen R1-Pakete aus
 ### 7.21 Drittes R3-Inkrement: Budgets und Look-ahead-Tiefe
 
 Dieses begrenzte Inkrement ergänzt die vorhandenen Cache-/Serververträge,
-Statistiken und Tests. R3 ist weiterhin offen. Der referenzierte ausführliche
+Statistiken und Tests. R3 war zu diesem Messzeitpunkt offen. Der referenzierte ausführliche
 Phase-5-Plan ist nicht vorhanden; der eingebettete R1-R6-Plan bleibt maßgeblich.
 Historische Exporte, aufgezeichnete Fixtures und Provenienz werden unverändert
 weiterverwendet. Neue Logs und Messungen bleiben ausschließlich lokal.
@@ -5458,7 +5471,7 @@ zurückgespult. Kein erforderlicher gültiger oder zukünftiger Snapshot wird
 zur Freigabe von Platz verdrängt. Transporttimeouts, Budgetaushandlung,
 Kopieroptimierungen, lange wechselnde Arbeitsmengen, breite Live-/GPU- und
 Look-ahead-Sweeps sowie der gehostete CPU-Nachweis bleiben außerhalb dieses
-Inkrements. R3 und die übrigen offenen Phase-5-Pakete sind nicht abgeschlossen.
+Inkrements. R3 war zu diesem Messzeitpunkt nicht abgeschlossen; seine Abschlussabnahme steht in 7.24.
 
 ### 7.22 Viertes R3-Inkrement: CFR-Kopierreduktion und Gettereigentum
 
@@ -5467,7 +5480,7 @@ von R3 um. Vier Produktionsdateien ändern ausschließlich Eigentum und Datenhal
 `mimo-channel-matrix.{h,cc}` und `sionna-propagation-cache.{h,cc}`. Der vorhandene
 IPC-Benchmark und seine Tests werden erweitert; ein zweites Framework oder neue
 versionierte Messfixtures entstehen nicht. Der Vertrag steht in Abschnitt 5.25.
-R3 und Phase 5 insgesamt bleiben offen.
+R3 und Phase 5 insgesamt waren zu diesem Messzeitpunkt offen; R3 schließt in 7.24.
 
 Die Baseline ist die vor den Produktionsänderungen gebaute native Bibliothek zum
 Modulstand `11fd05c`. Sie wurde lokal gesichert und ihr SHA-256 gegen die bereits
@@ -5562,9 +5575,10 @@ Nach der letzten Dokumentationsänderung wird die PDF genau einmal erzeugt und
 auf Seitenzahl, vollständige Textextraktion, alle Fußzeilen und ausgewählte Seiten
 geprüft. Neue Rohdaten, Zeitmessungen und Fixtures bleiben ausschließlich lokal.
 
-Offen bleiben die breiten Zeit-/Arbeitsmengen-/Look-ahead-Sweeps, Mobilitätshistorien,
-RT-/CIR-Zwischenspeicher und Allokatorpools, temporäre Protobuf-/Transportkopien,
-Transporttimeouts und Budgetaushandlung sowie Live-/GPU-/gehostete CPU-Evidenz.
+Zum damaligen Messzeitpunkt waren breitere Sweeps, Mobilitätshistorien und
+Allokatorpools offen. Die verbleibende R3-Abnahme wird in 7.24 geschlossen;
+RT-/CIR-/Protobuf-/Transportbedarf, Transporttimeouts, Budgetaushandlung sowie
+Live-/GPU-/gehostete CPU-Evidenz bleiben außerhalb dieser Speicherabnahme.
 Der ungecachte Getter behält seine unabhängige öffentliche Wertkopie. Dieses
 Inkrement reduziert keine MU-PHY-Gruppenrechnung und erweitert weder die
 HE-MCS-0/BCC/32-Byte/1x1-Kalibrierung noch den physikalischen CSI-Vertrag.
@@ -5591,6 +5605,38 @@ Am 7. Oktober 2026 bestanden im bestehenden nativen Conda-CPU-Environment:
 Die vollständigen lokalen Pakete und unveränderlichen Indexidentitäten stehen
 im versionierten Artefaktkatalog. Neue Messdaten bleiben außerhalb von Git;
 historische Messhashes, Datensätze und R2 wurden nicht verändert.
+
+### 7.24 R3-Abschluss: begrenzte Mobilitäts- und Pool-Speicherung
+
+Am 7. Oktober 2026 wurde die verbleibende R3-Abnahme als eine Unterphase im
+bestehenden nativen Conda-CPU-Environment abgeschlossen:
+
+- 15 vorab festgelegte Fälle: H = 0/1/8/64/1024, WALL/TIME/DISTANCE,
+  ns-3 Run 1, Seeds 42/43/44 und explizite Streams 0/1. Alle 300000
+  Bewegungsupdates stimmen exakt in Position, Geschwindigkeit, Kontrollzustand
+  und lokalem RNG mit einer historienlosen Referenz überein. 1200 Checkpoints
+  prüfen Slotidentitäten und Zähler; H = 1024 erreicht 49152 Byte und 1024
+  Paarallokationen, danach 18977 Wiederverwendungen. H = 0 bleibt leer.
+- 512 ungecachte native RPCs: eine Stagingallokation, 511 Poolhits,
+  336 Byte freie Kapazität innerhalb 1048576 Byte; CSI-Belegung bleibt null.
+  Wachstum, kleinere Grenzen, Übergrößen, deaktivierter Pool, fehlerhafte
+  Batchsuffixe und unabhängige Getterwerte bestehen ebenfalls.
+- 16-Epochen-Look-ahead liefert mit H = 0/1/1024 identische Antworten;
+  Fehler bei Platzierung/CFR stellen Knotenidentität, Historie und RNG wieder her.
+  Sechs zusätzliche echte LLVM-Traces (2x2, 256 Bins, 10000 Samples,
+  zwei Epochen bei Anfragezeiten 1/12 ms) stimmen rohbytegenau mit der
+  Vor-R3-Implementierung und einer Wiederholung überein.
+- beide nativen Benchmarks und Sionna-Tests gezielt neu gebaut; bestehender
+  Dependency-Lock und tatsächlicher LLVM-Backendcheck bestanden.
+- etablierte CPU-Regressionen sequenziell: sieben native Suites mit 60 Fällen;
+  122 Python-Tests, davon 120 bestanden und zwei optionale Exporttests ausgelassen.
+
+Neue Pläne, Rohantworten, CSVs, Logs und Eingangsbytes sind lokal im
+[R3-Artefaktkatalog](experiments/r3/catalog.json) mit externem Indexhash
+zugänglich. Das verschobene 39-Dateien-Paket verifiziert vollständig; ein neuer nativer
+CPU-Lauf reproduziert alle deterministischen Speicher-/Trajektorienfelder exakt. Historische
+Messhashes und R1/R2 bleiben unverändert. R3 besitzt keine Live-RT/PHY-Latenz-,
+physikalische Doppler-, CFR-/Protobuf-Allokator- oder RSS-Freigabe; R4–R6 bleiben offen.
 
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 
@@ -5843,6 +5889,20 @@ Python-Vertrag und Server vom Verzeichnis contrib/sionna/model/ns3sionna:
     python tests/test_imports.py
     conda run -n sionna-venv python -m unittest -v tests.test_mimo_data_contract
     conda run -n sionna-venv python -m unittest -v tests.unit_tests
+
+R3-Abschluss, im vorhandenen Conda-CPU-Environment mit leerem Ausgabeordner:
+
+    ./ns3 build -j 2 sionna-test ns3_wifi_sumimo_benchmark ns3_sionna_cache_ipc_benchmark
+    python contrib/sionna/tools/benchmark_mobility_storage.py --native-check \
+      --output=/tmp/r3-storage
+    python contrib/sionna/tools/experiment_bundle.py export \
+      --study=/tmp/r3-storage --output=/tmp/r3-bundle
+    python contrib/sionna/tools/run_cpu_regressions.py
+
+Den ausgegebenen Indexhash separat aufbewahren; das vollständige Bundle verschieben
+und mit `verify --bundle <neuer-pfad> --index-sha256 <externer-hash>` prüfen.
+`storage.csv` enthält alle 256 Schritte einen Checkpoint sowie Anfang/Ende.
+Zeitmessungen umfassen gepaarte Bewegung und Validierung und sind rein deskriptiv.
 
 PDF neu erzeugen:
 

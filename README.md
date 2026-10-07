@@ -373,3 +373,36 @@ copy the entire bundle to relocate it. Historical hashes/statuses are preserved.
 `SionnaHelper::AssignStreams(s)` reserves RT/mobility IDs `s`/`s+1`; native
 configuration accepts `--seed`, `--run`, `--stream`. Run 1/RT stream 0 preserves
 RT seeds 42/43/44. This subphase requires no containers or Docker.
+
+## Bounded mobility storage (Phase 5 R3)
+
+Mobility histories retain at most `--mobility_history_limit` position/velocity
+pairs per node (default 1024; zero disables retention). Filled histories reuse
+arrays; public getters/exported histories return independent values. Look-ahead
+uses history-free motion/RNG clones and explicit epoch poses, then restores
+committed state on success or forecast failure. Existing actual-time motion runs
+before forecasting. `mobility_storage_statistics()` reports retained/transient
+NumPy data separately from Python/RT overhead.
+
+`SionnaPropagationCache::SetBatchPoolLimit(bytes)` bounds one empty staging vector
+(default 1 MiB; zero disables). `GetPoolStatistics()` reports its actual reserve
+allocations and reuse independently of CSI storage. No CFR/Protobuf pooling or
+RSS/latency guarantee is claimed. R1/R2 remain closed; live scaling belongs to R4.
+
+From the ns-3 root, using a new output directory in the existing CPU environment:
+
+```sh
+./ns3 build -j 2 sionna-test ns3_wifi_sumimo_benchmark ns3_sionna_cache_ipc_benchmark
+conda run --no-capture-output -n sionna-venv python contrib/sionna/tools/benchmark_mobility_storage.py --output=/tmp/r3-storage --native-check
+conda run --no-capture-output -n sionna-venv python contrib/sionna/tools/experiment_bundle.py export --study=/tmp/r3-storage --output=/tmp/r3-bundle
+# Set R3_INDEX_SHA256 to the printed index_sha256, retained outside the bundle.
+mv /tmp/r3-bundle /tmp/r3-relocated
+conda run --no-capture-output -n sionna-venv python contrib/sionna/tools/experiment_bundle.py verify --bundle=/tmp/r3-relocated --index-sha256="$R3_INDEX_SHA256"
+conda run --no-capture-output -n sionna-venv python contrib/sionna/tools/benchmark_mobility_storage.py --output=/tmp/r3-reproduced --native-check
+conda run --no-capture-output -n sionna-venv python contrib/sionna/tools/run_cpu_regressions.py
+```
+
+The [R3 catalog](experiments/r3/catalog.json) identifies local complete payloads.
+The fixed 15-case storage plan compares 20,000 updates per case with an identically
+seeded history-disabled twin; elapsed time is descriptive. The native fixture
+checks 512 uncached RPCs, allocation reuse, byte bounds and independent getters.

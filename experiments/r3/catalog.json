@@ -1,0 +1,86 @@
+{
+  "acceptance": {
+    "checkpoints": 1200,
+    "history_bytes_at_limit_1024": 49152,
+    "mobility_cases": 15,
+    "mobility_updates_compared": 300000,
+    "native_cases": 60,
+    "native_pool_capacity_bytes": 336,
+    "native_pool_hits": 511,
+    "native_pool_limit_bytes": 1048576,
+    "native_requests": 512,
+    "native_staging_allocations": 1,
+    "native_suites": 7,
+    "optional_skips": 2,
+    "python_passed": 120,
+    "python_tests": 122,
+    "real_lookahead_traces": 6,
+    "relocated_verification": "passed; system Python from /tmp",
+    "reports": {
+      "experiments/r3/checks/build.log": {
+        "bytes": 12178,
+        "raw_sha256": "083e90d8d5789151f07fa406fab8a1f05b70f9e3c2e38d62cfc83569131866f7"
+      },
+      "experiments/r3/checks/bundle-verify.json": {
+        "bytes": 211,
+        "lf_sha256": "815a193ec9c74a760d540b4dda534fdc50e07fc379c074a3bfb6ad15d906fa35",
+        "raw_sha256": "815a193ec9c74a760d540b4dda534fdc50e07fc379c074a3bfb6ad15d906fa35",
+        "text_hash_version": 1
+      },
+      "experiments/r3/checks/cpu-regressions.log": {
+        "bytes": 27568,
+        "raw_sha256": "7e43f8032770982f0f9c4db2f7563f0f78fa52d79df8f5b29ee631ea730bed60"
+      },
+      "experiments/r3/checks/environment.json": {
+        "bytes": 14181,
+        "lf_sha256": "48adf400ffda096eb0e5ca5bb2279e6dbfa03f7e06846519bbf5b26ef63ac80e",
+        "raw_sha256": "48adf400ffda096eb0e5ca5bb2279e6dbfa03f7e06846519bbf5b26ef63ac80e",
+        "text_hash_version": 1
+      },
+      "experiments/r3/checks/focused.log": {
+        "bytes": 5921,
+        "raw_sha256": "54df39765b653513d5298e067ffffda02f2a09ffc93e0c5cde4e5b5fa51e1431"
+      },
+      "experiments/r3/checks/real-lookahead.log": {
+        "bytes": 1334,
+        "raw_sha256": "2e96f0cd9377be110899c1ea70c15d2dbf7e8bf55dc53735d8cca8215b585de0"
+      },
+      "experiments/r3/checks/storage-reproduction.json": {
+        "bytes": 262,
+        "lf_sha256": "c1f3905268068f101f1ccf0e938aecf5c1ec915d1792c3226f58468a988bd170",
+        "raw_sha256": "c1f3905268068f101f1ccf0e938aecf5c1ec915d1792c3226f58468a988bd170",
+        "text_hash_version": 1
+      }
+    },
+    "storage_reproduction": "exact deterministic fields; elapsed_seconds excluded",
+    "strict_environment": "passed"
+  },
+  "access": "Complete local bundles remain unversioned workspace artifacts. Copy the whole directory and retain this catalog separately as the trusted index identity; no hosted download is claimed.",
+  "artifacts": [
+    {
+      "execution_status": [
+        "success",
+        "success"
+      ],
+      "files_verified": 39,
+      "index": "experiments/r3/acceptance-relocated/index.json",
+      "index_sha256": "77bc8e27576b647e7fb061d4168198f3b6e01ece4f41d4f31cf7a68c083cce66",
+      "path": "experiments/r3/acceptance-relocated",
+      "reproduction_output": "experiments/r3/storage-reproduced",
+      "semantics": "Plans, original measurements and Run source/input identities copied byte-for-byte. Native code inputs and captured baseline look-ahead source are included; packaging verifies recorded hashes and does not rerun historical scientific acceptance.",
+      "source_outputs": [
+        "experiments/r3/storage-final",
+        "experiments/r3/lookahead-accepted"
+      ],
+      "studies": [
+        "R3.storage",
+        "R3.lookahead"
+      ],
+      "validation": "passed"
+    }
+  ],
+  "path_base": "module root",
+  "schema": "ns3sionna.experiment-catalog",
+  "schema_version": 1,
+  "scope": "R3 remaining bounded mobility histories, lightweight forecasts and one empty native batch staging pool; R1/R2 unchanged."
+}

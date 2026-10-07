@@ -2,7 +2,6 @@ import sionna.rt  # Must run before importing Mitsuba so Sionna selects its RT b
 
 import os
 import argparse
-import copy
 import numpy as np
 import time
 import GPUtil
@@ -57,7 +56,14 @@ class SionnaEnv:
     def __init__(self, model_folder='./models/', rt_fast=False, default_mode=MODE_P2P,
                  rt_max_parallel_links=256, est_csi=True, VERBOSE=True,
                  CHECKS_ENABLED=True, equidistant_walk_steps=0,
-                 mobility_bbox_margin=1.0, mobility_bbox_enabled=False, resource_limits=None):
+                 mobility_bbox_margin=1.0, mobility_bbox_enabled=False, resource_limits=None,
+                 mobility_history_limit=1024):
+        if type(mobility_history_limit) is not int or mobility_history_limit < 0:
+            raise ValueError("mobility_history_limit must be a nonnegative integer")
+        self.mobility_history_limit = mobility_history_limit
+        self._lookahead_current_states = 0
+        self._lookahead_peak_states = 0
+        self._prediction_nodes = 0
         self.resource_limits = resource_limits or ResourceLimits()
         self.model_folder = model_folder
         self.rt_fast = rt_fast
@@ -339,7 +345,45 @@ class SionnaEnv:
             return self.compute_cfr_classic(csi_req, reply_wrapper, req_mode)
 
 
+    def mobility_storage_statistics(self):
+        """Retained history and transient pose-array bytes, excluding Python/RNG/RT overhead."""
+        nodes = getattr(self, "_lookahead_committed_nodes", self.node_info)
+        histories = {str(node_id): node.history_statistics() for node_id, node in nodes.items()}
+        states = getattr(self, "_lookahead_current_states", 0)
+        prediction_nodes = getattr(self, "_prediction_nodes", 0)
+        return {"nodes": histories, "history_entries": sum(n["entries"] for n in histories.values()),
+                "history_bytes": sum(n["bytes"] for n in histories.values()),
+                "lookahead_states": states, "lookahead_bytes": 48 * states,
+                "peak_lookahead_states": getattr(self, "_lookahead_peak_states", 0),
+                "prediction_nodes": prediction_nodes, "prediction_bytes": 48 * prediction_nodes}
+
+
     def compute_cfr_with_lookahead(self, csi_req, reply_wrapper):
+        """Forecast on history-free clones; every forecast exit restores committed motion."""
+        node_ids = sorted(self.node_info)
+        depth = lookahead_depth(self.sub_mode, len(node_ids) - 1)
+        self._check_batch_budget(len(node_ids) - 1, depth)
+        # Commit only motion up to the actual requested timestamp.
+        self._update_nodes_to_time(csi_req.time, node_ids)
+        self.sim_time = csi_req.time
+        committed = self.node_info
+        rng_state = np.random.get_state()  # Legacy nodes may use the global generator.
+        try:
+            self.node_info = {node_id: node.clone_for_prediction()
+                              for node_id, node in committed.items()}
+            self._lookahead_committed_nodes = committed
+            self._prediction_nodes = len(committed)
+            return self._compute_cfr_with_lookahead(csi_req, reply_wrapper)
+        finally:
+            self.node_info = committed
+            self.sim_time = csi_req.time
+            np.random.set_state(rng_state)
+            self._lookahead_current_states = 0
+            self._prediction_nodes = 0
+            self.__dict__.pop("_lookahead_committed_nodes", None)
+
+
+    def _compute_cfr_with_lookahead(self, csi_req, reply_wrapper):
         '''
         Compute the requested CFR
         :param csi_req: received CSI request (ZMQ)
@@ -362,17 +406,19 @@ class SionnaEnv:
 
         # compute look-ahead
         look_ahead = lookahead_depth(self.sub_mode, len(nodes_to_update) - 1)
-        self._check_batch_budget(len(nodes_to_update) - 1, look_ahead)
 
         print(f'compute CFR to #RX={len(nodes_to_update) - 1} with LAH={look_ahead}')
 
         # sim future node positions
         lah_time_vec = []
-        mobility_checkpoint = None
+        lah_states = []
         for lah_i in range(look_ahead):
             self._update_nodes_to_time(req_sim_time, nodes_to_update)
-            if mobility_checkpoint is None:
-                mobility_checkpoint = copy.deepcopy(self.node_info)
+            lah_states.append({node_id: (node.pos.copy(), node.velocity.copy())
+                               for node_id, node in self.node_info.items() if node_id != tx_node_id})
+            self._lookahead_current_states = len(lah_states) * (len(nodes_to_update) - 1)
+            self._lookahead_peak_states = max(getattr(self, "_lookahead_peak_states", 0),
+                                             self._lookahead_current_states)
 
             csi_tc_arr = []
             for node_id in nodes_to_update:
@@ -400,7 +446,7 @@ class SionnaEnv:
         rx_nodes = nodes_to_update
         rx_nodes.remove(tx_node_id)
 
-        self._place_tx_rx_nodes_with_lah(lah_time_vec, tx_node_id, rx_nodes)
+        self._place_tx_rx_nodes_with_lah(lah_time_vec, tx_node_id, rx_nodes, lah_states)
 
         # create pathsolver; todo: check reuse
         p_solver  = PathSolver()
@@ -443,6 +489,8 @@ class SionnaEnv:
 
         Tc_p2mp_lah = []
         for lah_time_idx, lah_time in enumerate(lah_time_vec): # iterate over time
+            lah_positions = {node_id: state[0] for node_id, state in lah_states[lah_time_idx].items()}
+            lah_velocities = {node_id: state[1] for node_id, state in lah_states[lah_time_idx].items()}
             csi = chan_response.csi.add()
 
             csi.start_time = lah_time
@@ -461,7 +509,7 @@ class SionnaEnv:
 
                 h = extract_link_cfr(h_raw, rx_id)
                 lnk_delay, lnk_loss, h_normalized = self._extract_link_channel(
-                    tau[rx_id], h, tx_pos, self.node_info[curr_rx_node].get_pos_at(lah_time))
+                    tau[rx_id], h, tx_pos, lah_positions[curr_rx_node])
 
                 if self.CHECKS_ENABLED:
                     power_normalized = np.mean(np.abs(h_normalized) ** 2)
@@ -471,7 +519,7 @@ class SionnaEnv:
                     print(f'{lah_time/1e9}s: {tx_node_id}->{curr_rx_node} lnk_delay = {lnk_delay}ns, wb_loss = {lnk_loss:.3f}dB, CFR shape: {h_normalized.shape}')
 
                 rx_node_info = csi.rx_nodes.add()
-                rx_pos = self.node_info[curr_rx_node].get_pos_at(lah_time)
+                rx_pos = lah_positions[curr_rx_node]
                 rx_node_info.id = curr_rx_node
                 rx_node_info.position.x = rx_pos[0]
                 rx_node_info.position.y = rx_pos[1]
@@ -486,9 +534,9 @@ class SionnaEnv:
                                                  tx_node_id, csi.start_time,
                                                  self.rx_array_config)
                 if self.fixed_coherence_time_ns == 0:
-                    tc = coherence_from_velocities(self.node_info[curr_rx_node].get_velo_at(lah_time),
+                    tc = coherence_from_velocities(lah_velocities[curr_rx_node],
                                                     self.node_info[tx_node_id].velocity, self.fc,
-                                                    pos_tx=self.node_info[curr_rx_node].get_pos_at(lah_time),
+                                                    pos_tx=lah_positions[curr_rx_node],
                                                     pos_rx=self.node_info[tx_node_id].pos)
                 else:
                     tc = self.fixed_coherence_time_ns
@@ -506,13 +554,10 @@ class SionnaEnv:
 
         print(f'{self.sim_time / 1e9}s: Computed CSI with Tc: {np.round(np.asarray(Tc_p2mp_lah) / 1e6,2)}ms, #links: {num_computed_lnks}')
 
-        if mobility_checkpoint is not None:
-            self.node_info = mobility_checkpoint
-            self.sim_time = lah_time_vec[0]
         return num_computed_lnks
 
 
-    def _place_tx_rx_nodes_with_lah(self, lah_time_vec: list, tx_node: int, rx_nodes: list):
+    def _place_tx_rx_nodes_with_lah(self, lah_time_vec: list, tx_node: int, rx_nodes: list, lah_states=None):
         '''
         Place the given nodes together with their lookahead positions in the scenario
         :param lah_time_vec: time vector containing the lah time vector
@@ -541,7 +586,8 @@ class SionnaEnv:
             # Create a receiver(s)
             for rx_node_i in rx_nodes:
                 rx_node_name = "rx" + str(rx_node_i) + "." + str(lah_time_idx)
-                rx_pos = self.node_info[rx_node_i].get_pos_at(lah_time)
+                rx_pos = (lah_states[lah_time_idx][rx_node_i][0] if lah_states is not None else
+                          self.node_info[rx_node_i].get_pos_at(lah_time))
                 rx = Receiver(name=rx_node_name, position=rx_pos,
                               orientation=self.node_orientations[rx_node_i], display_radius=self.disp_r)
                 self.scene.add(rx)
@@ -857,7 +903,7 @@ class SionnaEnv:
 
     def _get_mobility_history(self, node_id):
         ts = sorted(self.node_info[node_id].pos_history.keys())
-        pos = [self.node_info[node_id].pos_history[t] for t in ts]
+        pos = [self.node_info[node_id].pos_history[t].copy() for t in ts]
         return ts, pos
 
 
@@ -869,7 +915,8 @@ class SionnaEnv:
             if (node_info.HasField("constant_position_model")):
                 # fixed position; no mobility
                 pos = node_info.constant_position_model.position
-                self.node_info[node_info.id] = ConstantMobility(node_info.id, [pos.x, pos.y, pos.z])
+                self.node_info[node_info.id] = ConstantMobility(node_info.id, [pos.x, pos.y, pos.z],
+                    history_limit=self.mobility_history_limit)
             elif (node_info.HasField("random_walk_model")):
                 # mobile scenario
                 random_walk_model = node_info.random_walk_model
@@ -914,7 +961,8 @@ class SionnaEnv:
                     self.randomness["mapping_version"] == 1) else None
                 self.node_info[node_info.id] = RandomWalkMobility(node_info.id, [pos.x, pos.y, pos.z],
                                                                   mode, mode_params, speed, speed_params,
-                                                                  direction, direction_params, rng=rng)
+                                                                  direction, direction_params, rng=rng,
+                                                                  history_limit=self.mobility_history_limit)
 
 
     def run(self):
@@ -1014,6 +1062,8 @@ if __name__ == '__main__':
     parser.add_argument("--verbose", help="Whether to run in verbose mode", action='store_true')
     parser.add_argument("--equidistant_walk_steps", type=int, default=0,
                         help="Fixed internal mobility step in ns; 0 uses request intervals")
+    parser.add_argument("--mobility_history_limit", type=int, default=1024,
+                        help="Maximum retained history records per node; 0 disables history")
     parser.add_argument("--mobility_bbox_toggle", action='store_true',
                         help="Reflect mobile nodes at the scene x/y bounding box")
     parser.add_argument("--mobility_bbox_margin", type=float, default=1.0,
@@ -1033,6 +1083,7 @@ if __name__ == '__main__':
                         equidistant_walk_steps=args.equidistant_walk_steps,
                         mobility_bbox_margin=args.mobility_bbox_margin,
                         mobility_bbox_enabled=args.mobility_bbox_toggle,
+                        mobility_history_limit=args.mobility_history_limit,
                         resource_limits=ResourceLimits(**{
                             name: getattr(args, name) for name in vars(ResourceLimits())}))
         env.run()

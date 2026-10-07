@@ -11,3 +11,7 @@
 # Portable R1 payloads stay local; their trusted catalog is versioned.
 /experiments/r1/*
 !/experiments/r1/catalog.json
+
+# R3 storage measurements remain local; retain their trusted artifact catalog.
+/experiments/r3/*
+!/experiments/r3/catalog.json

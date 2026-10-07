@@ -47,6 +47,7 @@
 #include <cmath>
 #include <complex>
 #include <iterator>
+#include <iostream>
 #include <future>
 #include <filesystem>
 #include <fstream>
@@ -5183,6 +5184,269 @@ class CacheBudgetTest : public TestCase
     }
 };
 
+// Pool reuse covers real REQ/REP traffic while public results remain independent.
+class CacheBatchPoolReuseTest : public TestCase
+{
+  public:
+    CacheBatchPoolReuseTest()
+        : TestCase("bounded batch allocation pool reuses empty capacity and independent getters")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        auto a = MakeCacheRadio(), b = MakeCacheRadio();
+        constexpr unsigned repetitions = 512;
+        auto reply = [&](unsigned entries, unsigned value, bool evolving = false) {
+            ns3sionna::Wrapper wrapper;
+            for (unsigned i = 0; i < entries; ++i)
+            {
+                AddCacheState(wrapper, a, b, evolving ? value - 1 : 0,
+                              evolving ? value - 1 : 10000, value + i);
+                auto* rx = wrapper.mutable_channel_state_response()->mutable_csi(i)->
+                    mutable_rx_nodes(0);
+                rx->set_num_rx_antennas(2);
+                rx->set_num_tx_antennas(2);
+                rx->set_frequencies(0, 78125 + value);
+                rx->add_frequencies(156250 + value);
+                rx->clear_csi_real();
+                rx->clear_csi_imag();
+                for (unsigned coefficient = 0; coefficient < 8; ++coefficient)
+                {
+                    rx->add_csi_real(value + coefficient);
+                    rx->add_csi_imag(-static_cast<double>(value));
+                }
+            }
+            return wrapper.SerializeAsString();
+        };
+        std::vector<std::string> replies;
+        for (unsigned value = 1; value <= repetitions; ++value)
+        {
+            replies.push_back(reply(2, value, true));
+        }
+        // Grow, shrink, seed a smaller bounded slot, bypass a large batch, reuse,
+        // then exercise a byte bound below one entry and explicit pool disable.
+        for (const auto& item : std::vector<std::pair<unsigned, unsigned>>{
+                 {32, 200}, {2, 201}, {2, 202}, {32, 203}, {2, 204}, {2, 205}, {2, 206}})
+        {
+            replies.push_back(reply(item.first, item.second));
+        }
+        CachePeer peer(replies);
+        SionnaHelper helper("batch-pool-reuse", peer.endpoint);
+        helper.m_zmq_socket.set(zmq::sockopt::linger, 0);
+        helper.m_zmq_socket.set(zmq::sockopt::rcvtimeo, 3000);
+        auto cache = CreateObject<SionnaPropagationCache>();
+        cache->SetSionnaHelper(helper);
+        cache->SetOptimize(false);
+        cache->SetCaching(false);
+        MimoChannelMatrix heldMatrix;
+        std::vector<std::complex<double>> heldCsi;
+        std::vector<int> heldFrequencies;
+        SionnaPropagationCache::PoolStatistics initial;
+        // Each frozen peer response expires at its distinct requested nanosecond.
+        // Only the production staging pool is bounded; prebuilt peer fixtures are not.
+        for (unsigned value = 1; value <= repetitions; ++value)
+        {
+            Simulator::Schedule(NanoSeconds(value - 1), [&, value]() {
+                if (value == 1)
+                {
+                    heldMatrix = cache->GetPropagationChannelMatrix(a, b);
+                }
+                else if (value == 2)
+                {
+                    heldCsi = cache->GetPropagationCSI(a, b);
+                }
+                else if (value == 3)
+                {
+                    heldFrequencies = cache->GetPropagationFreq(a, b);
+                    initial = cache->GetPoolStatistics();
+                    NS_TEST_ASSERT_MSG_EQ(initial.allocations, 1, "Same-sized batches allocated again");
+                    NS_TEST_ASSERT_MSG_EQ(initial.misses, 1, "Initial allocation is one miss");
+                    NS_TEST_ASSERT_MSG_EQ(initial.hits, 2, "Subsequent getters did not reuse staging storage");
+                    NS_TEST_ASSERT_MSG_EQ(initial.buffers, 1, "No empty staging allocation retained");
+                    NS_TEST_ASSERT_MSG_GT(initial.capacityBytes, 0, "Pool capacity was not accounted");
+                }
+                else if (value % 4 == 0)
+                {
+                    auto matrix = cache->GetPropagationChannelMatrix(a, b);
+                    NS_TEST_ASSERT_MSG_EQ(matrix.GetNumSubcarriers(), 2, "Fresh tensor shape changed");
+                    NS_TEST_ASSERT_MSG_EQ(matrix.Get(0, 0, 0),
+                        std::complex<double>(value, -static_cast<double>(value)), "Stale pooled CFR");
+                    matrix.Set(0, 0, 0, {999, 999});
+                }
+                else if (value % 4 == 1)
+                {
+                    auto csi = cache->GetPropagationCSI(a, b);
+                    NS_TEST_ASSERT_MSG_EQ(csi.at(7),
+                        std::complex<double>(value + 7, -static_cast<double>(value)), "Stale CSI vector");
+                    csi.at(0) = {999, 999};
+                }
+                else if (value % 4 == 2)
+                {
+                    auto frequencies = cache->GetPropagationFreq(a, b);
+                    NS_TEST_ASSERT_MSG_EQ(frequencies.at(0), 78125 + value, "Stale frequency vector");
+                    frequencies.at(0) = -1;
+                }
+                else
+                {
+                    NS_TEST_ASSERT_MSG_EQ(cache->GetPropagationLoss(a, b), value, "Stale scalar reply");
+                }
+                const auto storage = cache->GetStorageStatistics();
+                NS_TEST_ASSERT_MSG_EQ(storage.snapshots, 0, "Pool retained disabled snapshots");
+                NS_TEST_ASSERT_MSG_EQ(storage.payloadBytes, 0, "Pool retained disabled CFR payload");
+                NS_TEST_ASSERT_MSG_EQ(storage.capacityBytes, 0, "Pool changed snapshot capacity semantics");
+            });
+        }
+        Simulator::Run();
+        const auto stable = cache->GetPoolStatistics();
+        NS_TEST_ASSERT_MSG_EQ(stable.allocations, 1, "Long repeated workload grew staging allocations");
+        NS_TEST_ASSERT_MSG_EQ(stable.hits, repetitions - 1, "Long workload missed reusable capacity");
+        NS_TEST_ASSERT_MSG_EQ(stable.capacityBytes, initial.capacityBytes, "Long workload grew idle bytes");
+        NS_TEST_ASSERT_MSG_EQ(stable.peakCapacityBytes, initial.capacityBytes, "Long workload grew peak bytes");
+        NS_TEST_ASSERT_MSG_LT_OR_EQ(stable.capacityBytes, 1048576, "Long workload exceeded pool bound");
+
+        NS_TEST_ASSERT_MSG_EQ(cache->GetPropagationLoss(a, b), 200, "Larger batch failed");
+        const auto grown = cache->GetPoolStatistics();
+        NS_TEST_ASSERT_MSG_EQ(grown.allocations, 2, "Larger staging batch did not grow storage");
+        NS_TEST_ASSERT_MSG_GT(grown.capacityBytes, stable.capacityBytes, "Growth capacity not counted");
+        NS_TEST_ASSERT_MSG_LT_OR_EQ(grown.capacityBytes, 1048576, "Default pool bound exceeded");
+        NS_TEST_ASSERT_MSG_EQ(cache->GetPropagationLoss(a, b), 201, "Shrinking batch failed");
+        NS_TEST_ASSERT_MSG_EQ(cache->GetPoolStatistics().allocations, 2, "Shrinking batch allocated");
+        cache->SetBatchPoolLimit(initial.capacityBytes);
+        NS_TEST_ASSERT_MSG_EQ(cache->GetPoolStatistics().capacityBytes, 0, "Lower bound retained large slot");
+        NS_TEST_ASSERT_MSG_EQ(cache->GetPropagationLoss(a, b), 202, "Small bounded seed failed");
+        const auto small = cache->GetPoolStatistics();
+        NS_TEST_ASSERT_MSG_EQ(small.capacityBytes, initial.capacityBytes, "Small seed exceeds exact bound");
+        NS_TEST_ASSERT_MSG_EQ(cache->GetPropagationLoss(a, b), 203, "Oversized pool batch should succeed");
+        const auto bypassed = cache->GetPoolStatistics();
+        NS_TEST_ASSERT_MSG_EQ(bypassed.bypasses, 1, "Oversized batch did not bypass pool");
+        NS_TEST_ASSERT_MSG_EQ(bypassed.capacityBytes, small.capacityBytes, "Bypass consumed smaller idle slot");
+        NS_TEST_ASSERT_MSG_EQ(cache->GetPropagationLoss(a, b), 204, "Small slot failed after bypass");
+        const auto reused = cache->GetPoolStatistics();
+        NS_TEST_ASSERT_MSG_EQ(reused.hits, bypassed.hits + 1, "Smaller slot not reused after bypass");
+        NS_TEST_ASSERT_MSG_EQ(reused.allocations, bypassed.allocations, "Reuse after bypass allocated");
+        cache->SetBatchPoolLimit(1);
+        NS_TEST_ASSERT_MSG_EQ(cache->GetPoolStatistics().buffers, 0, "Tiny limit did not release idle slot");
+        NS_TEST_ASSERT_MSG_EQ(cache->GetPropagationLoss(a, b), 205, "Tiny pool bound rejected valid reply");
+        NS_TEST_ASSERT_MSG_EQ(cache->GetPoolStatistics().capacityBytes, 0, "Tiny bound retained oversized capacity");
+        cache->SetBatchPoolLimit(0);
+        NS_TEST_ASSERT_MSG_EQ(cache->GetPropagationLoss(a, b), 206, "Disabled pool rejected valid reply");
+        const auto disabled = cache->GetPoolStatistics();
+        NS_TEST_ASSERT_MSG_EQ(disabled.capacityBytes, 0, "Disabled pool retained native allocation");
+        NS_TEST_ASSERT_MSG_EQ(disabled.bypasses, 3, "Tiny and disabled bounds must bypass");
+        NS_TEST_ASSERT_MSG_EQ(disabled.peakCapacityBytes, grown.peakCapacityBytes, "Trim reset lifetime peak");
+        NS_TEST_ASSERT_MSG_EQ(heldMatrix.Get(0, 0, 0), std::complex<double>(1, -1),
+                              "Held matrix changed during pooled reuse");
+        NS_TEST_ASSERT_MSG_EQ(heldCsi.at(7), std::complex<double>(9, -2),
+                              "Held CSI changed during pooled reuse");
+        NS_TEST_ASSERT_MSG_EQ(heldFrequencies.at(0), 78128, "Held frequencies changed during pooled reuse");
+        const auto requests = peer.Finish();
+        NS_TEST_ASSERT_MSG_EQ(requests.size(), replies.size(), "Pool changed disabled RPC count");
+        for (unsigned i = 0; i < repetitions; ++i)
+        {
+            NS_TEST_ASSERT_MSG_EQ(requests.at(i).time(), i, "Long workload did not evolve request time");
+            NS_TEST_ASSERT_MSG_EQ(requests.at(i).tx_node(), CacheRadioId(a), "Wrong long workload TX");
+            NS_TEST_ASSERT_MSG_EQ(requests.at(i).rx_node(), CacheRadioId(b), "Wrong long workload RX");
+        }
+        std::cout << "R3_POOL_SUMMARY {\"requests\":" << requests.size() - 7
+                  << ",\"allocations\":" << stable.allocations << ",\"hits\":" << stable.hits
+                  << ",\"capacity_bytes\":" << stable.capacityBytes
+                  << ",\"limit_bytes\":1048576}" << std::endl;
+        helper.m_zmq_socket.close();
+        Simulator::Destroy();
+    }
+};
+
+class CacheBatchPoolValidationTest : public TestCase
+{
+  public:
+    CacheBatchPoolValidationTest()
+        : TestCase("batch pool preflight, atomic suffix rejection, recovery and independent limits")
+    {
+    }
+
+  private:
+    void DoRun() override
+    {
+        auto a = MakeCacheRadio(), b = MakeCacheRadio();
+        auto c = MakeCacheRadio(), d = MakeCacheRadio();
+        auto e = MakeCacheRadio(), f = MakeCacheRadio();
+        auto g = MakeCacheRadio(), h = MakeCacheRadio();
+        ns3sionna::Wrapper initial, preflight, malformed, recovery, disabled;
+        AddCacheState(initial, a, b, 0, 100, 10);
+        AddCacheState(initial, c, d, 0, 100, 20);
+        AddCacheState(recovery, e, f, 0, 100, 30);
+        AddCacheState(recovery, g, h, 0, 100, 40);
+        preflight = recovery;
+        preflight.mutable_channel_state_response()->mutable_csi(1)->mutable_rx_nodes(0)->
+            set_num_tx_antennas(std::numeric_limits<uint32_t>::max());
+        malformed = recovery;
+        malformed.mutable_channel_state_response()->mutable_csi(1)->mutable_rx_nodes(0)->
+            clear_csi_imag();
+        AddCacheState(disabled, e, f, 0, 100, 50);
+        const std::vector<std::string> replies{initial.SerializeAsString(), preflight.SerializeAsString(),
+            malformed.SerializeAsString(), recovery.SerializeAsString(), disabled.SerializeAsString()};
+        CachePeer peer(replies);
+        SionnaHelper helper("batch-pool-validation", peer.endpoint);
+        helper.m_zmq_socket.set(zmq::sockopt::linger, 0);
+        helper.m_zmq_socket.set(zmq::sockopt::rcvtimeo, 3000);
+        auto cache = CreateObject<SionnaPropagationCache>();
+        cache->SetSionnaHelper(helper);
+        cache->SetOptimize(false);
+        NS_TEST_ASSERT_MSG_EQ(cache->GetPropagationLoss(a, b), 10, "Initial batch failed");
+        const auto before = cache->GetPoolStatistics();
+        const auto liveBefore = cache->GetStorageStatistics();
+        bool rejected = false;
+        try { cache->GetPropagationLoss(e, f); }
+        catch (const std::invalid_argument&) { rejected = true; }
+        NS_TEST_ASSERT_MSG_EQ(rejected, true, "Oversized dimensions passed resource preflight");
+        const auto afterPreflight = cache->GetPoolStatistics();
+        NS_TEST_ASSERT_MSG_EQ(afterPreflight.hits, before.hits, "Preflight acquired pooled storage");
+        NS_TEST_ASSERT_MSG_EQ(afterPreflight.misses, before.misses, "Preflight counted pool miss");
+        NS_TEST_ASSERT_MSG_EQ(afterPreflight.allocations, before.allocations, "Preflight allocated staging");
+        NS_TEST_ASSERT_MSG_EQ(afterPreflight.capacityBytes, before.capacityBytes, "Preflight consumed idle slot");
+        NS_TEST_ASSERT_MSG_EQ(afterPreflight.peakCapacityBytes, before.peakCapacityBytes, "Preflight grew pool peak");
+        rejected = false;
+        try { cache->GetPropagationLoss(e, f); }
+        catch (const std::invalid_argument&) { rejected = true; }
+        NS_TEST_ASSERT_MSG_EQ(rejected, true, "Malformed suffix passed validation");
+        const auto afterMalformed = cache->GetPoolStatistics();
+        NS_TEST_ASSERT_MSG_EQ(afterMalformed.hits, before.hits + 1, "Malformed decode did not use lease");
+        NS_TEST_ASSERT_MSG_EQ(afterMalformed.allocations, before.allocations, "Exception lost reusable allocation");
+        NS_TEST_ASSERT_MSG_EQ(afterMalformed.capacityBytes, before.capacityBytes, "Exception failed to return empty slot");
+        const auto liveAfter = cache->GetStorageStatistics();
+        NS_TEST_ASSERT_MSG_EQ(liveAfter.snapshots, liveBefore.snapshots, "Valid prefix leaked into cache");
+        NS_TEST_ASSERT_MSG_EQ(liveAfter.payloadBytes, liveBefore.payloadBytes, "Rejected batch retained CFR");
+        NS_TEST_ASSERT_MSG_EQ(liveAfter.capacityBytes, liveBefore.capacityBytes, "Rejected batch grew cache capacity");
+        NS_TEST_ASSERT_MSG_EQ(liveAfter.peakCapacityBytes, liveBefore.peakCapacityBytes, "Rejection changed cache peak");
+        NS_TEST_ASSERT_MSG_EQ(cache->GetPropagationLoss(a, b), 10, "Old entry changed after pool rejection");
+        NS_TEST_ASSERT_MSG_EQ(cache->GetPropagationLoss(e, f), 30, "Pool failed recovery after rejection");
+        const auto recovered = cache->GetPoolStatistics();
+        NS_TEST_ASSERT_MSG_EQ(recovered.hits, before.hits + 2, "Recovery did not reuse returned slot");
+        NS_TEST_ASSERT_MSG_EQ(recovered.allocations, before.allocations, "Recovery allocated staging again");
+        cache->SetBatchPoolLimit(recovered.capacityBytes - 1);
+        NS_TEST_ASSERT_MSG_EQ(cache->GetPoolStatistics().capacityBytes, 0, "Lowering limit did not trim pool");
+        NS_TEST_ASSERT_MSG_EQ(cache->GetStorageStatistics().snapshots, 4, "Pool trim evicted live snapshots");
+        cache->SetBatchPoolLimit(0);
+        NS_TEST_ASSERT_MSG_EQ(cache->GetPropagationLoss(e, f), 30, "Disabling pool invalidated cache hit");
+        NS_TEST_ASSERT_MSG_EQ(cache->GetPoolStatistics().misses, recovered.misses, "Cache hit touched disabled pool");
+        cache->SetCaching(false);
+        NS_TEST_ASSERT_MSG_EQ(cache->GetPropagationLoss(e, f), 50, "Disabled cache returned retained pool data");
+        const auto storage = cache->GetStorageStatistics();
+        NS_TEST_ASSERT_MSG_EQ(storage.snapshots, 0, "Disabled pool/cache retained snapshots");
+        NS_TEST_ASSERT_MSG_EQ(storage.payloadBytes, 0, "Disabled pool/cache retained payload");
+        NS_TEST_ASSERT_MSG_EQ(storage.capacityBytes, 0, "Disabled cache retained capacity");
+        const auto pooled = cache->GetPoolStatistics();
+        NS_TEST_ASSERT_MSG_EQ(pooled.buffers, 0, "Disabled pool retained idle allocation");
+        NS_TEST_ASSERT_MSG_EQ(pooled.bypasses, 1, "Disabled pool did not bypass staging retention");
+        NS_TEST_ASSERT_MSG_EQ(pooled.peakCapacityBytes, before.peakCapacityBytes, "Disable reset pool lifetime peak");
+        NS_TEST_ASSERT_MSG_EQ(peer.Finish().size(), replies.size(), "Pool changed hit/rejection RPC count");
+        helper.m_zmq_socket.close();
+        Simulator::Destroy();
+    }
+};
+
 class SionnaRandomStreamsTest : public TestCase
 {
   public:
@@ -5228,6 +5492,8 @@ class SionnaTestSuite : public TestSuite
         AddTestCase(new DisabledCacheFreshReplyTest, TestCase::QUICK);
         AddTestCase(new CacheGetterOwnershipTest, TestCase::QUICK);
         AddTestCase(new CacheBudgetTest, TestCase::QUICK);
+        AddTestCase(new CacheBatchPoolReuseTest, TestCase::QUICK);
+        AddTestCase(new CacheBatchPoolValidationTest, TestCase::QUICK);
         for (unsigned scenario = 0; scenario < 3; ++scenario)
         {
             AddTestCase(new CacheContractTest(scenario), TestCase::QUICK);

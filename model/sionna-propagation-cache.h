@@ -159,6 +159,30 @@ class SionnaPropagationCache : public ns3::Object
         };
         /** Purge expired entries and return current counters and lifetime peaks. */
         StorageStatistics GetStorageStatistics() const;
+
+        /**
+         * One reusable, empty native batch-staging allocation, bounded independently
+         * of snapshot budgets. The default bound is 1 MiB; zero disables pooling.
+         * Lowering the bound releases oversized idle capacity without evicting CSI.
+         */
+        void SetBatchPoolLimit(uint64_t capacityBytes);
+        /**
+         * Structural staging-vector capacity only: excludes live snapshots, CFR and
+         * frequency buffers, Protobuf/ZMQ allocations, allocator overhead and RSS.
+         * Bytes/buffers describe idle storage; counters and peaks persist on disable.
+         */
+        struct PoolStatistics
+        {
+            uint64_t hits{0};       //!< Nonempty batches reusing sufficient idle capacity.
+            uint64_t misses{0};     //!< Nonempty batches needing a staging allocation.
+            uint64_t allocations{0}; //!< Successful vector reserve growth operations.
+            uint64_t bypasses{0};   //!< Misses too large for the bound, or pooling disabled.
+            uint64_t buffers{0};    //!< Empty idle allocations: zero or one.
+            uint64_t capacityBytes{0};
+            uint64_t peakCapacityBytes{0};
+        };
+        /** Pool reads neither purge snapshots nor count cache/pool lookups. */
+        PoolStatistics GetPoolStatistics() const;
         void PrintStats();
 
     private:
@@ -235,6 +259,23 @@ class SionnaPropagationCache : public ns3::Object
             std::vector<int> m_freq;
             MimoChannelMatrix m_cfr; // channel frequency response
         };
+
+        using PendingEntries = std::vector<std::pair<CacheKey, CacheEntry>>;
+        /** A local lease returns empty staging capacity on success and exceptions. */
+        struct PendingBatch
+        {
+            explicit PendingBatch(const SionnaPropagationCache& cache) : owner(cache) {}
+            ~PendingBatch();
+            PendingBatch(const PendingBatch&) = delete;
+            PendingBatch& operator=(const PendingBatch&) = delete;
+            const SionnaPropagationCache& owner;
+            PendingEntries entries;
+        };
+        void AcquireBatchStorage(PendingEntries& entries, uint64_t count) const;
+        void ReleaseBatchStorage(PendingEntries& entries) const noexcept;
+        uint64_t m_batchPoolLimit{1048576};
+        mutable PendingEntries m_batchPool; // Always empty; retains no snapshot objects.
+        mutable PoolStatistics m_pool;
 
         /** Borrow only inside one getter. An uncached reply belongs to its caller's scratch. */
         const CacheEntry& GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityModel> b,

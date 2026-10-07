@@ -71,6 +71,8 @@ class CoherenceTimeUnitsTest(unittest.TestCase):
             "comp_rx_node_id": 1,
             "tx_node_id": 0,
             "lah_time": 0,
+            "lah_positions": {1: _Mobility.pos},
+            "lah_velocities": {1: _Mobility.velocity},
         }
         module = ast.fix_missing_locations(ast.Module(body=[branch], type_ignores=[]))
         exec(compile(module, str(SERVER_PATH), "exec"), namespace)
