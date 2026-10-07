@@ -15,3 +15,7 @@
 # R3 storage measurements remain local; retain their trusted artifact catalog.
 /experiments/r3/*
 !/experiments/r3/catalog.json
+
+# R4 live RT/PHY records stay local; the trusted catalog is versioned.
+/experiments/r4/*
+!/experiments/r4/catalog.json

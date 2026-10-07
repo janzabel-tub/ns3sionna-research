@@ -1,0 +1,498 @@
+{
+  "acceptance": {
+    "aggregation": "server follow-up samples pooled across3processes excluding first RPC in each; native run median across3processes; isolated process high-water maxima never summed",
+    "backend": "llvm_ad_mono_polarized",
+    "cache_pairs": 21,
+    "case_measurements": [
+      {
+        "antennas": 1,
+        "cache_enabled": false,
+        "cache_peak_payload_bytes": 0,
+        "case_id": "case_00",
+        "failed_receptions": 0,
+        "lookahead_depth": 1,
+        "native_hwm_bytes": 27787264,
+        "processes": 3,
+        "receivers": 1,
+        "rpc_requests": 96,
+        "samples": 10000,
+        "server_first_compute_median_ms": 120.372223,
+        "server_followup_count": 93,
+        "server_followup_median_ms": 76.299186,
+        "server_followup_p95_ms": 86.2154822,
+        "server_hwm_bytes": 326402048,
+        "simulator_run_median_ms": 2559.730789,
+        "successful_receptions": 24,
+        "width_mhz": 20
+      },
+      {
+        "antennas": 1,
+        "cache_enabled": true,
+        "cache_peak_payload_bytes": 15360,
+        "case_id": "case_01",
+        "failed_receptions": 0,
+        "lookahead_depth": 1,
+        "native_hwm_bytes": 27750400,
+        "processes": 3,
+        "receivers": 1,
+        "rpc_requests": 12,
+        "samples": 10000,
+        "server_first_compute_median_ms": 117.88291,
+        "server_followup_count": 9,
+        "server_followup_median_ms": 81.532745,
+        "server_followup_p95_ms": 93.614983,
+        "server_hwm_bytes": 326352896,
+        "simulator_run_median_ms": 375.743499,
+        "successful_receptions": 24,
+        "width_mhz": 20
+      },
+      {
+        "antennas": 1,
+        "cache_enabled": false,
+        "cache_peak_payload_bytes": 0,
+        "case_id": "case_02",
+        "failed_receptions": 0,
+        "lookahead_depth": 1,
+        "native_hwm_bytes": 28389376,
+        "processes": 3,
+        "receivers": 4,
+        "rpc_requests": 384,
+        "samples": 10000,
+        "server_first_compute_median_ms": 130.835433,
+        "server_followup_count": 381,
+        "server_followup_median_ms": 91.276368,
+        "server_followup_p95_ms": 104.676104,
+        "server_hwm_bytes": 326762496,
+        "simulator_run_median_ms": 12109.866467,
+        "successful_receptions": 96,
+        "width_mhz": 20
+      },
+      {
+        "antennas": 1,
+        "cache_enabled": true,
+        "cache_peak_payload_bytes": 61440,
+        "case_id": "case_03",
+        "failed_receptions": 0,
+        "lookahead_depth": 1,
+        "native_hwm_bytes": 28233728,
+        "processes": 3,
+        "receivers": 4,
+        "rpc_requests": 12,
+        "samples": 10000,
+        "server_first_compute_median_ms": 125.691714,
+        "server_followup_count": 9,
+        "server_followup_median_ms": 92.557398,
+        "server_followup_p95_ms": 96.9240492,
+        "server_hwm_bytes": 326193152,
+        "simulator_run_median_ms": 434.720803,
+        "successful_receptions": 96,
+        "width_mhz": 20
+      },
+      {
+        "antennas": 2,
+        "cache_enabled": false,
+        "cache_peak_payload_bytes": 0,
+        "case_id": "case_04",
+        "failed_receptions": 0,
+        "lookahead_depth": 1,
+        "native_hwm_bytes": 28663808,
+        "processes": 3,
+        "receivers": 1,
+        "rpc_requests": 96,
+        "samples": 10000,
+        "server_first_compute_median_ms": 185.641665,
+        "server_followup_count": 93,
+        "server_followup_median_ms": 142.348895,
+        "server_followup_p95_ms": 149.6860106,
+        "server_hwm_bytes": 453521408,
+        "simulator_run_median_ms": 4707.524058,
+        "successful_receptions": 24,
+        "width_mhz": 40
+      },
+      {
+        "antennas": 2,
+        "cache_enabled": true,
+        "cache_peak_payload_bytes": 104448,
+        "case_id": "case_05",
+        "failed_receptions": 0,
+        "lookahead_depth": 1,
+        "native_hwm_bytes": 28913664,
+        "processes": 3,
+        "receivers": 1,
+        "rpc_requests": 12,
+        "samples": 10000,
+        "server_first_compute_median_ms": 156.523302,
+        "server_followup_count": 9,
+        "server_followup_median_ms": 143.84594,
+        "server_followup_p95_ms": 149.5527374,
+        "server_hwm_bytes": 453296128,
+        "simulator_run_median_ms": 631.908255,
+        "successful_receptions": 24,
+        "width_mhz": 40
+      },
+      {
+        "antennas": 2,
+        "cache_enabled": false,
+        "cache_peak_payload_bytes": 0,
+        "case_id": "case_06",
+        "failed_receptions": 0,
+        "lookahead_depth": 1,
+        "native_hwm_bytes": 30183424,
+        "processes": 3,
+        "receivers": 4,
+        "rpc_requests": 384,
+        "samples": 10000,
+        "server_first_compute_median_ms": 250.372938,
+        "server_followup_count": 381,
+        "server_followup_median_ms": 207.227646,
+        "server_followup_p95_ms": 229.97374,
+        "server_hwm_bytes": 457572352,
+        "simulator_run_median_ms": 27413.484354,
+        "successful_receptions": 96,
+        "width_mhz": 40
+      },
+      {
+        "antennas": 2,
+        "cache_enabled": true,
+        "cache_peak_payload_bytes": 417792,
+        "case_id": "case_07",
+        "failed_receptions": 0,
+        "lookahead_depth": 1,
+        "native_hwm_bytes": 29884416,
+        "processes": 3,
+        "receivers": 4,
+        "rpc_requests": 12,
+        "samples": 10000,
+        "server_first_compute_median_ms": 261.138285,
+        "server_followup_count": 9,
+        "server_followup_median_ms": 214.82682,
+        "server_followup_p95_ms": 308.5361546,
+        "server_hwm_bytes": 456515584,
+        "simulator_run_median_ms": 1018.101807,
+        "successful_receptions": 96,
+        "width_mhz": 40
+      },
+      {
+        "antennas": 1,
+        "cache_enabled": false,
+        "cache_peak_payload_bytes": 0,
+        "case_id": "case_08",
+        "failed_receptions": 0,
+        "lookahead_depth": 4,
+        "native_hwm_bytes": 27860992,
+        "processes": 3,
+        "receivers": 1,
+        "rpc_requests": 96,
+        "samples": 10000,
+        "server_first_compute_median_ms": 127.566225,
+        "server_followup_count": 93,
+        "server_followup_median_ms": 90.3787,
+        "server_followup_p95_ms": 103.13407399999998,
+        "server_hwm_bytes": 326434816,
+        "simulator_run_median_ms": 3075.733028,
+        "successful_receptions": 24,
+        "width_mhz": 20
+      },
+      {
+        "antennas": 1,
+        "cache_enabled": true,
+        "cache_peak_payload_bytes": 61440,
+        "case_id": "case_09",
+        "failed_receptions": 0,
+        "lookahead_depth": 4,
+        "native_hwm_bytes": 27922432,
+        "processes": 3,
+        "receivers": 1,
+        "rpc_requests": 3,
+        "samples": 10000,
+        "server_first_compute_median_ms": 123.16306,
+        "server_followup_count": 0,
+        "server_followup_median_ms": null,
+        "server_followup_p95_ms": null,
+        "server_hwm_bytes": 326074368,
+        "simulator_run_median_ms": 131.371321,
+        "successful_receptions": 24,
+        "width_mhz": 20
+      },
+      {
+        "antennas": 2,
+        "cache_enabled": false,
+        "cache_peak_payload_bytes": 0,
+        "case_id": "case_10",
+        "failed_receptions": 0,
+        "lookahead_depth": 4,
+        "native_hwm_bytes": 35504128,
+        "processes": 3,
+        "receivers": 4,
+        "rpc_requests": 384,
+        "samples": 10000,
+        "server_first_compute_median_ms": 468.342423,
+        "server_followup_count": 381,
+        "server_followup_median_ms": 421.429478,
+        "server_followup_p95_ms": 468.024272,
+        "server_hwm_bytes": 470663168,
+        "simulator_run_median_ms": 56127.027172,
+        "successful_receptions": 96,
+        "width_mhz": 40
+      },
+      {
+        "antennas": 2,
+        "cache_enabled": true,
+        "cache_peak_payload_bytes": 1671168,
+        "case_id": "case_11",
+        "failed_receptions": 0,
+        "lookahead_depth": 4,
+        "native_hwm_bytes": 32993280,
+        "processes": 3,
+        "receivers": 4,
+        "rpc_requests": 3,
+        "samples": 10000,
+        "server_first_compute_median_ms": 442.123638,
+        "server_followup_count": 0,
+        "server_followup_median_ms": null,
+        "server_followup_p95_ms": null,
+        "server_hwm_bytes": 467083264,
+        "simulator_run_median_ms": 539.579181,
+        "successful_receptions": 96,
+        "width_mhz": 40
+      },
+      {
+        "antennas": 2,
+        "cache_enabled": false,
+        "cache_peak_payload_bytes": 0,
+        "case_id": "case_12",
+        "failed_receptions": 0,
+        "lookahead_depth": 1,
+        "native_hwm_bytes": 30330880,
+        "processes": 3,
+        "receivers": 4,
+        "rpc_requests": 384,
+        "samples": 100000,
+        "server_first_compute_median_ms": 1145.499527,
+        "server_followup_count": 381,
+        "server_followup_median_ms": 1056.192623,
+        "server_followup_p95_ms": 1165.718203,
+        "server_hwm_bytes": 485756928,
+        "simulator_run_median_ms": 136742.535512,
+        "successful_receptions": 96,
+        "width_mhz": 40
+      },
+      {
+        "antennas": 2,
+        "cache_enabled": true,
+        "cache_peak_payload_bytes": 417792,
+        "case_id": "case_13",
+        "failed_receptions": 0,
+        "lookahead_depth": 1,
+        "native_hwm_bytes": 29880320,
+        "processes": 3,
+        "receivers": 4,
+        "rpc_requests": 12,
+        "samples": 100000,
+        "server_first_compute_median_ms": 1076.49619,
+        "server_followup_count": 9,
+        "server_followup_median_ms": 1067.366915,
+        "server_followup_p95_ms": 1156.9035838,
+        "server_hwm_bytes": 456593408,
+        "simulator_run_median_ms": 4474.42985,
+        "successful_receptions": 96,
+        "width_mhz": 40
+      }
+    ],
+    "case_processes": 42,
+    "decoded_snapshots": 11556,
+    "drjit_threads": 1,
+    "failed_receptions": 0,
+    "host_cpu": "AMD Ryzen 5 PRO 2500U w/ Radeon Vega Mobile Gfx",
+    "hosted_ci_cuda": "not executed",
+    "max_cache_payload_bytes": 1671168,
+    "native_cases": 60,
+    "native_max_hwm_bytes": 35504128,
+    "native_suites": 7,
+    "new_r4_tests": 20,
+    "optional_legacy_skips": 2,
+    "python": "3.12.12",
+    "python_passed": 140,
+    "python_tests": 142,
+    "reports": {
+      "experiments/r4/checks/acceptance-20dbm.log": {
+        "bytes": 7083,
+        "raw_sha256": "5fcece59d956e34178d952ecd62debddb8e0801fcdd5a03379b660d501ed6b61"
+      },
+      "experiments/r4/checks/acceptance.log": {
+        "bytes": 6352,
+        "raw_sha256": "6ee8e2d5d3cbd84c475b52fbf826ad1b12ab1b3e5b57bf49bfcf9beb0e3c3543"
+      },
+      "experiments/r4/checks/build-final.log": {
+        "bytes": 421,
+        "raw_sha256": "e0154517b3ab6edb63c83e3bcf8f8f64afbbb6b0123af81329f1cd9092ec6518"
+      },
+      "experiments/r4/checks/build.log": {
+        "bytes": 499,
+        "raw_sha256": "6298e6864c4fc5d97445bb9373d7e353830394d304f0060823e01f69d35b2283"
+      },
+      "experiments/r4/checks/bundle-export.json": {
+        "bytes": 205,
+        "lf_sha256": "7e5bed8fbbbe68c9f2b3feb5f1d5b7b159e80247a39f4cceab7781a04a7edf92",
+        "raw_sha256": "7e5bed8fbbbe68c9f2b3feb5f1d5b7b159e80247a39f4cceab7781a04a7edf92",
+        "text_hash_version": 1
+      },
+      "experiments/r4/checks/bundle-verify.json": {
+        "bytes": 202,
+        "lf_sha256": "68e107997d63f654dfd84b0e0c97856f648614252a38bdb979d86e93aedc6ad0",
+        "raw_sha256": "68e107997d63f654dfd84b0e0c97856f648614252a38bdb979d86e93aedc6ad0",
+        "text_hash_version": 1
+      },
+      "experiments/r4/checks/configure.log": {
+        "bytes": 5655,
+        "raw_sha256": "bdea55b3835f019e8ceba8729d061b1153e3005d8adae2c4aeb0c2f8f6465220"
+      },
+      "experiments/r4/checks/cpu-regressions-cwd-failure.log": {
+        "bytes": 1357,
+        "raw_sha256": "5273d29394591bbaa9056df4c11e4c9e12937f87bff1d4d932458e448d3f5e6a"
+      },
+      "experiments/r4/checks/cpu-regressions.log": {
+        "bytes": 31508,
+        "raw_sha256": "24dc2545fafeea7ffe145e8562549d99771824c6f40960652d3c7b9a03152906"
+      },
+      "experiments/r4/checks/focused.log": {
+        "bytes": 3541,
+        "raw_sha256": "94ee9db2e18d3e80c606d3ce9b552d6ca64184c85580513a6090faf6fe3beca8"
+      },
+      "experiments/r4/checks/measurement-report.json": {
+        "bytes": 9516,
+        "lf_sha256": "6ba303b06311f861550857dd9ef628f71bf1475f08fc14a157ff1fb8d3168c65",
+        "raw_sha256": "6ba303b06311f861550857dd9ef628f71bf1475f08fc14a157ff1fb8d3168c65",
+        "text_hash_version": 1
+      },
+      "experiments/r4/checks/model-pdf-source.md": {
+        "bytes": 203361,
+        "raw_sha256": "02c833af7bae0925779ad60287c6702c0a009ea67c9187fed735aff65f7de624"
+      },
+      "experiments/r4/checks/pdf-info.txt": {
+        "bytes": 616,
+        "lf_sha256": "a2356cb43bf595e30dbdf9ab74812e5d6929808cdefaa19e0ce3e3e0e08a8d78",
+        "raw_sha256": "a2356cb43bf595e30dbdf9ab74812e5d6929808cdefaa19e0ce3e3e0e08a8d78",
+        "text_hash_version": 1
+      },
+      "experiments/r4/checks/pdf-render.log": {
+        "bytes": 0,
+        "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "experiments/r4/checks/pdf-validation.json": {
+        "bytes": 454,
+        "lf_sha256": "e25840f4712e24fbcde769aefed5f60983428614383885f17d588d98c384c785",
+        "raw_sha256": "e25840f4712e24fbcde769aefed5f60983428614383885f17d588d98c384c785",
+        "text_hash_version": 1
+      },
+      "experiments/r4/checks/smoke-ack-fixed.log": {
+        "bytes": 337,
+        "raw_sha256": "c172f803f3705946af45f01f40dff6493f2a0b66c3763fc800d2f85d2d9a8af3"
+      },
+      "experiments/r4/checks/smoke-fixed.log": {
+        "bytes": 1297,
+        "raw_sha256": "0cf50cfa8082d57342c33f869b71dfffc696985a547a282fd90b96c728cbf8d8"
+      },
+      "experiments/r4/checks/smoke.log": {
+        "bytes": 1180,
+        "raw_sha256": "68ed832aed975e81e1b928dfdccae4397606ff0023b0a3a8f7b717ed235233ac"
+      }
+    },
+    "rpc_requests": 1890,
+    "schema_version": 1,
+    "sends": 336,
+    "server_max_hwm_bytes": 485756928,
+    "source_run_sha256": "7acd16fd68f363001af761a956f08242011fda9bb80de62aa325180396b83d22",
+    "subphase": "R4",
+    "successful_receptions": 912
+  },
+  "accepted_study": {
+    "execution": "success",
+    "path": "experiments/r4/acceptance-20dbm",
+    "plan": {
+      "bytes": 5805,
+      "lf_sha256": "f8b161371fddead4a35487c7e7ea4aafa8a0f96320f146eb5e3ccd812b5a79e2",
+      "raw_sha256": "f8b161371fddead4a35487c7e7ea4aafa8a0f96320f146eb5e3ccd812b5a79e2",
+      "text_hash_version": 1
+    },
+    "run": {
+      "bytes": 936427,
+      "lf_sha256": "7acd16fd68f363001af761a956f08242011fda9bb80de62aa325180396b83d22",
+      "raw_sha256": "7acd16fd68f363001af761a956f08242011fda9bb80de62aa325180396b83d22",
+      "text_hash_version": 1
+    },
+    "validation": "passed",
+    "validation_report": {
+      "bytes": 208147,
+      "lf_sha256": "c93286c7fc12fe0c93c2d2664055bb2c5c15ecb59dd7ef4c7d55ff31e1121ef6",
+      "raw_sha256": "c93286c7fc12fe0c93c2d2664055bb2c5c15ecb59dd7ef4c7d55ff31e1121ef6",
+      "text_hash_version": 1
+    }
+  },
+  "access": "Complete local artifacts remain unversioned workspace data. Copy the whole bundle and retain this catalog separately as the trusted index identity; no hosted download or new R4 replay is claimed.",
+  "bundle": {
+    "execution_status": "success",
+    "files_verified": 4719,
+    "index": "experiments/r4/live-bundle-relocated/index.json",
+    "index_sha256": "24ba050f53ccc7b4fc0a34ae3a0bd24c8691281c885718fadcdb7b24b1a17ea2",
+    "path": "experiments/r4/live-bundle-relocated",
+    "relocated_verification": "passed",
+    "semantics": "Original plans, measurements, raw protocol bytes and measurement-time Run identities copied verbatim; required scene dependencies and native/runner source inputs included. Verification audits integrity; does not execute a new portable live replay.",
+    "validation": "passed"
+  },
+  "documentation": {
+    "markdown": {
+      "bytes": 203361,
+      "raw_sha256": "02c833af7bae0925779ad60287c6702c0a009ea67c9187fed735aff65f7de624"
+    },
+    "pdf": {
+      "bytes": 414978,
+      "raw_sha256": "5bde243c56b991360a277f3821529bc1319659da950f54193751b0f5897c96f3"
+    },
+    "pdf_pages": 67,
+    "render_count": 1,
+    "render_source": "Merged working-tree Markdown, including its pre-existing condensed layout. The exact rendered source snapshot is retained; this R4 commit stages only R4 text in the prior committed layout, leaving the pre-existing rewrite uncommitted.",
+    "source_snapshot": {
+      "bytes": 203361,
+      "path": "experiments/r4/checks/model-pdf-source.md",
+      "raw_sha256": "02c833af7bae0925779ad60287c6702c0a009ea67c9187fed735aff65f7de624"
+    },
+    "validation": "passed"
+  },
+  "measurement_identity": "Measurement-time source hashes are preserved, including the recorded dirty worktree. Final documentation and regression-cwd fix do not retroactively replace those identities.",
+  "preserved_diagnostics": [
+    {
+      "path": "experiments/r4/smoke",
+      "reason": "Interrupted relative worker output path diagnosis; peer output preserved separately.",
+      "status": "incomplete"
+    },
+    {
+      "path": "experiments/r4/smoke-misplaced-worker",
+      "reason": "Worker output from first relative path diagnosis.",
+      "status": "incomplete"
+    },
+    {
+      "path": "experiments/r4/smoke-fixed",
+      "reason": "Production success ACK message OK initially rejected by observer; later corrected.",
+      "status": "failed"
+    },
+    {
+      "path": "experiments/r4/smoke-ack-fixed",
+      "scope": "Initial0dBm1x1 smoke only, not final acceptance.",
+      "status": "success"
+    },
+    {
+      "path": "experiments/r4/acceptance",
+      "reason": "Initial0dBm diagnosis exposed2x2preamble drops; interrupted and retained. Not accepted.",
+      "status": "incomplete"
+    },
+    {
+      "path": "experiments/r4/mimo-20dbm-smoke",
+      "scope": "Fixed20dBm2x2/40MHz complete reception smoke, preceding final matrix.",
+      "status": "worker success/native PASS"
+    }
+  ],
+  "schema": "ns3sionna.r4-artifact-catalog",
+  "schema_version": 1,
+  "scope": "One complete representative instrumented live CPU server/HE-SU PHY scaling subphase. Fixed geometry, seed42/run1/streams0-1, LLVM1thread,20dBm,diagnostic beta2. R5 physical aging and R6 GPU/backend completion remain open."
+}

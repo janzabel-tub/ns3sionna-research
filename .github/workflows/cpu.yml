@@ -36,7 +36,7 @@ jobs:
           mkdir -p ci-logs
           rm -f contrib/sionna/model/message.pb.cc contrib/sionna/model/message.pb.h contrib/sionna/model/ns3sionna/common/message_pb2.py
           ./ns3 configure --enable-examples --enable-tests --enable-modules=sionna,wifi,internet,applications,buildings 2>&1 | tee ci-logs/configure.log
-          ./ns3 build -j 2 test-runner sionna-test ns3_wifi_sumimo_benchmark ns3_sionna_cache_ipc_benchmark 2>&1 | tee ci-logs/build.log
+          ./ns3 build -j 2 test-runner sionna-test ns3_wifi_sumimo_benchmark ns3_sionna_cache_ipc_benchmark ns3_sionna_live_benchmark 2>&1 | tee ci-logs/build.log
           test -s contrib/sionna/model/ns3sionna/common/message_pb2.py
       - name: Native, contract, calibration, policy and frozen export checks
         working-directory: ns-3.40

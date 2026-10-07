@@ -1022,39 +1022,26 @@ R1/R2 bleiben geschlossen. Live-RT/PHY-Skalierung, allgemeine CFR-/Protobuf-
 Allokatorersetzung und GPU-Nachweise gehören nicht dazu. Methoden stehen in 5.26,
 die Abschlussabnahme in 7.24. Logische Bytes sind keine harte RSS-Schranke.
 
-##### R4: Live-Server-/PHY-Skalierung und gemessene Optimierungen
+##### R4: Live-CPU-Server-/PHY-Skalierung (abgeschlossen)
 
-Abhängigkeit: R3 für belastbare Cachevergleiche; 5.2.3 liefert die Basis.
+R4 wurde als eine vollständige Unterphase für den echten lokalen CPU-Server-/
+HE-SU-PHY-Pfad umgesetzt. Vorab festgelegter Umfang: getrennte frische Server-/
+ns-3-Prozesse, feste Szene `simple_room`, 1/4 Empfänger, 1x1/2x2, 20/40 MHz,
+Cache an/aus und Look-ahead-Tiefe 1/4 in sechs repräsentativen Kombinationen;
+je drei Prozesspaare bei 10000 RT-Samples, zusätzlich die Cachepaarung des
+4-Empfänger-/2x2-/40-MHz-/Tiefe-1-Falls bei 100000 Samples. Vier Epochen mit
+je zwei echten HE-SU-PPDUs bei 20 dBm bilden den Arbeitsumfang. Abnahme: produktive
+`SionnaEnv.compute_cfr`-Antworten mit geprüfter Identität, Zeit, Dimension und
+endlichen Koeffizienten; echte PHY-Empfangsereignisse; numerisch konsistente
+statische Cachepaarungen; getrennte Kalt-/Folgelatenzen und Prozess-RSS/HWM;
+Cache-/Pool-/Mobilitätsnutzbytes separat; erhaltene Fehlerartefakte und
+sequenzielle CPU-Regressionen. Zeit-/RSS-Werte sind deskriptive Beobachtungen
+mit festem Samplebudget, keine Leistungsgrenze oder Konvergenzfreigabe.
+MU-/MAC-Scheduling, physikalische Alterung und GPU-Abnahme bleiben R5/R6 bzw.
+spätere Arbeit. Weitere Optimierungen gehören nicht zu diesem R4-Abschluss.
 
-- Bestehende Matrizen und Requestprüfungen für echte Sionna-Serverberechnung
-  in P2P/P2MP/Look-ahead und unterstützte PHY-/Verkehrsfälle erweitern.
-  Den abgebrochenen `performance-sionna-mimo.sh` reparieren, Seeds/Run
-  weiterreichen und getrennte Ausgabeverzeichnisse verwenden.
-- PathSolver, CIR/CFR, NumPy-Konvertierung/Normalisierung, Protobufaufbau,
-  Serialisierung, Transport, C++-Parsing/Validierung, Cacheübernahme und
-  Linkrechnung getrennt messen. Ereignisse über Anfrageidentität verbinden;
-  keine Differenz unsynchronisierter Prozessuhren als Laufzeit ausgeben.
-- Import-/JIT-Kosten von warmen Messungen trennen. RSS/Spitzen-RSS und
-  backendbezogenen GPU-Speicher messen; Torch-Allokatorwerte erfassen nicht
-  den gesamten Mitsuba-/Dr.Jit-Bedarf. Validierte Live-RT-Optionen für Samples,
-  Tiefe und Solverflags ergänzen; bisher setzt der Runner sie direkt im
-  Prozess.
-- Transportstress um ausgewählte 4096-Ton-/Eckfälle und zeitliche Batches
-  innerhalb eines vorab geprüften Budgets ergänzen. Synthetische Tensorgrößen
-  bleiben von unterstützten HE-Ressourcengittern getrennt.
-- MU-Gruppenrechnungen pro Empfänger/PPDU zählen und erst dann reduzieren.
-  Wiederverwendung erfordert vollständige CSI-/Gruppen-/RU-/Precoder-/
-  Rausch-/TX-Vector-Identität und korrekten empfängerbezogenen Zustand.
-- Baseline auf einem benannten Host mit vielen Anfragestichproben und
-  unabhängigen Prozessen messen. Median/p95 und Schwankungen zwischen
-  Läufen berichten; Leistungsgrenzen vor Kandidatenvergleich festlegen.
-  Eine höchstens zehnprozentige Regression auf unbetroffenen Fällen ist
-  ein vorgeschlagenes Prüfziel, keine bestehende Garantie.
-
-Abnahmekriterium: Live-CPU und später GPU besitzen belegte Grenzen für
-Speicherverstärkung, Latenz und simulierte Sekunden pro Wandzeitsekunde.
-Ressourcenüberschreitungen werden mitberichtet; Optimierungen besitzen
-gemessenen Nutzen oder eine belegte Korrektheits-/Speichergrenzenwirkung.
+Die vollständige Methodik steht in 5.27, die Abnahme in 7.25 und im
+[R4-Vertrag](doc/r4-live-scaling.md).
 
 ##### R5: Physikalische CSI-Alterung und breitere Sensitivität
 
@@ -3547,6 +3534,67 @@ Misses, echte Reserve-Vergrößerungen, Bypässe und freie Kapazität vom CSI-Ca
 Es werden keine CFR-, Frequenz-, Protobuf- oder Transportpuffer gepoolt;
 ungecachte CSI-Belegung bleibt null. Dies ist kein RSS- oder Latenzversprechen.
 
+### 5.27 R4: instrumentierter Live-CPU-Messvertrag
+
+**R4: instrumentierter Live-Server-/HE-SU-PHY-Pfad (abgeschlossen).**
+`tools/benchmark_live_scaling.py` startet je Wiederholung einen frischen
+lokalen REQ/REP-Prozessverbund; der Server ruft die produktive
+`SionnaEnv.init_simulation_env`-/`compute_cfr`-Implementierung auf.
+`examples/ns3_sionna_live_benchmark.cc` sendet echte HE-SU-PPDUs über
+SpectrumWifiPhy, Cache und Sionna-Adapter. Alle Rohrequests/-antworten werden
+mit Anfrageindex, TX/RX und simulierter Zeit erhalten. Die Abstraktion und
+SINR/PER-Rechnung bleiben ausschließlich in ns-3.
+
+Die sechs repräsentativen Formen `(Empfänger,Antennen je Ende,MHz,Tiefe)` sind
+`(1,1,20,1)`, `(4,1,20,1)`, `(1,2,40,1)`, `(4,2,40,1)`, `(1,1,20,4)` und
+`(4,2,40,4)`: jeweils Cache an/aus und drei frische Prozesse bei 10000 Samples.
+Die vierte Form wird zusätzlich bei 100000 Samples gepaart. Seed/Run/Streams
+sind 42/1/0–1; LLVM verwendet einen Thread. Vier Epochen mit je zwei PPDUs
+beginnen bei 1 ms, Epochenabstand 6 ms und Paketabstand 1 ms. Kohärenzzeit 5 ms,
+MCS 0/BCC/800 ns, 256 Byte Nutzdaten beziehungsweise 284 Byte PSDU, offene
+räumliche Multiplexierung, isotrope V-Arrays mit 0,5 Lambda und 20 dBm bleiben
+fest. Beta 2 ist eine explizite Diagnosegröße, keine zusätzliche Kalibrierung.
+Ein vorheriger 0-dBm-Diagnoselauf zeigte frühe Präambelabbrüche in einzelnen
+2x2-Fällen; die akzeptierte Messung wird deshalb vorab bei 20 dBm festgelegt
+und verlangt erfolgreiche vollständige PHY-Rezeption in jedem Prozess.
+
+Der produktive Helper erweitert den CFR-Bereich um die SpectrumWifiPhy-Guards:
+20/40 MHz PHY entsprechen 60/120 MHz und 768/1536 CFR-Bins. Für L Empfänger,
+D Zukunftsintervalle und A Antennen je Ende gilt
+
+\[
+ B_{\rm CSI}=LDN_{\rm sc}(16A^2+4)\ {\rm Byte}.
+\]
+
+Der größte geplante Batch enthält 1671168 logische Byte. Kapazität, struktureller
+Stagingpool, Mobilitätsarrays, serialisierte Wirebytes sowie nativer/Server-RSS
+bleiben getrennte Größen. `peak_rss_bytes` ist ein Stichprobenmaximum;
+`VmHWM` ist das Linux-Prozessmaximum einschließlich Initialisierung und JIT.
+Die beiden Prozessmaxima werden nicht als gleichzeitiger Gesamtspeicher addiert.
+
+Native Timer trennen `WifiPhy::Send` (skalare Loss-/Delay-RPCs), den später
+geplanten Adapteraufruf (CFR-RPC, MMSE/EESM und MimoRx-Traceausgabe) und
+`Simulator::Run`. Servertimer trennen Parsing, produktive Berechnung,
+Serialisierung und Send. Servervalidierung/Rohdateien liegen außerhalb dieser
+Servertimer; Simulation und Adapter enthalten die beschriebenen Beobachterkosten.
+Für n Beobachtungen werden n, Median und empirisches p95 ausgewiesen, jeweils
+erste Kanalrechnung und Folgerechnungen getrennt. Ohne Folgerechnung existiert kein
+warmer Messwert (JSON `null`); drei gleiche Seeds sind Zeitwiederholungen, keine unabhängigen
+Kanäle. Für simulierte Dauer T_sim und gemessene Laufzeit T_wall wird zusätzlich
+T_sim/T_wall angegeben. Unsynchronisierte Prozessuhren werden nicht subtrahiert.
+Alle Latenz-/RSS-Werte bleiben deskriptive instrumentierte CPU-Beobachtungen.
+
+Vier Produktionsgetter je Empfänger und PPDU erzeugen ungecacht vier RPCs;
+ein gecachter P2MP-Batch bedient dagegen die ganze Gruppe, Look-ahead auch
+künftige Intervalle. Abnahme prüft jeden RPC nach Identität/Zeit sowie jede
+Antwort nach Gültigkeit, Shape, Frequenzgitter, Normierung und Endlichkeit.
+Statische Cachepaare vergleichen tatsächliche native PHY-Metriken und initiale
+Roh-CFRs mit rtol 1e-4/atol 1e-7. Ungecachte CSI-Belegung muss überall null sein,
+Poolkapazität höchstens 1 MiB. Das experimentlokale REP-Frontend verändert den
+Produktionsserver nicht; automatische MAC-/MU-Steuerung, Doppler und GPU
+bleiben außerhalb dieser Abnahme. Details stehen im
+[R4-Vertrag](doc/r4-live-scaling.md).
+
 ## 6. High-Level-API-Vertrag bis Unterphase 4.8
 
 ### 6.1 Typen, Besitz und Defaults
@@ -3951,7 +3999,7 @@ Simulator-Timer, keine implizite CSI-Abfrage und keinen MAC-Feedbacktransport;
 diese Grenzen verhindern, dass das explizite Forschungsmodell eine
 vollständige 802.11-Soundingprozedur vortäuscht.
 
-## 7. Validierung bis zum R3-Abschluss
+## 7. Validierung bis zum R4-Abschluss
 
 Die native Suite sionna enthält die schnellen API-, Numerik- und Adapterfälle:
 
@@ -5636,7 +5684,82 @@ Neue Pläne, Rohantworten, CSVs, Logs und Eingangsbytes sind lokal im
 zugänglich. Das verschobene 39-Dateien-Paket verifiziert vollständig; ein neuer nativer
 CPU-Lauf reproduziert alle deterministischen Speicher-/Trajektorienfelder exakt. Historische
 Messhashes und R1/R2 bleiben unverändert. R3 besitzt keine Live-RT/PHY-Latenz-,
-physikalische Doppler-, CFR-/Protobuf-Allokator- oder RSS-Freigabe; R4–R6 bleiben offen.
+physikalische Doppler-, CFR-/Protobuf-Allokator- oder RSS-Freigabe; R4 ist gemäß Abschnitt 7.25 abgeschlossen, R5/R6 bleiben offen.
+
+### 7.25 R4-Abschluss: Live-CPU-Server-/PHY-Skalierung
+
+Am 7. Oktober 2026 wurde R4 als eine vollständige Unterphase abgeschlossen.
+Die feste Abnahme verwendet AMD Ryzen 5 PRO 2500U, Conda/Python 3.12.12,
+Sionna/Sionna RT 2.0.1, LLVM und einen Dr.Jit-Thread. Es wurden 14 Einstellungen
+mit je drei frischen, sequenziellen Server-/ns-3-Prozesspaaren ausgeführt.
+
+- 42 Prozesspaare und alle 21 Cachepaarungen bestanden; 336 echte HE-SU-PPDUs
+  führten zu 912 erfolgreichen vollständigen PHY-Rezeptionen und null Fehlern.
+- Alle 1890 echten RPCs und 11556 gelieferten Link-/Zeitsnapshots wurden nach
+  Identität, Zeit, Shape, Antennen-/Frequenzgitter, Endlichkeit und Normierung
+  geprüft. Native SINR-/PER-/Rangwerte und initiale Rohkanäle der Cachepaare
+  erfüllen rtol 1e-4/atol 1e-7. Jedes Antwortartefakt bleibt rohbytegehasht.
+- Ungecachte CSI-Belegung, Nutzbytes und Kapazität waren in allen Beobachtungen
+  null; größter gecachter Nutzdatenbatch exakt 1671168 Byte. Der getrennte
+  strukturelle Stagingpool blieb unter 1 MiB; die Serverhistorien unter acht
+  Einträgen pro Knoten, ohne zurückbehaltene Vorhersagezustände.
+- Maximales Linux-VmHWM: Server 485756928 Byte (463,25 MiB), nativer Prozess
+  35504128 Byte (33,86 MiB). Das sind getrennte Prozessmaxima einschließlich
+  Initialisierung/JIT, keine gleichzeitige Summe oder harte Ressourcenfreigabe.
+- Alle sieben nativen Suites mit 60 Fällen und die vollständige sequenzielle
+  Python-Regression bestanden: 142 Tests, davon 140 bestanden und zwei optionale
+  ältere Exporttests ausgelassen. Alle 20 neuen R4-Tests, einschließlich der drei
+  Prüfungen des vollständigen Live-Exports, wurden ausgeführt. Die CPU-CI baut
+  den neuen nativen Zielnamen; hosted CI/CUDA wurden hier nicht ausgeführt.
+- Relative Ausgabe-/Binärpfade werden vor Prozessstart absolut aufgelöst.
+  Negative Optionen, fehlerhafte Antwortdaten und echte Prozessfehler testen
+  Ausgabeschutz, Fehlerprovenienz, erhaltene Logs und aufgeräumte Peerprozesse.
+  Der Regressionrunner setzt außerdem das ns-3-Arbeitsverzeichnis ausdrücklich,
+  damit relative Kalibrierfixtures bei Aufruf aus dem Modul gefunden werden.
+
+Die Tabelle aggregiert Folge-Compute-Timer nach Ausschluss der ersten Anfrage
+jedes Prozesses; n ist deren Gesamtzahl über drei Prozesse. Median/p95 betreffen
+produktive Serverberechnung einschließlich CFR-/Protobufaufbau. T_Run ist der
+Median der instrumentierten Simulatorlaufzeit von drei Prozessen. Die übrigen
+Stage-/Kalt-/RSS-/Rausch-/PHY-Daten bleiben in den Rohdateien erhalten.
+
+| R/A/MHz/D/Samples | Cache | RPCs gesamt | n Folge | Compute Median/p95 [ms] | T_Run [ms] |
+| --- | --- | --- | --- | --- | --- |
+| 1/1/20/1/10000 | aus | 96 | 93 | 76.30/86.22 | 2559.73 |
+| 1/1/20/1/10000 | an | 12 | 9 | 81.53/93.61 | 375.74 |
+| 4/1/20/1/10000 | aus | 384 | 381 | 91.28/104.68 | 12109.87 |
+| 4/1/20/1/10000 | an | 12 | 9 | 92.56/96.92 | 434.72 |
+| 1/2/40/1/10000 | aus | 96 | 93 | 142.35/149.69 | 4707.52 |
+| 1/2/40/1/10000 | an | 12 | 9 | 143.85/149.55 | 631.91 |
+| 4/2/40/1/10000 | aus | 384 | 381 | 207.23/229.97 | 27413.48 |
+| 4/2/40/1/10000 | an | 12 | 9 | 214.83/308.54 | 1018.10 |
+| 1/1/20/4/10000 | aus | 96 | 93 | 90.38/103.13 | 3075.73 |
+| 1/1/20/4/10000 | an | 3 | 0 | keine Folgerechnung | 131.37 |
+| 4/2/40/4/10000 | aus | 384 | 381 | 421.43/468.02 | 56127.03 |
+| 4/2/40/4/10000 | an | 3 | 0 | keine Folgerechnung | 539.58 |
+| 4/2/40/1/100000 | aus | 384 | 381 | 1056.19/1165.72 | 136742.54 |
+| 4/2/40/1/100000 | an | 12 | 9 | 1067.37/1156.90 | 4474.43 |
+
+Cache reduziert tatsächliche Requests je Prozess von 32 auf 4 beim Einempfänger-
+Tiefe-1-Fall und von 128 auf 4 beim Vierempfängerfall; Tiefe 4 reduziert sie
+jeweils auf 1. Aus den gemessenen Medianen folgt zum Beispiel 56,13 s gegenüber
+0,54 s für den Vierempfänger-/2x2-/40-MHz-/Tiefe-4-Fall. Das ist eine beobachtete
+Wirkung des bestehenden Caches auf diesem Host, kein universelles Latenzziel.
+100000 statt 10000 Samples erhöht die Folge-Compute-Mediane im
+Vierempfänger-/2x2-/40-MHz-/Tiefe-1-Fall von ungefähr 207 auf 1056 ms ungecacht.
+Dies ist ein Kostenvergleich und keine zusätzliche Samplekonvergenzfreigabe.
+
+Der [R4-Artefaktkatalog](experiments/r4/catalog.json) hält das vollständige
+lokale Bundle, dessen externen Indexhash, Plan, Rohdaten, Laufstatus,
+Nachprüfungen und die Auswertungs-/Regressionslogs fest. Das Bundle wurde nach
+Verschiebung mit seinem externen Hash geprüft; Messzeitpunkt-Quellidentitäten
+und die historischen R1/R2/R3-Artefakte wurden nicht ersetzt. Die vorherigen
+Pfad-/ACK-Diagnosen und der unvollständige 0-dBm-Lauf bleiben als lokale
+Fehler-/Kontrolldaten erhalten und werden nicht als bestandene Abnahme gezählt.
+
+R4 ist im festgelegten instrumentierten CPU-Messumfang abgeschlossen.
+Weitere Szenen, PHY-/MU-/MAC-Lasten, Pools, universelle RSS-/Leistungsgrenzen,
+physikalische Alterung und GPU-Abnahme sind spätere Arbeit beziehungsweise R5/R6.
 
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 
@@ -5903,6 +6026,23 @@ Den ausgegebenen Indexhash separat aufbewahren; das vollständige Bundle verschi
 und mit `verify --bundle <neuer-pfad> --index-sha256 <externer-hash>` prüfen.
 `storage.csv` enthält alle 256 Schritte einen Checkpoint sowie Anfang/Ende.
 Zeitmessungen umfassen gepaarte Bewegung und Validierung und sind rein deskriptiv.
+
+R4-Live-Abnahme, aus dem ns-3-Verzeichnis im dokumentierten CPU-Environment:
+
+    ./ns3 build -j 2 ns3_sionna_live_benchmark sionna-test
+    python contrib/sionna/tools/benchmark_live_scaling.py --output=/tmp/r4-live
+    LIVE_SCALING_RESULTS=/tmp/r4-live python contrib/sionna/tools/run_cpu_regressions.py
+    python contrib/sionna/tools/experiment_bundle.py export \
+      --study=/tmp/r4-live --output=/tmp/r4-bundle \
+      --input=contrib/sionna/examples/ns3_sionna_live_benchmark.cc \
+      --input=contrib/sionna/tools/benchmark_live_scaling.py
+
+`--quick --epochs=2` prüft eine kleine Cachepaarung; eigene Samples/Epochen/
+Wiederholungen benötigen neue Ordner und sind nicht die feste volle Abnahme.
+Server-/Native-Logs und Protokolldaten werden auch bei Fehlern erhalten.
+Den ausgegebenen Bundleindexhash extern aufbewahren und die verschobene Kopie
+mit `experiment_bundle.py verify` gegen diesen Hash prüfen. Messgrenzen und
+Rohdatenschemata stehen im [R4-Vertrag](doc/r4-live-scaling.md).
 
 PDF neu erzeugen:
 

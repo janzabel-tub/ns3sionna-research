@@ -38,13 +38,13 @@ def main():
     for suite in ('sionna', 'sionna-mimo-csi-feedback', 'dl-mu-mimo-runtime',
                   'dl-mu-mimo-ru', 'he-dl-mu-spectrum-ru', 'ul-mu-mimo',
                   'he-ul-mu-mimo-phy-adapter'):
-        subprocess.run([str(runner[0]), '--suite=' + suite, '--verbose'], check=True)
+        subprocess.run([str(runner[0]), '--suite=' + suite, '--verbose'], check=True, cwd=NS3)
     subprocess.run([sys.executable, str(SERVER / 'tests/test_imports.py')], check=True)
     # Import checks must establish the actual RT backend in this process too.
     import benchmark_sumimo
     benchmark_sumimo.runtime()
     modules = ('test_cpu_environment', 'test_random_streams', 'test_experiment_bundle', 'test_provenance', 'test_calibrate_eesm', 'test_benchmark_sumimo',
-               'test_benchmark_rt_convergence', 'test_benchmark_cache_ipc', 'test_benchmark_mobility_storage',
+               'test_benchmark_rt_convergence', 'test_benchmark_cache_ipc', 'test_benchmark_mobility_storage', 'test_benchmark_live_scaling',
                'test_mimo_data_contract', 'test_mobility_storage', 'test_lookahead_storage',
                'test_deterministic_mobility', 'test_coherence_time_units')
     tests = unittest.TestLoader().loadTestsFromNames(modules)

@@ -406,3 +406,31 @@ The [R3 catalog](experiments/r3/catalog.json) identifies local complete payloads
 The fixed 15-case storage plan compares 20,000 updates per case with an identically
 seeded history-disabled twin; elapsed time is descriptive. The native fixture
 checks 512 uncached RPCs, allocation reuse, byte bounds and independent getters.
+
+## R4 live CPU scaling
+
+The live benchmark sends real HE-SU PPDUs through SpectrumWifiPhy, the production
+Sionna cache and a fresh local Sionna RT server process. It records raw protocol
+bytes, real PHY callbacks, cache/RPC counts, cold and subsequent latency samples,
+and separate server/native RSS and high-water observations. Its explicit beta 2
+is a diagnostic setting; it does not extend the HE calibration profile.
+
+From ns-3, in the documented Conda CPU environment and with a new output path:
+
+```shell
+./ns3 configure --enable-examples --enable-tests
+./ns3 build -j 2 ns3_sionna_live_benchmark sionna-test
+python contrib/sionna/tools/benchmark_live_scaling.py --output=/tmp/r4-live
+LIVE_SCALING_RESULTS=/tmp/r4-live python contrib/sionna/tools/run_cpu_regressions.py
+```
+
+The default acceptance matrix has 14 settings and three fresh process pairs per
+setting; `--quick --epochs=2` checks a small cache pair. The runner protects
+existing output, preserves failure logs and reaps subprocesses. `--samples`,
+`--epochs`, `--repeats` and `--timeout` support explicit custom measurements;
+custom/quick runs are separate from the default acceptance. Production PHY guard
+bands expand 20/40 MHz to 768/1536 CFR bins. Latency and RSS are descriptive
+measurements, with no universal performance limit. See the
+[R4 measurement contract](doc/r4-live-scaling.md) and
+[local artifact catalog](experiments/r4/catalog.json). R5 physical channel aging
+and R6 GPU/backend completion remain open.
