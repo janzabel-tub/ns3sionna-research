@@ -10,3 +10,4 @@
 # Preserve historical C++ CRLF bytes without flagging CR as trailing space.
 *.cc whitespace=cr-at-eol
 *.h whitespace=cr-at-eol
+/patches/*.patch text eol=lf whitespace=-blank-at-eol

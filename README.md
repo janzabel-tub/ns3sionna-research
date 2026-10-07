@@ -35,7 +35,7 @@ apt-get install gcc g++ python3 python3-pip cmake
 apt-get install libzmq5 libzmq5-dev
 apt-get install libprotobuf-dev
 apt-get install protobuf-compiler
-apt-get install pkg-config
+apt-get install pkg-config patch
 
 ```
 
@@ -327,6 +327,22 @@ check all five getters, exact payloads, 656 hits/2 misses per process and no hid
 hit RPCs. Performance observations use frozen channels and local process IPC;
 long working-set/look-ahead sweeps, transport timeouts and Live/GPU evidence remain
 open Phase-5 work.
+
+## HE pilot calibration at reception
+
+For the validated HE MCS 0/BCC/32-byte/1×1/20 MHz/800 ns pilot:
+
+```cpp
+helper.LoadHeCalibrationProfile("contrib/sionna/data/he_mcs0_bcc_32_calibration.json");
+helper.Apply(sionna, txPhyHelper, rxPhyHelper, spectrumModel);
+helper.InstallHeCalibration(rxDevice); // after device creation, before Simulator::Run()
+```
+
+The 32 bytes are the complete nonaggregated PSDU, including MAC header and FCS.
+The payload-only wrapper requires the default `TableBasedErrorRateModel`;
+unmatched receptions use the existing error calculation. Configure applies a
+small, idempotent ns-3.40 payload-context patch. Details and formulas are in
+[the model contract](ns3sionna_mimo_model.md).
 
 ## TCP/MIMO experiment runner
 

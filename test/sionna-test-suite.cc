@@ -33,6 +33,8 @@
 #include "ns3/wifi-mac.h"
 #include "ns3/wifi-mac-header.h"
 #include "ns3/wifi-mac-helper.h"
+#include "ns3/wifi-mpdu.h"
+#include "ns3/yans-error-rate-model.h"
 #include "ns3/wifi-net-device.h"
 #include "ns3/wifi-psdu.h"
 #include "ns3/wifi-spectrum-signal-parameters.h"
@@ -45,6 +47,8 @@
 #include <complex>
 #include <iterator>
 #include <future>
+#include <filesystem>
+#include <fstream>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -1965,6 +1969,256 @@ class HeAwgnCalibrationContextTest : public TestCase
                                   1e-12,
                                   "High-level API lost the exact calibration context");
     }
+};
+
+class HeCalibrationProfileTest : public TestCase
+{
+  public:
+    HeCalibrationProfileTest() : TestCase("HE pilot loading is atomic and context and model matching are exact") {}
+
+  private:
+    void DoRun() override
+    {
+        const auto path = std::filesystem::path(NS_TEST_SOURCEDIR).parent_path() /
+                          "data/he_mcs0_bcc_32_calibration.json";
+        SionnaMimoHelper helper;
+        helper.LoadHeCalibrationProfile(path.string());
+        const auto profile = *helper.GetConfiguration().heCalibrationProfile;
+        NS_TEST_ASSERT_MSG_EQ_TOL(helper.GetEesmBeta(0), profile.betaLinear, 1e-12,
+                                  "Profile beta was not installed");
+        auto rejects = [this](const auto& action) {
+            bool rejected = false;
+            try { action(); } catch (const std::invalid_argument&) { rejected = true; }
+            NS_TEST_ASSERT_MSG_EQ(rejected, true, "Invalid calibration was accepted");
+        };
+        rejects([&] { helper.LoadHeCalibrationProfile(path.string() + ".missing"); });
+        rejects([&] { helper.SetEesmBeta(0, 2.0); });
+        rejects([&] { helper.SetAwgnSnrOffsetDb(profile.key, 0.0); });
+
+        std::ifstream input(path);
+        const std::string original((std::istreambuf_iterator<char>(input)), {});
+        const auto badPath = CreateTempDirFilename("bad-calibration.json");
+        const std::vector<std::pair<std::string, std::string>> changes{
+            {"\"validated\"", "\"rejected\""},
+            {"\"link_level\"", "\"synthetic\""},
+            {"\"BCC\"", "\"invalid\""},
+            {"\"mcs\": 0", "\"mcs\": 0.5"},
+            {"\"nss\": 1", "\"nss\": 257"},
+            {"\"packet_size_bytes\": 32", "\"packet_size_bytes\": 33"},
+            {"\"beta_linear\": 1.0383687667246768", "\"beta_linear\": -1"},
+            {"\"awgn_snr_offset_db\": -0.49589212058827303", "\"awgn_snr_offset_db\": 31"},
+            {profile.awgnModelSha256, std::string(64, '0')},
+            {profile.referenceSha256, "not-a-hash"},
+            {"\"source_version\": \"2026a\"", "\"source_version\": \"\""},
+            {"\"reasons\": []", "\"reasons\": [\"failed\"]"},
+            {"\"beta_linear\"", "\"missing_beta\""}};
+        for (const auto& [before, after] : changes)
+        {
+            std::string bad = original;
+            const auto pos = bad.find(before);
+            NS_TEST_ASSERT_MSG_NE(pos, std::string::npos, "Invalid-profile fixture did not match");
+            bad.replace(pos, before.size(), after);
+            { std::ofstream output(badPath); output << bad; }
+            rejects([&] { helper.LoadHeCalibrationProfile(badPath); });
+        }
+        { std::ofstream output(badPath); output << "{"; }
+        rejects([&] { helper.LoadHeCalibrationProfile(badPath); });
+        NS_TEST_ASSERT_MSG_EQ_TOL(helper.GetEesmBeta(0), profile.betaLinear, 1e-12,
+                                  "Rejected load changed the helper state");
+        NS_TEST_ASSERT_MSG_EQ(helper.GetConfiguration().heCalibrationProfile->referenceSha256,
+                              profile.referenceSha256, "Provenance changed after rejection");
+
+        auto base = CreateObject<TableBasedErrorRateModel>();
+        auto model = CreateObject<HeCalibratedErrorRateModel>();
+        model->Configure(profile, base);
+        WifiMacHeader header;
+        header.SetType(WIFI_MAC_DATA);
+        auto psdu = Create<WifiPsdu>(Create<Packet>(4), header);
+        auto tx = MakeHeTxVector(HePhy::GetHeMcs0(), 1);
+        NS_TEST_ASSERT_MSG_EQ(psdu->GetSize(), 32, "PSDU fixture has wrong MAC/FCS length");
+        NS_TEST_ASSERT_MSG_EQ(model->Matches(tx, *psdu, 1), true, "Pilot did not match");
+        for (int mismatch = 0; mismatch < 6; ++mismatch)
+        {
+            auto other = tx;
+            if (mismatch == 0) { other.SetMode(HePhy::GetHeMcs1()); }
+            if (mismatch == 1) { other.SetLdpc(true); }
+            if (mismatch == 2) { other.SetNss(2); }
+            if (mismatch == 3) { other.SetChannelWidth(40); }
+            if (mismatch == 4) { other.SetGuardInterval(1600); }
+            if (mismatch == 5) { other.SetPreambleType(WIFI_PREAMBLE_HE_ER_SU); }
+            NS_TEST_ASSERT_MSG_EQ(model->Matches(other, *psdu, 1), false,
+                                  "Incompatible TXVECTOR inherited calibration");
+        }
+        NS_TEST_ASSERT_MSG_EQ(model->Matches(tx, *psdu, 2), false, "RX mismatch accepted");
+        auto longer = Create<WifiPsdu>(Create<Packet>(5), header);
+        NS_TEST_ASSERT_MSG_EQ(model->Matches(tx, *longer, 1), false, "Length mismatch accepted");
+        auto single = Create<WifiPsdu>(Create<WifiMpdu>(Create<Packet>(0), header), true);
+        NS_TEST_ASSERT_MSG_EQ(single->GetSize(), 32, "Aggregate length control differs");
+        NS_TEST_ASSERT_MSG_EQ(model->Matches(tx, *single, 1), false, "S-MPDU inherited calibration");
+        WifiPhyOperatingChannel operating;
+        operating.Set(36, 0, 20, WIFI_STANDARD_80211ax, WIFI_PHY_BAND_5GHZ);
+        auto ppdu = Create<HePpdu>(psdu, tx, operating, MicroSeconds(100), 999);
+        const double raw = base->GetChunkSuccessRate(tx.GetMode(), tx, 0.8, 117, 1);
+        NS_TEST_ASSERT_MSG_EQ_TOL(model->GetPayloadChunkSuccessRate(tx.GetMode(), tx, 0.8,
+                                    117, 1, SU_STA_ID, ppdu, 0.5), raw, 1e-12,
+                                  "Missing reception context must delegate unchanged");
+        model->SetReception(999, std::vector<double>(234, 0.8), 0.8, MicroSeconds(100));
+        const double expected = base->GetChunkSuccessRate(tx.GetMode(), tx,
+            0.8 * WifiLinkBudget::DbToLinear(profile.offsetDb), 256, 1);
+        const double half = model->GetPayloadChunkSuccessRate(tx.GetMode(), tx, 0.8,
+            117, 1, SU_STA_ID, ppdu, 0.5);
+        NS_TEST_ASSERT_MSG_EQ_TOL(half * half, expected, 1e-12,
+                                  "Chunk splitting changed whole-PSDU calibrated probability");
+        const double interfered = model->GetPayloadChunkSuccessRate(tx.GetMode(), tx, 0.4,
+            117, 1, SU_STA_ID, ppdu, 0.5);
+        NS_TEST_ASSERT_MSG_EQ_TOL(interfered * interfered,
+            base->GetChunkSuccessRate(tx.GetMode(), tx,
+                0.4 * WifiLinkBudget::DbToLinear(profile.offsetDb), 256, 1), 1e-12,
+                                  "Chunk interference did not scale data-tone SINRs");
+        NS_TEST_ASSERT_MSG_EQ_TOL(model->GetChunkSuccessRate(HePhy::GetOfdmRate6Mbps(), tx,
+            0.8, 48, 1, WIFI_PPDU_FIELD_NON_HT_HEADER),
+            base->GetChunkSuccessRate(HePhy::GetOfdmRate6Mbps(), tx,
+            0.8, 48, 1, WIFI_PPDU_FIELD_NON_HT_HEADER), 1e-12,
+                                  "Header inherited payload calibration");
+        rejects([&] { model->Configure(profile, CreateObject<YansErrorRateModel>()); });
+        base->SetAttribute("SizeThreshold", UintegerValue(1));
+        rejects([&] { model->Configure(profile, base); });
+        rejects([&] { model->GetPayloadChunkSuccessRate(tx.GetMode(), tx, 0.8,
+                        117, 1, SU_STA_ID, ppdu, 0.5); });
+        Simulator::Stop(MicroSeconds(101));
+        Simulator::Run();
+        base->SetAttribute("SizeThreshold", UintegerValue(400));
+        NS_TEST_ASSERT_MSG_EQ_TOL(model->GetPayloadChunkSuccessRate(tx.GetMode(), tx, 0.8,
+                                    117, 1, SU_STA_ID, ppdu, 0.5), raw, 1e-12,
+                                  "Expired reception context survived PPDU end");
+        Simulator::Destroy();
+    }
+};
+
+class HeCalibrationSpectrumReceptionTest : public TestCase
+{
+  public:
+    HeCalibrationSpectrumReceptionTest()
+        : TestCase("HE pilot calibrates real scalar SpectrumWifiPhy payloads with exact PSDU lengths") {}
+
+  private:
+    void Payload(WifiTxVector, Time) { ++m_payloads; }
+    void RxOk(Ptr<const WifiPsdu>, RxSignalInfo, WifiTxVector, std::vector<bool>) {}
+    void RxError(Ptr<const WifiPsdu>) {}
+    void Applied(uint64_t, double effective, double corrected, double success, double fraction)
+    {
+        ++m_applied;
+        NS_TEST_ASSERT_MSG_EQ_TOL(effective, m_expectedEffective, 1e-10, "Wrong data-tone EESM");
+        NS_TEST_ASSERT_MSG_EQ_TOL(corrected, effective * WifiLinkBudget::DbToLinear(m_profile.offsetDb),
+                                  1e-12, "Offset did not reach actual payload error model");
+        auto base = CreateObject<TableBasedErrorRateModel>();
+        const auto tx = MakeHeTxVector(HePhy::GetHeMcs0(), 1);
+        const double expected = base->GetChunkSuccessRate(tx.GetMode(), tx, corrected, 256, 1);
+        NS_TEST_ASSERT_MSG_EQ_TOL(success, expected, 1e-12, "Symbol padding replaced PSDU bytes");
+        NS_TEST_ASSERT_MSG_EQ_TOL(fraction, 1.0, 1e-12, "Full MPDU window was not normalized");
+        if (m_applied == 2)
+        {
+            const double uncorrected = base->GetChunkSuccessRate(tx.GetMode(), tx, effective, 256, 1);
+            NS_TEST_ASSERT_MSG_GT(std::abs(success - uncorrected), 0.01,
+                                  "Selective control cannot distinguish calibrated PER");
+        }
+    }
+    void DoRun() override
+    {
+        SionnaMimoHelper helper;
+        helper.LoadHeCalibrationProfile((std::filesystem::path(NS_TEST_SOURCEDIR).parent_path() /
+            "data/he_mcs0_bcc_32_calibration.json").string());
+        m_profile = *helper.GetConfiguration().heCalibrationProfile;
+        auto channel = CreateObject<MultiModelSpectrumChannel>();
+        auto adapter = CreateObject<SionnaSpectrumPropagationLossModel>();
+        channel->AddSpectrumPropagationLossModel(adapter);
+        SpectrumWifiPhyHelper txHelper, rxHelper;
+        txHelper.SetChannel(channel);
+        rxHelper.SetChannel(channel);
+        SionnaHelper ipc("simple_room", "tcp://127.0.0.1:5555");
+        helper.Apply(ipc, txHelper, rxHelper, adapter);
+        constexpr double powerDbm = -80;
+        txHelper.Set("TxPowerStart", DoubleValue(powerDbm));
+        txHelper.Set("TxPowerEnd", DoubleValue(powerDbm));
+        NodeContainer nodes;
+        nodes.Create(2);
+        for (uint32_t i = 0; i < 2; ++i)
+        {
+            auto mobility = CreateObject<ConstantPositionMobilityModel>();
+            mobility->SetPosition({double(i), 0, 0});
+            nodes.Get(i)->AggregateObject(mobility);
+        }
+        WifiHelper wifi;
+        wifi.SetStandard(WIFI_STANDARD_80211ax);
+        WifiMacHelper mac;
+        mac.SetType("ns3::AdhocWifiMac");
+        auto txDevice = DynamicCast<WifiNetDevice>(wifi.Install(txHelper, mac, nodes.Get(0)).Get(0));
+        auto rxDevice = DynamicCast<WifiNetDevice>(wifi.Install(rxHelper, mac, nodes.Get(1)).Get(0));
+        auto txPhy = DynamicCast<SpectrumWifiPhy>(txDevice->GetPhy());
+        auto rxPhy = DynamicCast<SpectrumWifiPhy>(rxDevice->GetPhy());
+        txPhy->SetOperatingChannel({36, 20, WIFI_PHY_BAND_5GHZ, 0});
+        rxPhy->SetOperatingChannel({36, 20, WIFI_PHY_BAND_5GHZ, 0});
+        auto model = helper.InstallHeCalibration(rxDevice);
+        rxPhy->SetReceiveOkCallback(MakeCallback(&HeCalibrationSpectrumReceptionTest::RxOk, this));
+        rxPhy->SetReceiveErrorCallback(MakeCallback(&HeCalibrationSpectrumReceptionTest::RxError, this));
+        bool duplicateRejected = false;
+        try { helper.InstallHeCalibration(rxDevice); }
+        catch (const std::invalid_argument&) { duplicateRejected = true; }
+        NS_TEST_ASSERT_MSG_EQ(duplicateRejected, true, "Duplicate wrapper installation was accepted");
+        model->TraceConnectWithoutContext("CalibrationApplied",
+            MakeCallback(&HeCalibrationSpectrumReceptionTest::Applied, this));
+        rxPhy->TraceConnectWithoutContext("PhyRxPayloadBegin",
+            MakeCallback(&HeCalibrationSpectrumReceptionTest::Payload, this));
+        txPhy->AssignStreams(1);
+        rxPhy->AssignStreams(1);
+        auto txPsd = WifiSpectrumValueHelper::CreateHeOfdmTxPowerSpectralDensity(
+            5180, 20, std::pow(10.0, (powerDbm - 30) / 10.0), txPhy->GetGuardBandwidth(20));
+        const uint32_t nsc = txPsd->GetValuesN() - 1;
+        MimoChannelMatrix flat(nsc, 1, 1), selective(nsc, 1, 1);
+        for (uint32_t sc = 0; sc < nsc; ++sc)
+        {
+            flat.Set(sc, 0, 0, {1, 0});
+            selective.Set(sc, 0, 0, sc < nsc / 2 ? std::complex<double>{0, 0}
+                                                : std::complex<double>{std::sqrt(2.0), 0});
+        }
+        const double noise = WifiLinkBudget::Calculate(0, 0, 20e6, 290, 7).GetReceiverNoisePowerW();
+        const double rho = (*txPsd)[nsc / 2 + 2] / (noise / 20e6);
+        adapter->SetFixedChannelMatrix(flat, 0);
+        WifiMacHeader header;
+        header.SetType(WIFI_MAC_DATA);
+        header.SetAddr1(rxDevice->GetMac()->GetAddress());
+        header.SetAddr2(txDevice->GetMac()->GetAddress());
+        auto psdu = Create<WifiPsdu>(Create<Packet>(4), header);
+        NS_TEST_ASSERT_MSG_EQ(psdu->GetSize(), 32, "Actual PSDU is not the calibration length");
+        const auto tx = MakeHeTxVector(HePhy::GetHeMcs0(), 1);
+        Simulator::Schedule(MilliSeconds(1), [this, rho, txPhy, psdu, tx]() {
+            m_expectedEffective = rho;
+            txPhy->Send({{SU_STA_ID, psdu}}, tx);
+        });
+        Simulator::Schedule(MilliSeconds(2), [this, rho, adapter, selective, txPhy, psdu, tx]() {
+            adapter->SetFixedChannelMatrix(selective, 0);
+            m_expectedEffective = -m_profile.betaLinear *
+                std::log((1 + std::exp(-2 * rho / m_profile.betaLinear)) / 2);
+            txPhy->Send({{SU_STA_ID, psdu}}, tx);
+        });
+        Simulator::Schedule(MilliSeconds(3), [adapter, flat, txPhy, header, tx]() {
+            adapter->SetFixedChannelMatrix(flat, 0);
+            txPhy->Send({{SU_STA_ID, Create<WifiPsdu>(Create<Packet>(5), header)}}, tx);
+        });
+        Simulator::Schedule(MilliSeconds(4), [txPhy, psdu, tx]() {
+            auto other = tx;
+            other.SetGuardInterval(1600);
+            txPhy->Send({{SU_STA_ID, psdu}}, other);
+        });
+        Simulator::Stop(MilliSeconds(5));
+        Simulator::Run();
+        NS_TEST_ASSERT_MSG_EQ(m_payloads, 4, "Real PPDUs did not reach payload decoding");
+        NS_TEST_ASSERT_MSG_EQ(m_applied, 2, "Unmatched reception silently used the pilot");
+        Simulator::Destroy();
+    }
+    HeCalibrationProfile m_profile;
+    double m_expectedEffective{0};
+    uint32_t m_payloads{0}, m_applied{0};
 };
 
 class HeEesmFrequencySelectiveTest : public TestCase
@@ -4958,6 +5212,8 @@ class SionnaTestSuite : public TestSuite
         AddTestCase(new WifiLinkBudgetCalculationTest, TestCase::QUICK);
         AddTestCase(new HeEesmFlatChannelTest, TestCase::QUICK);
         AddTestCase(new HeAwgnCalibrationContextTest, TestCase::QUICK);
+        AddTestCase(new HeCalibrationProfileTest, TestCase::QUICK);
+        AddTestCase(new HeCalibrationSpectrumReceptionTest, TestCase::QUICK);
         AddTestCase(new HeEesmFrequencySelectiveTest, TestCase::QUICK);
         AddTestCase(new HeSisoErrorModelParityTest, TestCase::QUICK);
         AddTestCase(new HePerMonotonicityTest, TestCase::QUICK);

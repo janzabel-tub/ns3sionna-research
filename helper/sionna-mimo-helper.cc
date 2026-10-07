@@ -12,6 +12,8 @@
 #include "ns3/double.h"
 #include "ns3/he-configuration.h"
 #include "ns3/he-frame-exchange-manager.h"
+#include "ns3/interference-helper.h"
+#include "ns3/pointer.h"
 #include "ns3/mpdu-aggregator.h"
 #include "ns3/qos-txop.h"
 #include "ns3/simulator.h"
@@ -976,6 +978,12 @@ void
 SionnaMimoHelper::SetEesmBeta(uint8_t mcs, double betaLinear)
 {
     ValidateEesmBeta(mcs, betaLinear);
+    if (m_configuration.heCalibrationProfile &&
+        mcs == m_configuration.heCalibrationProfile->key.mcs &&
+        betaLinear != m_configuration.heCalibrationProfile->betaLinear)
+    {
+        Reject("EESM beta conflicts with the loaded HE calibration profile");
+    }
     m_configuration.eesmBetaLinear[mcs] = betaLinear;
 }
 
@@ -987,6 +995,37 @@ SionnaMimoHelper::SetAwgnSnrOffsetDb(const HeAwgnCalibrationKey& key,
     candidate.awgnSnrOffsetsDb[key] = offsetDb;
     Validate(candidate);
     m_configuration = std::move(candidate);
+}
+
+void
+SionnaMimoHelper::LoadHeCalibrationProfile(const std::string& path)
+{
+    const auto profile = HeCalibrationProfile::Load(path);
+    auto candidate = m_configuration;
+    candidate.heCalibrationProfile = profile;
+    candidate.eesmBetaLinear[profile.key.mcs] = profile.betaLinear;
+    candidate.awgnSnrOffsetsDb[profile.key] = profile.offsetDb;
+    Validate(candidate);
+    m_configuration = std::move(candidate);
+}
+
+Ptr<HeCalibratedErrorRateModel>
+SionnaMimoHelper::InstallHeCalibration(Ptr<WifiNetDevice> receiver) const
+{
+    Validate(m_configuration);
+    auto phy = receiver ? DynamicCast<SpectrumWifiPhy>(receiver->GetPhy()) : nullptr;
+    if (!phy || !m_configuration.heCalibrationProfile || !receiver->GetHeConfiguration() ||
+        phy->GetNumberOfAntennas() != 1 || phy->GetMaxSupportedRxSpatialStreams() != 1)
+    {
+        Reject("HE calibration installation requires a configured 1x1 HE SpectrumWifiPhy receiver");
+    }
+    PointerValue pointer;
+    phy->GetAttribute("InterferenceHelper", pointer);
+    auto interference = pointer.Get<InterferenceHelper>();
+    auto model = CreateObject<HeCalibratedErrorRateModel>();
+    model->Configure(*m_configuration.heCalibrationProfile, interference->GetErrorRateModel());
+    phy->SetErrorRateModel(model);
+    return model;
 }
 
 bool
@@ -1316,6 +1355,20 @@ SionnaMimoHelper::Validate(const SionnaMimoConfiguration& configuration)
         if (!key.IsValid() || !std::isfinite(offsetDb) || std::abs(offsetDb) > 30.0)
         {
             Reject("AWGN calibration requires a valid HE PHY context and a finite +/-30 dB offset");
+        }
+    }
+    if (configuration.heCalibrationProfile)
+    {
+        const auto& profile = *configuration.heCalibrationProfile;
+        profile.Validate();
+        const auto beta = configuration.eesmBetaLinear.find(profile.key.mcs);
+        const auto offset = configuration.awgnSnrOffsetsDb.find(profile.key);
+        if (configuration.mode != SionnaMimoMode::SISO ||
+            configuration.numTxAntennas != 1 || configuration.numRxAntennas != 1 ||
+            beta == configuration.eesmBetaLinear.end() || beta->second != profile.betaLinear ||
+            offset == configuration.awgnSnrOffsetsDb.end() || offset->second != profile.offsetDb)
+        {
+            Reject("HE pilot requires consistent beta/offset and SISO helper dimensions");
         }
     }
     for (const auto& [nodeId, orientation] : configuration.nodeOrientations)

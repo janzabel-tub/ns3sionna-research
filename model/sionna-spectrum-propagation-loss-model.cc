@@ -18,6 +18,7 @@
  */
 
 #include "sionna-spectrum-propagation-loss-model.h"
+#include "he-calibrated-error-rate-model.h"
 //#include "sionna-utils.h"
 
 #include "ns3/socket.h"
@@ -1095,6 +1096,44 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
                       mimoRx.GetLinkResult().GetEffectiveSinrLinear(),
                       mimoRx.GetLinkResult().GetPacketErrorRate(),
                       mimoRx.GetLinkResult().GetMimoResult().GetMinimumChannelRank());
+    }
+
+    // Calibration changes only payload error probabilities. Keep the physical
+    // scalar PSD for CCA, headers, and overlapping receivers. Per-PHY snapshots
+    // avoid putting receiver-specific calibration state in shared packet tags.
+    if (isHeSu && legacySiso && !m_awgnSnrOffsetsDb.empty() &&
+        DynamicCast<WifiSpectrumPhyInterface>(params->txPhy))
+    {
+        const auto txInterface = DynamicCast<WifiSpectrumPhyInterface>(params->txPhy);
+        const auto rxPhy = GetSpectrumWifiPhy(b, txInterface->GetChannel());
+        const auto calibrated = DynamicCast<HeCalibratedErrorRateModel>(GetErrorRateModel(rxPhy));
+        const auto psdu = wifiParams->ppdu->GetPsdu();
+        if (calibrated && psdu &&
+            calibrated->Matches(wifiParams->ppdu->GetTxVector(), *psdu, rxPhy->GetNumberOfAntennas()))
+        {
+            const auto txPhy = GetTransmitterSpectrumWifiPhy(params);
+            const double centerHz = txPhy->GetOperatingChannel().GetPrimaryChannelCenterFrequency(20) * 1e6;
+            const double rxGain = DbToRatio(rxPhy->GetRxGain());
+            const double noise = WifiLinkBudget::Calculate(0.0, 0.0, 20e6,
+                WIFI_NOISE_TEMPERATURE_K, m_receiverNoiseFigureDb).GetReceiverNoisePowerW();
+            const double scalarSnr = IntegralBand(*rxPsd, txPhy->GetBand(20).indices) * rxGain / noise;
+            std::vector<double> tones;
+            auto band = params->psd->GetSpectrumModel()->Begin();
+            for (uint32_t sc = 0; sc < psdSubcarriers; ++sc, ++band)
+            {
+                // HE 20 MHz data tones: [-122,-2] and [2,122], excluding pilots.
+                const auto tone = std::llround((band->fc - centerHz) / 78125.0);
+                const auto absolute = std::abs(tone);
+                if (absolute < 2 || absolute > 122 || absolute == 22 || absolute == 48 ||
+                    absolute == 90 || absolute == 116)
+                {
+                    continue;
+                }
+                tones.push_back((*params->psd)[sc] * rxGain * std::norm(channel.Get(sc, 0, 0)) /
+                                (noise / 20e6));
+            }
+            calibrated->SetReception(wifiParams->ppdu->GetUid(), tones, scalarSnr, params->duration);
+        }
     }
 
     // Common fields and bystanders have no addressed MU payload to annotate.

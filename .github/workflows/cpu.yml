@@ -24,7 +24,7 @@ jobs:
         run: |
           mkdir -p ns-3.40/ci-logs
           sudo apt-get update 2>&1 | tee ns-3.40/ci-logs/system.log
-          sudo apt-get install -y cmake ninja-build g++ pkg-config libzmq3-dev cppzmq-dev libprotobuf-dev protobuf-compiler llvm 2>&1 | tee -a ns-3.40/ci-logs/system.log
+          sudo apt-get install -y cmake ninja-build g++ pkg-config patch libzmq3-dev cppzmq-dev libprotobuf-dev protobuf-compiler llvm 2>&1 | tee -a ns-3.40/ci-logs/system.log
       - name: Pinned Python environment
         run: |
           python -m pip install pip==26.0.1 2>&1 | tee ns-3.40/ci-logs/python-install.log

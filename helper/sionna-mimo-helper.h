@@ -9,6 +9,7 @@
 
 #include "ns3/mimo-csi-feedback.h"
 #include "ns3/he-su-mimo-link-abstraction.h"
+#include "ns3/he-calibrated-error-rate-model.h"
 #include "ns3/dl-mu-mimo-runtime.h"
 #include "ns3/mimo-precoding-matrix.h"
 #include "ns3/ptr.h"
@@ -18,6 +19,7 @@
 #include <functional>
 #include <map>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace ns3
@@ -170,6 +172,8 @@ struct SionnaMimoConfiguration
     std::map<uint8_t, double> eesmBetaLinear;
     /** Exact PHY contexts with measured AWGN SNR corrections; empty by default. */
     std::map<HeAwgnCalibrationKey, double> awgnSnrOffsetsDb;
+    /** Optional validated pilot for explicit installation on a receiving device. */
+    std::optional<HeCalibrationProfile> heCalibrationProfile;
     std::map<uint32_t, SionnaMimoOrientation> nodeOrientations;
     std::optional<MimoPrecodingMatrix> precodingMatrix;
     std::optional<SionnaMimoBeamformingConfiguration> beamforming;
@@ -316,6 +320,14 @@ class SionnaMimoHelper
 
     /** Validate and store a measured correction for one exact HE PHY context. */
     void SetAwgnSnrOffsetDb(const HeAwgnCalibrationKey& key, double offsetDb);
+
+    /** Load the existing pilot atomically; preserve measurement hashes unchanged. */
+    void LoadHeCalibrationProfile(const std::string& path);
+
+    /** Install payload calibration after Apply() and device creation, before Run().
+     * Reject unsupported PHY dimensions or a different configured error model.
+     */
+    Ptr<HeCalibratedErrorRateModel> InstallHeCalibration(Ptr<WifiNetDevice> receiver) const;
 
     /** Return whether an explicit EESM beta exists for an HE MCS. */
     bool HasEesmBeta(uint8_t mcs) const;

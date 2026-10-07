@@ -1,0 +1,110 @@
+--- a/src/wifi/model/error-rate-model.h
++++ b/src/wifi/model/error-rate-model.h
+@@ -26,6 +26,7 @@
+ 
+ namespace ns3
+ {
++class WifiPpdu;
+ 
+ /**
+  * \ingroup wifi
+@@ -92,6 +93,23 @@
+                                WifiPpduField field = WIFI_PPDU_FIELD_DATA,
+                                uint16_t staId = SU_STA_ID) const;
+ 
++    /** Payload-only hook with the original PPDU and fraction of the MPDU window.
++     * Existing models retain their timed-chunk calculation. Context-dependent
++     * models can match PSDU lengths without mistaking symbol padding for data.
++     */
++    virtual double GetPayloadChunkSuccessRate(WifiMode mode,
++                                              const WifiTxVector& txVector,
++                                              double snr,
++                                              uint64_t nbits,
++                                              uint8_t numRxAntennas,
++                                              uint16_t staId,
++                                              const Ptr<const WifiPpdu>& ppdu,
++                                              double chunkFraction) const
++    {
++        return GetChunkSuccessRate(mode, txVector, snr, nbits, numRxAntennas,
++                                   WIFI_PPDU_FIELD_DATA, staId);
++    }
++
+     /**
+      * Assign a fixed random variable stream number to the random variables
+      * used by this model. Return the number of streams (possibly zero) that
+--- a/src/wifi/model/interference-helper.h
++++ b/src/wifi/model/interference-helper.h
+@@ -339,13 +339,17 @@
+      * \param duration the duration of the chunk
+      * \param txVector the TXVECTOR
+      * \param staId the station ID of the PSDU (only used for MU)
++     * \param ppdu original PPDU for context-dependent payload error models
++     * \param windowDuration duration of the complete MPDU reception window
+      *
+      * \return the success rate
+      */
+     double CalculatePayloadChunkSuccessRate(double snir,
+                                             Time duration,
+                                             const WifiTxVector& txVector,
+-                                            uint16_t staId = SU_STA_ID) const;
++                                            uint16_t staId = SU_STA_ID,
++                                            Ptr<const WifiPpdu> ppdu = nullptr,
++                                            Time windowDuration = Seconds(0)) const;
+ 
+   private:
+     /**
+--- a/src/wifi/model/interference-helper.cc
++++ b/src/wifi/model/interference-helper.cc
+@@ -545,7 +545,9 @@
+ InterferenceHelper::CalculatePayloadChunkSuccessRate(double snir,
+                                                      Time duration,
+                                                      const WifiTxVector& txVector,
+-                                                     uint16_t staId) const
++                                                     uint16_t staId,
++                                                     Ptr<const WifiPpdu> ppdu,
++                                                     Time windowDuration) const
+ {
+     if (duration.IsZero())
+     {
+@@ -556,13 +558,16 @@
+     auto nbits = static_cast<uint64_t>(rate * duration.GetSeconds());
+     nbits /= txVector.GetNss(staId); // divide effective number of bits by NSS to achieve same chunk
+                                      // error rate as SISO for AWGN
+-    double csr = m_errorRateModel->GetChunkSuccessRate(mode,
++    double csr = m_errorRateModel->GetPayloadChunkSuccessRate(mode,
+                                                        txVector,
+                                                        snir,
+                                                        nbits,
+                                                        m_numRxAntennas,
+-                                                       WIFI_PPDU_FIELD_DATA,
+-                                                       staId);
++                                                       staId,
++                                                       ppdu,
++                                                       windowDuration.IsStrictlyPositive()
++                                                           ? duration.GetSeconds() / windowDuration.GetSeconds()
++                                                           : 0.0);
+     return csr;
+ }
+ 
+@@ -613,7 +618,9 @@
+             psr *= CalculatePayloadChunkSuccessRate(snr,
+                                                     Min(windowEnd, current) - previous,
+                                                     event->GetPpdu()->GetTxVector(),
+-                                                    staId);
++                                                    staId,
++                                                    event->GetPpdu(),
++                                                    window.second - window.first);
+             NS_LOG_DEBUG("Both previous and current point to the windowed payload: mode="
+                          << payloadMode << ", psr=" << psr);
+         }
+@@ -623,7 +630,9 @@
+             psr *= CalculatePayloadChunkSuccessRate(snr,
+                                                     Min(windowEnd, current) - windowStart,
+                                                     event->GetPpdu()->GetTxVector(),
+-                                                    staId);
++                                                    staId,
++                                                    event->GetPpdu(),
++                                                    window.second - window.first);
+             NS_LOG_DEBUG(
+                 "previous is before windowed payload and current is in the windowed payload: mode="
+                 << payloadMode << ", psr=" << psr);
