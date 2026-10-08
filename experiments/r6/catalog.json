@@ -1,0 +1,236 @@
+{
+  "bundle": {
+    "files_verified": 55,
+    "index_sha256": "d983c092468268785e544d842c461907adcc069e43af6e7a905e1144c73a487b",
+    "packaged_source": "all source bytes verified; archived runner independently replayed all 12 responses using existing native binary; no second native rebuild claimed",
+    "path": "experiments/r6/gpu-input/bundle",
+    "relocated_integrity": "passed",
+    "relocated_native_replay": "12 CPU responses passed",
+    "source_files": 6239,
+    "status": "gpu_pending"
+  },
+  "cpu_study": {
+    "cases": 2,
+    "cpu_run": {
+      "bytes": 86694,
+      "lf_sha256": "619eeabf7535c33134223bd6f56e0b51765044a045c056094e5d4c8752206dfd",
+      "raw_sha256": "619eeabf7535c33134223bd6f56e0b51765044a045c056094e5d4c8752206dfd",
+      "text_hash_version": 1
+    },
+    "fixed_samples": 100000,
+    "manifest": {
+      "bytes": 20744,
+      "lf_sha256": "dbe5e6d36d6b8af79c1c09760091d8ad51a6b2c1fb135f77569dfc39f56e42c0",
+      "raw_sha256": "dbe5e6d36d6b8af79c1c09760091d8ad51a6b2c1fb135f77569dfc39f56e42c0",
+      "text_hash_version": 1
+    },
+    "path": "experiments/r6/cpu-acceptance",
+    "repetitions": 2,
+    "seeds": [
+      42,
+      43,
+      44
+    ],
+    "tone_evaluations": 3072,
+    "top_run": {
+      "bytes": 78997,
+      "lf_sha256": "47812c2aa8a52f5db5a7640b7be670e6fcd61a504be966488c1c217c263eb47f",
+      "raw_sha256": "47812c2aa8a52f5db5a7640b7be670e6fcd61a504be966488c1c217c263eb47f",
+      "text_hash_version": 1
+    },
+    "traces": 12,
+    "verdict": "gpu_pending; all CPU reference and repeat checks passed"
+  },
+  "documentation": {
+    "all_page_footers_verified": true,
+    "all_r6_formatted_lines_verified": true,
+    "committed_layout_snapshot": "experiments/r6/checks/model-committed-layout.md",
+    "pages": 72,
+    "pdf": {
+      "bytes": 440854,
+      "raw_sha256": "2aa8741352c3575c530cd4ccb3cca7b0acfbb7afc201343bf315a91e2c9c5aea"
+    },
+    "plain_source_lines_matched": 3572,
+    "plain_source_lines_total": 3573,
+    "plain_source_unmatched": [
+      "der RU wird auf anderen belegten RUs die tats\u00e4chliche Energie"
+    ],
+    "r6_formatted_lines": 100,
+    "r6_pages": [
+      66,
+      67,
+      68
+    ],
+    "render_count": 1,
+    "semantics": "Working-tree PDF preserves prior user layout; commit stages only R6 content on the committed layout.",
+    "source": {
+      "bytes": 218472,
+      "raw_sha256": "dfa8210fbeaf37120e908986fea4ac94fb107c56dc07f77e4ce1ac5182fbd975"
+    },
+    "source_snapshot": "experiments/r6/checks/model-pdf-source.md",
+    "staged_layout": {
+      "bytes": 332451,
+      "raw_sha256": "a0cab7c749d71c55e91138aa457693282273016f0187dbfa2c6fad02dfbe0430"
+    },
+    "status": "passed",
+    "visual_inspection": "page66 passed"
+  },
+  "hardware_acceptance": {
+    "cpu": "passed",
+    "cuda": "not executed; local probe explicitly failed without GPU",
+    "cuda_ci": "workflow implemented; execution not claimed",
+    "remote_rtx3060": "awaiting user execution and independent audit"
+  },
+  "preserved_user_changes": "Existing README/model condensation and cache/provenance/plot changes remain unstaged. Source archive captures actual local working bytes; staged model uses prior committed section numbering plus R6. Historical R1-R5 catalogs and measurement hashes unchanged.",
+  "reports": {
+    "experiments/r6/checks/archive-final.log": {
+      "bytes": 274,
+      "raw_sha256": "3cfc7ce57b65f7e7e37b2a43d88c232c73563544eade479cbcba34f1e0209920"
+    },
+    "experiments/r6/checks/build.log": {
+      "bytes": 1299,
+      "raw_sha256": "f52f514b7c27738f98acfd31e5fdc88a652602104f3b244896c3be6103dc6604"
+    },
+    "experiments/r6/checks/bundle-export.json": {
+      "bytes": 245,
+      "lf_sha256": "13f8573b6801fcc5db97723d99f1f0b88c5a983d94fafb8fcdd12ec5cbd33c30",
+      "raw_sha256": "13f8573b6801fcc5db97723d99f1f0b88c5a983d94fafb8fcdd12ec5cbd33c30",
+      "text_hash_version": 1
+    },
+    "experiments/r6/checks/bundle-export.log": {
+      "bytes": 0,
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "experiments/r6/checks/bundle-verify.json": {
+      "bytes": 235,
+      "lf_sha256": "d5eec9962e356ccb44512473de76944a6dd042b1a12cf4cc1a26177284854618",
+      "raw_sha256": "d5eec9962e356ccb44512473de76944a6dd042b1a12cf4cc1a26177284854618",
+      "text_hash_version": 1
+    },
+    "experiments/r6/checks/cpu-acceptance.log": {
+      "bytes": 4040,
+      "raw_sha256": "7c41572d793075c1c24369beb98f54c058a4abae22e21d5fee4fa9e5a358ed92"
+    },
+    "experiments/r6/checks/cpu-probe.json": {
+      "bytes": 1975,
+      "lf_sha256": "107ddd5025843cbf31e04fe8123c5787c1f37eb7b118810f35ff67fdfbfac123",
+      "raw_sha256": "107ddd5025843cbf31e04fe8123c5787c1f37eb7b118810f35ff67fdfbfac123",
+      "text_hash_version": 1
+    },
+    "experiments/r6/checks/cpu-regressions.log": {
+      "bytes": 35898,
+      "raw_sha256": "a50adeb6e9b3607415e9a65b3a49144ea47747a87075cd96e95d10e49438925b"
+    },
+    "experiments/r6/checks/cuda-probe.json": {
+      "bytes": 201,
+      "lf_sha256": "9249d10a08a306d52317be065b604e35021fc5ab56d50442b313a1afaa081a15",
+      "raw_sha256": "9249d10a08a306d52317be065b604e35021fc5ab56d50442b313a1afaa081a15",
+      "text_hash_version": 1
+    },
+    "experiments/r6/checks/environment.json": {
+      "bytes": 14181,
+      "lf_sha256": "48adf400ffda096eb0e5ca5bb2279e6dbfa03f7e06846519bbf5b26ef63ac80e",
+      "raw_sha256": "48adf400ffda096eb0e5ca5bb2279e6dbfa03f7e06846519bbf5b26ef63ac80e",
+      "text_hash_version": 1
+    },
+    "experiments/r6/checks/focused-final.log": {
+      "bytes": 2217,
+      "raw_sha256": "00c2d640319b2eece63122fbee5300726f2787729dcfe94c91018217d98d506b"
+    },
+    "experiments/r6/checks/focused.log": {
+      "bytes": 2039,
+      "raw_sha256": "6991c4310ee2bb7e2a4eb2470bebe29087e0975f0dba8371314a4c4dfe3c06a5"
+    },
+    "experiments/r6/checks/model-committed-layout.md": {
+      "bytes": 332451,
+      "raw_sha256": "a0cab7c749d71c55e91138aa457693282273016f0187dbfa2c6fad02dfbe0430"
+    },
+    "experiments/r6/checks/model-pdf-source.md": {
+      "bytes": 218472,
+      "raw_sha256": "dfa8210fbeaf37120e908986fea4ac94fb107c56dc07f77e4ce1ac5182fbd975"
+    },
+    "experiments/r6/checks/model-pdf-text.txt": {
+      "bytes": 227543,
+      "lf_sha256": "9020b6711230441b5d9b8824094a90401282625c2e028a864ef474cdaa5055b7",
+      "raw_sha256": "9020b6711230441b5d9b8824094a90401282625c2e028a864ef474cdaa5055b7",
+      "text_hash_version": 1
+    },
+    "experiments/r6/checks/package-final.json": {
+      "bytes": 177,
+      "lf_sha256": "893d95411129125d759a3cd0b53be8eb07cdd03687da7c6f453d064e8b7f4bb8",
+      "raw_sha256": "893d95411129125d759a3cd0b53be8eb07cdd03687da7c6f453d064e8b7f4bb8",
+      "text_hash_version": 1
+    },
+    "experiments/r6/checks/package-final.log": {
+      "bytes": 0,
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "experiments/r6/checks/packaged-source-audit.json": {
+      "bytes": 252,
+      "lf_sha256": "cb326096c48c7618571689ff4b0000b9a4364810b70fc48441393073d033b485",
+      "raw_sha256": "cb326096c48c7618571689ff4b0000b9a4364810b70fc48441393073d033b485",
+      "text_hash_version": 1
+    },
+    "experiments/r6/checks/pdf-info.txt": {
+      "bytes": 616,
+      "lf_sha256": "da2fe6a3a7eeffdaf568a2d38c9509e67b3d2def3a3994dc18cbd870e0866650",
+      "raw_sha256": "da2fe6a3a7eeffdaf568a2d38c9509e67b3d2def3a3994dc18cbd870e0866650",
+      "text_hash_version": 1
+    },
+    "experiments/r6/checks/pdf-page-66.png": {
+      "bytes": 171225,
+      "raw_sha256": "58601feaacbe18341b744bb65648133b202b9f497965a010b36dad31b6a449d1"
+    },
+    "experiments/r6/checks/pdf-preview.log": {
+      "bytes": 0,
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "experiments/r6/checks/pdf-render.log": {
+      "bytes": 0,
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "experiments/r6/checks/pdf-validation.json": {
+      "bytes": 663,
+      "lf_sha256": "a48f61b3737a0983d4b136245f73f03767f6df7931fc05a460a63dbf97d3c420",
+      "raw_sha256": "a48f61b3737a0983d4b136245f73f03767f6df7931fc05a460a63dbf97d3c420",
+      "text_hash_version": 1
+    },
+    "experiments/r6/checks/relocated-native-audit.json": {
+      "bytes": 3660,
+      "lf_sha256": "8fe58bac0cb3a08a74c98974b82464972a1a289dc0b40ec06e0314361ecd92ad",
+      "raw_sha256": "8fe58bac0cb3a08a74c98974b82464972a1a289dc0b40ec06e0314361ecd92ad",
+      "text_hash_version": 1
+    },
+    "experiments/r6/checks/remote-source-extraction.log": {
+      "bytes": 56,
+      "raw_sha256": "31587cf08cc714c15af046312120ea4c365a3e321000895cbb6336b9b0426834"
+    }
+  },
+  "schema": "ns3sionna.r6-artifact-catalog",
+  "schema_version": 1,
+  "scope": "One R6 implementation increment: explicit fresh-process LLVM/CUDA tracing, paired static 2x2 native MMSE/MI diagnostics, shared exact package lock, manual self-hosted CUDA CI, source/result packaging and RTX3060 remote script.",
+  "status": "implementation_and_cpu_validated_gpu_pending",
+  "transfer": {
+    "access": "Local artifact; transfer to GPU host. No hosted download claimed.",
+    "identity": {
+      "bytes": 27774385,
+      "raw_sha256": "24cbba7fd9becf47ccf5763e13c138ed5e5038e90572a0407d568faa33682f8d"
+    },
+    "index_sha256": "d983c092468268785e544d842c461907adcc069e43af6e7a905e1144c73a487b",
+    "path": "experiments/r6/r6-gpu-input.tar.gz",
+    "remote_result": "r6-results/r6-results.tar.gz",
+    "script": "tools/run_r6_gpu.sh"
+  },
+  "validation": {
+    "archive_change_targeted_test": "passed after final archive exclusion adjustment",
+    "final_r6_passed": 13,
+    "final_r6_tests": 13,
+    "native_cases": 60,
+    "native_suites": 7,
+    "python_passed": 160,
+    "python_skipped": 5,
+    "python_tests": 165,
+    "skips": "Older optional aging/workload and full R4 exports not selected; full R5 and R6 CPU exports audited.",
+    "strict_cpu_environment": "passed"
+  }
+}

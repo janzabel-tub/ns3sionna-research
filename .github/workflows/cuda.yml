@@ -1,0 +1,30 @@
+name: CUDA backend comparison
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  cuda:
+    runs-on: [self-hosted, linux, x64, gpu]
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: nsnam/ns-3-dev-git
+          ref: 4fdc985b5d5b800992e0ce87df7a727e32033794 # ns-3.40
+          path: ns-3.40
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          path: ns-3.40/contrib/sionna
+      - name: Sequential CPU regressions and actual CPU/CUDA comparison
+        run: bash ns-3.40/contrib/sionna/tools/run_r6_gpu.sh --source ns-3.40 --output "$RUNNER_TEMP/r6-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: r6-cuda-results
+          path: |
+            ${{ runner.temp }}/r6-${{ github.run_id }}-${{ github.run_attempt }}/logs/
+            ${{ runner.temp }}/r6-${{ github.run_id }}-${{ github.run_attempt }}/study/
+            ${{ runner.temp }}/r6-${{ github.run_id }}-${{ github.run_attempt }}/bundle-relocated/
+            ${{ runner.temp }}/r6-${{ github.run_id }}-${{ github.run_attempt }}/result-index-sha256.txt
+            ${{ runner.temp }}/r6-${{ github.run_id }}-${{ github.run_attempt }}/exit-code.txt

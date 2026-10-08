@@ -432,5 +432,37 @@ custom/quick runs are separate from the default acceptance. Production PHY guard
 bands expand 20/40 MHz to 768/1536 CFR bins. Latency and RSS are descriptive
 measurements, with no universal performance limit. See the
 [R4 measurement contract](doc/r4-live-scaling.md) and
-[local artifact catalog](experiments/r4/catalog.json). R5 physical channel aging
-and R6 GPU/backend completion remain open.
+[local artifact catalog](experiments/r4/catalog.json). R5 physical CPU channel aging is complete. R6 implementation and CPU checks are
+complete; actual CUDA hardware acceptance remains pending.
+
+## R6 CPU/CUDA comparison and RTX 3060 remote script
+
+The fixed backend matrix, acceptance tolerances, local validation and complete
+remote commands are in [the R6 contract](doc/r6-backend-completion.md).
+The [remote script](tools/run_r6_gpu.sh) verifies a transferred source/result
+bundle, creates an isolated environment, rebuilds ns-3, runs CPU regressions,
+performs actual CPU/CUDA traces, audits every native result and packages the
+relocated reproduction payload. The shared exact Python lock is intentional;
+Sionna RT CUDA uses Mitsuba/Dr.Jit while PyTorch remains on CPU.
+
+From ns-3, in the existing CPU environment, use a new output directory:
+
+```sh
+python contrib/sionna/tools/benchmark_backends.py run --cpu-only --output=/tmp/r6-cpu
+python contrib/sionna/tools/benchmark_backends.py validate --output=/tmp/r6-cpu --native
+python contrib/sionna/tools/benchmark_backends.py package --output=/tmp/r6-cpu --bundle=/tmp/r6-bundle
+```
+
+Copy the prepared local `experiments/r6/r6-gpu-input.tar.gz` to the RTX machine,
+extract it, and use the trusted hash from [the catalog](experiments/r6/catalog.json):
+
+```sh
+bash run_r6_gpu.sh --bundle "$PWD/bundle" --index-sha256 "<trusted index hash>" --output "$PWD/r6-results"
+```
+
+Linux x86_64, Python 3.12, an NVIDIA driver and documented native libraries are
+prerequisites; the contract lists the one-time installation commands. Return
+`r6-results/r6-results.tar.gz` for independent audit. The manually dispatched
+CUDA CI uses a self-hosted runner with labels `self-hosted,linux,x64,gpu`.
+Local CPU acceptance passed; actual GPU acceptance and CUDA CI execution remain
+pending. CPU-only runs and packages explicitly record `gpu_pending`.

@@ -23,3 +23,7 @@
 # R5 physical channels and portable payloads remain local.
 /experiments/r5/*
 !/experiments/r5/catalog.json
+
+# R6 backend traces, sources and portable payloads stay local.
+/experiments/r6/*
+!/experiments/r6/catalog.json

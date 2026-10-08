@@ -2,7 +2,8 @@
 
 Stand: 8. Oktober 2026. Phasen 1–4 implementiert; Phase 5 mit enger
 HE-MCS-0-Kalibrierung und begrenzten CPU-Studien teilweise validiert.
-R1–R5 sind im jeweils festgelegten CPU-Umfang abgeschlossen; R6 bleibt offen.
+R1–R5 sind im jeweils festgelegten CPU-Umfang abgeschlossen. R6 ist implementiert;
+CPU-Abnahme erfolgreich, RTX-3060-/CUDA-CI-Hardwareabnahme ausstehend.
 R5 ergänzt getrennte physikalische Sounding-/Sendekanäle mit Bewegung und Doppler.
 
 Arbeitszweig: feature/su-mimo-minimal
@@ -5864,6 +5865,121 @@ Automatisches Sounding, MAC-Feedback, produktiver Server-Dopplerdispatch,
 bewegte Streuer, neue Abstand-/Elevations-/Roll-/NLOS-Szenen, größere statistische
 Studien, PER-/Goodput-Kalibrierung und GPU-Nachweise bleiben spätere Arbeit.
 Phase 5 insgesamt bleibt wegen R6 und der dokumentierten Profil-/Szenengrenzen offen.
+
+### 7.27 R6: Backendvergleich und vollständiges Reproduktionspaket
+
+R6 wurde als **ein Implementierungsinkrement** mit dem vorab festgelegten
+[Backendvertrag](doc/r6-backend-completion.md) umgesetzt. Die lokale CPU-Abnahme
+ist erfolgreich; die physische CUDA-Abnahme auf der vom Anwender bereitgestellten
+RTX 3060 und eine tatsächliche Ausführung der CUDA-CI stehen noch aus. R6 wird
+deshalb ausdrücklich **nicht als vollständig hardwarevalidiert** ausgewiesen.
+R1–R5 und deren historische Messhashes bleiben unverändert.
+
+`benchmark_backends.py` startet getrennte frische CPU-/CUDA-Prozesse und setzt
+vor dem Import der variantenspezifischen Sionna-Klassen exakt
+`llvm_ad_mono_polarized` beziehungsweise `cuda_ad_mono_polarized`.
+Eine tatsächliche Dr.Jit-Auswertung muss [2,3] ergeben; ein LLVM-Fallback
+erfüllt die CUDA-Abnahme nicht. Beide Seiten verwenden denselben vollständigen
+Python-Lock einschließlich CPU-PyTorch: Der CUDA-Raytracer wird durch
+Mitsuba/Dr.Jit ausgeführt, die MIMO-Abstraktion weiterhin ausschließlich durch
+den nativen ns-3-Kern. Variant, Paketversionen, Lockhash, Treiber-/GPU-Ausgabe,
+Konfiguration, Roh-CFR, native Kommandos, Messzeiten und Dateihashes werden
+gespeichert. Fehler und Zeitüberschreitungen behalten Logs und einen getrennten
+fehlgeschlagenen beziehungsweise unvollständigen Ausführungsstatus.
+
+Die feste Matrix verwendet `simple_room`, 5180 MHz, 20 MHz/256 FFT-Bins,
+explizite 2x2-Arrays mit Abstand 0,5 lambda, Positionen (3,2,2)/(4,3,1) m,
+TX-/RX-Azimute 90/90 und 90/0 Grad, Seeds 42/43/44, Run 1, Streams 0/1,
+100000 Samples, Tiefe 3, einen LLVM-Thread und zwei frische Wiederholungen.
+Das sind zwölf Traces pro Backend; andere Budgets bleiben Diagnostik.
+Die produktive CFR-Normalisierung erfüllt
+
+\[
+  \frac{1}{N_\mathrm{sc}N_\mathrm{rx}N_\mathrm{tx}}
+  \sum_k\Vert H_b[k]\Vert_F^2=1,
+  \qquad b\in\{\mathrm{CPU},\mathrm{CUDA}\}.
+\]
+
+Der gleiche native Open-Loop-Kern berechnet pro Backend bei gleicher
+Gesamtsendeleistung und perfekter RX-CSI
+
+\[
+ E_b[k]=\left(I+\frac{\rho_b}{2}H_b^H[k]H_b[k]\right)^{-1},
+ \quad\gamma_{b,s}[k]=\frac{1}{[E_b[k]]_{ss}}-1,
+ \quad\rho_b=\frac{P_\mathrm{tx}10^{-L_b/10}}
+ {k_\mathrm{B}TB10^{F/10}}.
+\]
+
+\[
+ \gamma_{b,s}^{\mathrm{eff}}
+ =\exp\!\left(\frac{1}{N_\mathrm{sc}}
+   \sum_k\ln(1+\gamma_{b,s}[k])\right)-1,
+ \qquad
+ \eta_b=\frac{1}{N_\mathrm{sc}}
+   \sum_{k,s}\log_2(1+\gamma_{b,s}[k]).
+\]
+
+Alle gespeicherten Ergebnisse werden gegen unabhängige NumPy-SVD-/MMSE-/MI-
+Referenzen und optional durch erneutes natives Replay geprüft. Gepaarte
+CPU-/CUDA-Vergleiche und backendinterne Wiederholungen übernehmen die bestehende
+Konvergenzpolicy: Pfadverlustabweichung höchstens 0,5 dB, kein geänderter
+Tonrang, Singularwerte mit rtol 0,05/atol 1e-7, Ton-SINR höchstens 1 dB,
+effektive SINR höchstens 0,5 dB und MI höchstens 0,2 bit/s/Hz. Vor dem
+Logarithmus gilt die SINR-Untergrenze 1e-12. Jeder Ton, Seed und jede
+Wiederholung muss bestehen; die Toleranzen werden nach GPU-Messungen nicht
+nachträglich verändert. Komplexe CFR-Abweichungen
+
+\[
+ \epsilon_H=\frac{\Vert H_\mathrm{CUDA}-H_\mathrm{CPU}\Vert_F}
+                   {\Vert H_\mathrm{CPU}\Vert_F}
+\]
+
+und Bytegleichheit bleiben separate Diagnostik, weil backendabhängige
+Pfadentdeckung und Reihenfolge verschieden sein können. Es wird weder eine
+allgemeine Samplekonvergenz noch ein Geschwindigkeitsgewinn oder ein neues
+PER-/Durchsatzprofil behauptet.
+
+`run_r6_gpu.sh` führt den gesamten Ablauf auf einem Linux-Rechner mit RTX 3060
+aus: externe Bundlehashprüfung, sichere Quellenextraktion, isolierte Python-
+Umgebung, frische Protobuf-Bindings, nativer Build, sequenzielle CPU-Regression,
+echter CUDA-Probe, beide Messungen, unabhängiges und natives Audit, R6-Tests,
+Bundleexport, Verschieben und erneutes Replay. Die notwendige einmalige
+Installation nativer Systembibliotheken und die konkreten Transferbefehle
+stehen im Backendvertrag. Automatische Systemänderungen erfolgen nicht.
+Die neue `.github/workflows/cuda.yml` nutzt denselben Ablauf auf einem
+Self-Hosted-Runner mit Labels `self-hosted,linux,x64,gpu`. Sie ist ausschließlich
+manuell auslösbar; CUDA-Ausfälle werden nicht als erfolgreiche Skips behandelt.
+Die vorhandene CPU-CI bleibt bestehen und übernimmt die neuen R6-Tests.
+
+Das vollständige lokale Reproduktionspaket enthält rohe Backendstudien,
+Konfigurationen, Szene, Ergebnisse, den vollständigen relevanten lokalen
+ns-3-Quellbaum einschließlich PHY-Anpassungen und Modul, Lock, Tests,
+Quellinventar/-hashes und Wiederaufbaubefehle. Buildausgaben, Git-Metadaten,
+Caches, Plots, PDFs und lokale Experimentverzeichnisse werden ausgeschlossen.
+Die Quellen sind ein identifizierter Working-Tree-Snapshot, kein vorgetäuschter
+sauberer Upstream-Checkout. Historische Studien können zusätzlich unverändert
+exportiert werden. Bibliotheken und Python-Wheels bleiben externe
+Installationsvoraussetzungen. Ein außerhalb des Bundles aufbewahrter Indexhash
+authentifiziert die vollständigen Payloads; `gpu_pending` wird beim Verpacken
+nicht in eine GPU-Abnahme umgedeutet.
+
+Lokal liefen zwölf echte CPU-Traces mit 3072 Tonauswertungen erfolgreich.
+Der strikte CPU-Lock-/Systemcheck und sieben native Testsuiten bestanden.
+Die sequenzielle Python-Regression führte 165 Tests aus: 160 bestanden,
+fünf optionale ältere Exporte waren nicht ausgewählt. Die abschließende
+R6-Suite bestand separat alle 13 Tests, einschließlich aller zwölf nativen
+CPU-Replays, wissenschaftlicher Negativfälle, manipulierten Exporte,
+Timeout-/Fehlerartefakte und sicherer Remote-Bundleextraktion. Gemessene
+Initialisierung 2,43–7,51 ms, CFR 658,62–767,89 ms und nativer Subprozess
+31,25–36,55 ms sind rein deskriptiv. Die lokale CUDA-Probe schlug auf dem
+CPU-Rechner explizit fehl. Der [R6-Katalog](experiments/r6/catalog.json)
+identifiziert Messungen, verschobenes Bundle, Transferarchiv, Audits und die
+genau einmal nach dieser finalen Dokumentationsänderung erzeugte PDF.
+
+Der Anwender führt das Transferpaket auf der RTX 3060 aus und liefert
+`r6-results.tar.gz` zurück. Erst nach unabhängiger Prüfung dieser tatsächlichen
+GPU-Ergebnisse und gesondertem CI-Nachweis kann R6 als hardwarevalidiert
+abgeschlossen werden. Bis dahin bleibt Phase 5 in diesem Punkt offen.
 
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 
