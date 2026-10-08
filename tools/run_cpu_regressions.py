@@ -44,7 +44,7 @@ def main():
     import benchmark_sumimo
     benchmark_sumimo.runtime()
     modules = ('test_cpu_environment', 'test_random_streams', 'test_experiment_bundle', 'test_provenance', 'test_calibrate_eesm', 'test_benchmark_sumimo',
-               'test_benchmark_rt_convergence', 'test_benchmark_cache_ipc', 'test_benchmark_mobility_storage', 'test_benchmark_live_scaling',
+               'test_benchmark_rt_convergence', 'test_benchmark_cache_ipc', 'test_benchmark_mobility_storage', 'test_benchmark_live_scaling', 'test_benchmark_physical_aging',
                'test_mimo_data_contract', 'test_mobility_storage', 'test_lookahead_storage',
                'test_deterministic_mobility', 'test_coherence_time_units')
     tests = unittest.TestLoader().loadTestsFromNames(modules)

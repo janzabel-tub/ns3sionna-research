@@ -19,3 +19,7 @@
 # R4 live RT/PHY records stay local; the trusted catalog is versioned.
 /experiments/r4/*
 !/experiments/r4/catalog.json
+
+# R5 physical channels and portable payloads remain local.
+/experiments/r5/*
+!/experiments/r5/catalog.json

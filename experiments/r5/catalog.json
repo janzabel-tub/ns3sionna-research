@@ -1,0 +1,347 @@
+{
+  "acceptance": {
+    "backend": "llvm_ad_mono_polarized",
+    "measurement_report": {
+      "age50_moving": [
+        {
+          "case_id": "case_00",
+          "effective_sinr0_db": {
+            "max": 58.167917398190156,
+            "median": 58.16791536550551,
+            "min": 58.163357204353225
+          },
+          "effective_sinr1_db": {
+            "max": 43.9776769090397,
+            "median": 43.97766375508124,
+            "min": 43.97493982843932
+          },
+          "median_channel_correlation": {
+            "max": 0.9667437627196198,
+            "median": 0.966704633304379,
+            "min": 0.9667046288460686
+          },
+          "mi_loss_bps_hz": {
+            "max": 1.5531668934339606,
+            "median": 1.5516142242928908,
+            "min": 1.5516135452746767
+          },
+          "mode": "position",
+          "seeds": 3,
+          "wideband_loss_db": {
+            "max": 53.86018877167768,
+            "median": 53.86018829131047,
+            "min": 53.860118158269984
+          }
+        },
+        {
+          "case_id": "case_00",
+          "effective_sinr0_db": {
+            "max": 58.604985787015416,
+            "median": 58.60497204041151,
+            "min": 58.60061557811939
+          },
+          "effective_sinr1_db": {
+            "max": 44.15077751906524,
+            "median": 44.15077531551974,
+            "min": 44.14814178734528
+          },
+          "median_channel_correlation": {
+            "max": 0.9687179568073365,
+            "median": 0.9686839044276088,
+            "min": 0.9686837116736351
+          },
+          "mi_loss_bps_hz": {
+            "max": 1.5575410376760956,
+            "median": 1.5560550183974087,
+            "min": 1.556050771653858
+          },
+          "mode": "doppler",
+          "seeds": 3,
+          "wideband_loss_db": {
+            "max": 53.42633773608966,
+            "median": 53.42633686669251,
+            "min": 53.42626427264402
+          }
+        },
+        {
+          "case_id": "case_01",
+          "effective_sinr0_db": {
+            "max": 64.00426713520608,
+            "median": 64.00290103149021,
+            "min": 64.00289709775107
+          },
+          "effective_sinr1_db": {
+            "max": 50.312315727425734,
+            "median": 50.31188134613483,
+            "min": 50.311876021657426
+          },
+          "median_channel_correlation": {
+            "max": 0.7446579077387624,
+            "median": 0.744657712473951,
+            "min": 0.7445440954679685
+          },
+          "mi_loss_bps_hz": {
+            "max": 0.7955917670390136,
+            "median": 0.795590568626892,
+            "min": 0.7952187562915327
+          },
+          "mode": "position",
+          "seeds": 3,
+          "wideband_loss_db": {
+            "max": 50.29375688701951,
+            "median": 50.29375646438968,
+            "min": 50.29374251762819
+          }
+        },
+        {
+          "case_id": "case_01",
+          "effective_sinr0_db": {
+            "max": 64.32307274263552,
+            "median": 64.32137055725275,
+            "min": 64.32136639926517
+          },
+          "effective_sinr1_db": {
+            "max": 50.350863857139956,
+            "median": 50.350490112238155,
+            "min": 50.35048478270821
+          },
+          "median_channel_correlation": {
+            "max": 0.7525501714914695,
+            "median": 0.7525500666442798,
+            "min": 0.752434751719433
+          },
+          "mi_loss_bps_hz": {
+            "max": 0.733665355317008,
+            "median": 0.7336640483061387,
+            "min": 0.7331844158522216
+          },
+          "mode": "doppler",
+          "seeds": 3,
+          "wideband_loss_db": {
+            "max": 50.172623396668435,
+            "median": 50.17262298566372,
+            "min": 50.1726003804643
+          }
+        }
+      ],
+      "backend": "llvm_ad_mono_polarized",
+      "evaluations": 240,
+      "path_sets": 24,
+      "snapshots": 240,
+      "status": "success",
+      "trajectories": 48
+    },
+    "native_cases": 60,
+    "native_suites": 7,
+    "new_r5_tests": 11,
+    "python_passed": 148,
+    "python_skipped": 5,
+    "python_tests": 153,
+    "skips": "two optional older aging/workload exports and three optional full R4 exports were not selected; all eleven R5 tests including the full final export and corruption checks executed"
+  },
+  "accepted_study": {
+    "doppler_path_sets": 24,
+    "evaluations": 240,
+    "execution": "success",
+    "manifest": {
+      "bytes": 162943,
+      "lf_sha256": "70a9856ad30d29cd9e06b56ca46f5b9fd777ba7931ddd8fa621bb5abd2691ac3",
+      "raw_sha256": "70a9856ad30d29cd9e06b56ca46f5b9fd777ba7931ddd8fa621bb5abd2691ac3",
+      "text_hash_version": 1
+    },
+    "path": "experiments/r5/acceptance-final",
+    "plan": {
+      "bytes": 2456,
+      "lf_sha256": "0cf5fdaf59341c2ce47e5afdc626851786859ccb262311a9bb62a4bd81b95129",
+      "raw_sha256": "0cf5fdaf59341c2ce47e5afdc626851786859ccb262311a9bb62a4bd81b95129",
+      "text_hash_version": 1
+    },
+    "run": {
+      "bytes": 378419,
+      "lf_sha256": "48fdff31c67c74bfbbc8778687b3925f9b04d3902c2ad76655d120429a018542",
+      "raw_sha256": "48fdff31c67c74bfbbc8778687b3925f9b04d3902c2ad76655d120429a018542",
+      "text_hash_version": 1
+    },
+    "snapshots": 240,
+    "summary": {
+      "bytes": 43325,
+      "lf_sha256": "f8732e28f706b64c2536e20bdda23910b002f81cc326467ebd832329e609f4a5",
+      "raw_sha256": "f8732e28f706b64c2536e20bdda23910b002f81cc326467ebd832329e609f4a5",
+      "text_hash_version": 1
+    },
+    "trajectories": 48,
+    "validation": "passed"
+  },
+  "access": "Complete artifacts remain local unversioned workspace data. Copy the entire bundle and keep this versioned catalog separately as its trusted index identity; no hosted download is claimed.",
+  "bundle": {
+    "execution_status": "success",
+    "files_verified": 574,
+    "index": "experiments/r5/bundle-relocated/index.json",
+    "index_sha256": "3bddbd15f3cc6bd50f530ab345dbcbb0c7a2dddeea8f9bf3cce78b931760b42a",
+    "path": "experiments/r5/bundle-relocated",
+    "relocated_native_audit": {
+      "evaluations": 240,
+      "status": "passed",
+      "trajectories": 48
+    },
+    "relocated_verification": "passed",
+    "semantics": "Complete raw study, configurations, required scene assets and runner/native/contract/test inputs. Integrity verified against this external trusted index; saved pairs independently audited and all 240 native evaluations replayed at relocated paths. No fresh relocated live RT execution claimed."
+  },
+  "documentation": {
+    "all_page_footers_verified": true,
+    "all_r5_formatted_lines_verified": true,
+    "committed_layout_snapshot": {
+      "bytes": 326108,
+      "path": "experiments/r5/checks/model-committed-layout.md",
+      "raw_sha256": "45a0cd5d619c9a2ad93ba5e56e250d67815f2e8a2f5fac499f619b94ada2d5da"
+    },
+    "inline_math_excluded_from_literal_comparison": true,
+    "markdown_path": "ns3sionna_mimo_model.md",
+    "pages": 70,
+    "pdf": {
+      "bytes": 429539,
+      "raw_sha256": "a5d74b776b6451ca5990a0918bfba44f79126cfb966e8e097c13cce973298dc1"
+    },
+    "pdf_path": "ns3sionna_mimo_model.pdf",
+    "plain_source_lines_matched": 3470,
+    "plain_source_lines_total": 3471,
+    "r5_section_pages": [
+      64
+    ],
+    "render_count": 1,
+    "render_source": "Merged working-tree Markdown preserves the user pre-existing condensed layout. Only R5 content is staged into the prior committed expanded layout, leaving that earlier rewrite uncommitted; this snapshot identifies the exact once-rendered source.",
+    "source": {
+      "bytes": 212013,
+      "raw_sha256": "5c325037558c83222f23b03da9e302f964cb8812e87e7b132ba81233325b225c"
+    },
+    "source_snapshot": {
+      "bytes": 212013,
+      "path": "experiments/r5/checks/model-pdf-source.md",
+      "raw_sha256": "5c325037558c83222f23b03da9e302f964cb8812e87e7b132ba81233325b225c"
+    },
+    "status": "passed",
+    "visual_inspection": "page64 passed"
+  },
+  "measurement_identity": "Measurement-time source hashes, dirty pre-existing edits, plan and run identities are preserved. Final documentation/catalog do not retroactively replace recorded sources or any historical R1-R4 data.",
+  "preserved_diagnostics": [
+    {
+      "path": "experiments/r5/smoke",
+      "scope": "10000-sample early implementation smoke, superseded by final policy metadata/audit checks; not final acceptance",
+      "status": "success"
+    },
+    {
+      "path": "experiments/r5/acceptance",
+      "reason": "Cleanly interrupted to correct inherited fixed-seed/fixed-CSI-time plan metadata before restarting in a fresh directory",
+      "status": "incomplete"
+    },
+    {
+      "path": "experiments/r5/checks/focused.log",
+      "reason": "Test invocation used an incorrect relative export path; corrected absolute path passed"
+    },
+    {
+      "path": "experiments/r5/checks/relocated-native-audit.log",
+      "reason": "Initial replay invocation guessed a study directory; corrected indexed path passed"
+    }
+  ],
+  "reports": {
+    "experiments/r5/checks/acceptance-final.log": {
+      "bytes": 16456,
+      "raw_sha256": "9d413b68960a6c57e1bc6d82bbd0db9862b1a21677e0308af1b28f42d1c61b3b"
+    },
+    "experiments/r5/checks/acceptance.log": {
+      "bytes": 14961,
+      "raw_sha256": "ce44ce45c9f4eb81f60f4fbdbe28759e51a7b29206f0408105e07eeaa8b346e9"
+    },
+    "experiments/r5/checks/build.log": {
+      "bytes": 499,
+      "raw_sha256": "a4af4a1936b1809567295117020d69964e063086f9b61c68b0f70fb117f640f7"
+    },
+    "experiments/r5/checks/bundle-export.json": {
+      "bytes": 200,
+      "lf_sha256": "d4f38c6276c7ba339f679462ce2e81bc858a8971ffd76f2f6ba779790cd5a2c0",
+      "raw_sha256": "d4f38c6276c7ba339f679462ce2e81bc858a8971ffd76f2f6ba779790cd5a2c0",
+      "text_hash_version": 1
+    },
+    "experiments/r5/checks/bundle-verify.json": {
+      "bytes": 201,
+      "lf_sha256": "a98764674da059690b4e75081816b0499307b7eddfce1871fb258a224da35d92",
+      "raw_sha256": "a98764674da059690b4e75081816b0499307b7eddfce1871fb258a224da35d92",
+      "text_hash_version": 1
+    },
+    "experiments/r5/checks/cpu-regressions.log": {
+      "bytes": 33958,
+      "raw_sha256": "8872a77bafdde3b42616b3d98d6f08657d9d4ca356dfbb62d92e8082b40db166"
+    },
+    "experiments/r5/checks/focused-final.log": {
+      "bytes": 2379,
+      "raw_sha256": "67cbed065b0902445769a916076fca656e0bba147301979a2ca6d5ea3c2c47da"
+    },
+    "experiments/r5/checks/focused.log": {
+      "bytes": 9751,
+      "raw_sha256": "9e90d2e946e7accd458d3de29ffe3872a6720c941c46f93aacfbb1973f00d341"
+    },
+    "experiments/r5/checks/measurement-report.json": {
+      "bytes": 3399,
+      "lf_sha256": "5a553b8bc1d732c87f511f2fc6c89201db21d2d8475efce290b5c97a2b658c50",
+      "raw_sha256": "5a553b8bc1d732c87f511f2fc6c89201db21d2d8475efce290b5c97a2b658c50",
+      "text_hash_version": 1
+    },
+    "experiments/r5/checks/model-committed-layout.md": {
+      "bytes": 326108,
+      "raw_sha256": "45a0cd5d619c9a2ad93ba5e56e250d67815f2e8a2f5fac499f619b94ada2d5da"
+    },
+    "experiments/r5/checks/model-pdf-source.md": {
+      "bytes": 212013,
+      "raw_sha256": "5c325037558c83222f23b03da9e302f964cb8812e87e7b132ba81233325b225c"
+    },
+    "experiments/r5/checks/model-pdf-text.txt": {
+      "bytes": 220837,
+      "lf_sha256": "098819bb01d2e2082ece5e3df8c8b4f0fa8a6468abe0e3e04a9237ff1fd6af41",
+      "raw_sha256": "098819bb01d2e2082ece5e3df8c8b4f0fa8a6468abe0e3e04a9237ff1fd6af41",
+      "text_hash_version": 1
+    },
+    "experiments/r5/checks/pdf-info.txt": {
+      "bytes": 616,
+      "lf_sha256": "b53f4a3edccda009fd9463f66eba0dab0cffd17ae8f639c579d0aa316d71db98",
+      "raw_sha256": "b53f4a3edccda009fd9463f66eba0dab0cffd17ae8f639c579d0aa316d71db98",
+      "text_hash_version": 1
+    },
+    "experiments/r5/checks/pdf-page-64.png": {
+      "bytes": 156603,
+      "raw_sha256": "c85ba9c1e3bd444c8b7c08c13dcd0f4e5c176ab8839be9ff9c95d9f823b96f8d"
+    },
+    "experiments/r5/checks/pdf-preview.log": {
+      "bytes": 0,
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "experiments/r5/checks/pdf-render.log": {
+      "bytes": 0,
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "experiments/r5/checks/pdf-validation.json": {
+      "bytes": 594,
+      "lf_sha256": "d2ed378fc304037b2d63232e4d43ab7bbe01eba2fafaaed23d1fc23edc764105",
+      "raw_sha256": "d2ed378fc304037b2d63232e4d43ab7bbe01eba2fafaaed23d1fc23edc764105",
+      "text_hash_version": 1
+    },
+    "experiments/r5/checks/relocated-native-audit-final.log": {
+      "bytes": 69,
+      "raw_sha256": "ed531a62658a922301741f75f8840e8d14433e66efd1b4a11bf044ee29f5cae5"
+    },
+    "experiments/r5/checks/relocated-native-audit.log": {
+      "bytes": 1460,
+      "raw_sha256": "c4fe71e6ac3baa69baf140cab8d8d9c6336e0150a91ff03389ac413c2a6230de"
+    },
+    "experiments/r5/checks/smoke-audit.log": {
+      "bytes": 69,
+      "raw_sha256": "ed531a62658a922301741f75f8840e8d14433e66efd1b4a11bf044ee29f5cae5"
+    },
+    "experiments/r5/checks/smoke.log": {
+      "bytes": 16456,
+      "raw_sha256": "9d413b68960a6c57e1bc6d82bbd0db9862b1a21677e0308af1b28f42d1c61b3b"
+    }
+  },
+  "schema": "ns3sionna.r5-artifact-catalog",
+  "schema_version": 1,
+  "scope": "One complete physical CPU CSI-aging subphase: position retracing and local constant-path Doppler, separate sounding/transmission CFR, native equal-power SVD/MMSE. Fixed simple_room 2x2/20MHz/5180MHz, two orientations, stationary or RX 1m/s, seeds42/43/44 run1 streams0/1, ages0/1/5/20/50ms, TX50ms, 100000 samples, two fresh repetitions, LLVM1thread. No automatic sounding, production Doppler dispatch, PER/throughput or GPU claim."
+}

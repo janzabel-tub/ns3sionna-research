@@ -53,10 +53,17 @@ Require(bool condition, const std::string& message)
 
 template <typename Position>
 bool
-MatchesPosition(const Position& position, const std::array<double, 3>& expected)
+HasFinitePosition(const Position& position)
 {
     return std::isfinite(position.x()) && std::isfinite(position.y()) &&
-           std::isfinite(position.z()) && std::abs(position.x() - expected[0]) <= 1e-12 &&
+           std::isfinite(position.z());
+}
+
+template <typename Position>
+bool
+MatchesPosition(const Position& position, const std::array<double, 3>& expected)
+{
+    return HasFinitePosition(position) && std::abs(position.x() - expected[0]) <= 1e-12 &&
            std::abs(position.y() - expected[1]) <= 1e-12 &&
            std::abs(position.z() - expected[2]) <= 1e-12;
 }
@@ -127,8 +134,10 @@ WriteConfiguration(const std::string& output,
 
 void
 Analyze(const std::string& input, const std::string& output,
-        bool aging, double ageMs, double transmissionMs, double rotationRate)
+        bool aging, double ageMs, double transmissionMs, double rotationRate,
+        const std::string& csiInput = {})
 {
+    const bool physical = !csiInput.empty();
     std::ifstream stream(input, std::ios::binary);
     Require(stream.is_open(), "Cannot open channel input: " + input);
     const auto start = std::chrono::steady_clock::now();
@@ -137,16 +146,75 @@ Analyze(const std::string& input, const std::string& output,
             "Cannot deserialize raw ChannelStateResponse");
     Require(response.csi_size() == 1, "Expected exactly one channel snapshot");
     const auto& snapshot = response.csi(0);
+    ns3sionna::ChannelStateResponse soundingResponse;
+    if (physical)
+    {
+        std::ifstream soundingStream(csiInput, std::ios::binary);
+        Require(soundingStream.is_open(), "Cannot open sounding channel input: " + csiInput);
+        Require(soundingResponse.ParseFromIstream(&soundingStream) && !soundingStream.bad(),
+                "Cannot deserialize raw sounding ChannelStateResponse");
+        Require(soundingResponse.csi_size() == 1, "Expected exactly one sounding channel snapshot");
+        const auto validatePhysicalSnapshot = [](const auto& state) {
+            const auto maxTimestamp = static_cast<uint64_t>(std::numeric_limits<int64_t>::max());
+            Require(state.start_time() <= maxTimestamp && state.end_time() <= maxTimestamp &&
+                        state.end_time() >= state.start_time(),
+                    "Physical channel snapshot has invalid nanosecond timestamps");
+            Require(state.has_tx_node() && state.tx_node().id() == 0 &&
+                        state.tx_node().has_position() &&
+                        HasFinitePosition(state.tx_node().position()),
+                    "Physical channel requires TX node 0 with a finite position");
+            Require(state.rx_nodes_size() == 1,
+                    "Physical channel requires exactly one receiver");
+            const auto& rx = state.rx_nodes(0);
+            Require(rx.id() == 1 && rx.has_position() && HasFinitePosition(rx.position()),
+                    "Physical channel requires RX node 1 with a finite position");
+            Require(rx.num_tx_antennas() == 2 && rx.num_rx_antennas() == 2,
+                    "Physical channel requires explicit 2x2 antenna dimensions");
+            Require(rx.frequencies_size() == 256 && rx.csi_real_size() == 1024 &&
+                        rx.csi_imag_size() == 1024,
+                    "Physical channel requires 256 tones with four complex coefficients each");
+            for (int sc = 1; sc < rx.frequencies_size(); ++sc)
+            {
+                Require(rx.frequencies(sc) > rx.frequencies(sc - 1),
+                        "Physical channel frequency grid must be strictly increasing");
+            }
+            Require(std::isfinite(rx.wb_loss()), "Physical channel wideband loss must be finite");
+            long double power = 0.0;
+            for (int i = 0; i < rx.csi_real_size(); ++i)
+            {
+                Require(std::isfinite(rx.csi_real(i)) && std::isfinite(rx.csi_imag(i)),
+                        "Physical channel CFR coefficients must be finite");
+                const long double real = rx.csi_real(i);
+                const long double imag = rx.csi_imag(i);
+                power += real * real + imag * imag;
+            }
+            Require(std::isfinite(power) && std::abs(power / 1024.0L - 1.0L) <= 1e-5L,
+                    "Physical channel requires unit-average-pair-power CFR normalization");
+        };
+        validatePhysicalSnapshot(snapshot);
+        const auto& soundingSnapshot = soundingResponse.csi(0);
+        validatePhysicalSnapshot(soundingSnapshot);
+        Require(soundingSnapshot.start_time() <= snapshot.start_time(),
+                "Sounding CSI timestamp cannot be later than transmission timestamp");
+        for (int sc = 0; sc < 256; ++sc)
+        {
+            Require(soundingSnapshot.rx_nodes(0).frequencies(sc) ==
+                        snapshot.rx_nodes(0).frequencies(sc),
+                    "Sounding and transmission frequency grids must match");
+        }
+    }
     Require(!aging || snapshot.start_time() == 0,
             "Aging evolution requires an initial channel at time zero");
     Require(snapshot.has_tx_node() && snapshot.tx_node().id() == 0 &&
                 snapshot.tx_node().has_position() &&
-                MatchesPosition(snapshot.tx_node().position(), TX_POSITION),
+                (physical ? HasFinitePosition(snapshot.tx_node().position())
+                          : MatchesPosition(snapshot.tx_node().position(), TX_POSITION)),
             "Expected TX node 0 at (3, 2, 2)");
     Require(snapshot.rx_nodes_size() == 1, "Expected exactly one receiver");
     const auto& receiver = snapshot.rx_nodes(0);
     Require(receiver.id() == 1 && receiver.has_position() &&
-                MatchesPosition(receiver.position(), RX_POSITION),
+                (physical ? HasFinitePosition(receiver.position())
+                          : MatchesPosition(receiver.position(), RX_POSITION)),
             "Expected RX node 1 at (4, 3, 1)");
     Require(receiver.num_tx_antennas() == 2 && receiver.num_rx_antennas() == 2,
             "Expected explicit 2x2 antenna dimensions");
@@ -196,11 +264,17 @@ Analyze(const std::string& input, const std::string& output,
         }
         return evolved;
     };
-    const Time transmissionTime = NanoSeconds(std::llround(transmissionMs * 1e6));
-    const Time age = NanoSeconds(std::llround(ageMs * 1e6));
-    const Time csiTime = transmissionTime - age;
-    const auto channel = aging ? evolve(transmissionTime) : initialChannel;
-    const auto estimate = aging ? evolve(csiTime) : initialChannel;
+    const Time transmissionTime = physical
+        ? NanoSeconds(static_cast<int64_t>(snapshot.start_time()))
+        : NanoSeconds(std::llround(transmissionMs * 1e6));
+    const Time csiTime = physical
+        ? NanoSeconds(static_cast<int64_t>(soundingResponse.csi(0).start_time()))
+        : transmissionTime - NanoSeconds(std::llround(ageMs * 1e6));
+    const Time age = transmissionTime - csiTime;
+    const auto channel = aging && !physical ? evolve(transmissionTime) : initialChannel;
+    const auto estimate = physical
+        ? SionnaPropagationCache::DeserializeChannelMatrix(soundingResponse.csi(0).rx_nodes(0))
+        : (aging ? evolve(csiTime) : initialChannel);
     // L_wb supplies absolute received power; normalized H[k] retains the spatial
     // and frequency variation. The MMSE model splits reference SNR over two streams.
     const auto budget = WifiLinkBudget::Calculate(TX_POWER_DBM,
@@ -215,10 +289,10 @@ Analyze(const std::string& input, const std::string& output,
     selectionConfiguration.rxArray.numColumns = 2;
     selectionConfiguration.feedback.codebook = MimoFeedbackCodebook::UNQUANTIZED;
     selectionConfiguration.timing.feedbackDelay = age;
-    // Continuous sampling (Tu=0) makes feedbackDelay equal the requested age.
+    // Continuous sampling (Tu=0) makes feedbackDelay equal the CSI age.
     // The existing API resolves and validates the timestamps, then evaluates
     // the selected W against the separately supplied, perfectly known RX CFR.
-    const auto selection = aging ? std::make_optional(MimoCsiAgingModel::Select(
+    const auto selection = (aging || physical) ? std::make_optional(MimoCsiAgingModel::Select(
         estimate, csiTime, transmissionTime, selectionConfiguration)) : std::nullopt;
     const auto link = selection ? selection->CalculateLink(channel, budget.GetReferenceSnrLinear())
                                : SuMimoLinkModel::Calculate(channel, budget.GetReferenceSnrLinear());
@@ -251,7 +325,7 @@ Analyze(const std::string& input, const std::string& output,
         // Relative SVD rank is diagnostic only: rank-one and zero channels remain valid.
         const double threshold = 1e-12 * sigma0;
         const uint32_t rank = (sigma0 > threshold ? 1 : 0) + (sigma1 > threshold ? 1 : 0);
-        double norm = 0.0, change = 0.0;
+        double norm = 0.0, oldNorm = 0.0, change = 0.0;
         std::complex<double> inner{0.0, 0.0};
         for (uint32_t rx = 0; rx < 2; ++rx)
         {
@@ -260,12 +334,16 @@ Analyze(const std::string& input, const std::string& output,
                 const auto current = channel.Get(sc, rx, tx);
                 const auto old = estimate.Get(sc, rx, tx);
                 norm += std::norm(current);
+                oldNorm += std::norm(old);
                 change += std::norm(current - old);
                 inner += std::conj(old) * current;
             }
         }
-        diagnostics.push_back({rank, sigma0, sigma1,
-                               norm > 0.0 ? std::abs(inner) / norm : 1.0,
+        const double correlation = physical
+            ? (norm > 0.0 && oldNorm > 0.0 ? std::abs(inner) / std::sqrt(oldNorm * norm)
+                                          : (norm == oldNorm ? 1.0 : 0.0))
+            : (norm > 0.0 ? std::abs(inner) / norm : 1.0);
+        diagnostics.push_back({rank, sigma0, sigma1, correlation,
                                norm > 0.0 ? std::sqrt(change / norm) : 0.0});
         Require(std::isfinite(link.GetSinrLinear(sc, 0)) &&
                     std::isfinite(link.GetSinrLinear(sc, 1)),
@@ -304,11 +382,13 @@ Analyze(const std::string& input, const std::string& output,
             << budget.GetReceiverNoisePowerW() << ',' << analysisSeconds;
         if (selection)
         {
-            csv << ",0," << selection->GetCsiTimestamp().GetNanoSeconds() << ','
+            csv << ',' << (physical ? csiTime.GetNanoSeconds() : 0) << ','
+                << selection->GetCsiTimestamp().GetNanoSeconds() << ','
                 << selection->GetTransmissionTimestamp().GetNanoSeconds() << ','
                 << selection->GetCsiAge().GetNanoSeconds() << ','
                 << selection->GetUpdateInterval().GetNanoSeconds() << ','
-                << selection->GetFeedbackDelay().GetNanoSeconds() << ',' << rotationRate << ','
+                << selection->GetFeedbackDelay().GetNanoSeconds() << ','
+                << (physical ? 0.0 : rotationRate) << ','
                 << diagnostic.correlation << ',' << diagnostic.relativeChange << ','
                 << selection->GetReconstruction().GetPrecodingMatrix().GetPower(sc);
         }
@@ -325,6 +405,7 @@ main(int argc, char* argv[])
 {
     std::string action{"config"};
     std::string input;
+    std::string csiInput;
     std::string output;
     double spacingLambda = 0.5;
     std::string txSpacingOverride, rxSpacingOverride;
@@ -335,11 +416,12 @@ main(int argc, char* argv[])
     SionnaMimoOrientation txOrientation;
     SionnaMimoOrientation rxOrientation;
     CommandLine cmd(__FILE__);
-    cmd.AddValue("action", "config, analyze (open loop), or aging (equal-power SVD)", action);
+    cmd.AddValue("action", "config, analyze, aging (analytic rotation), or physical-aging (paired CFR)", action);
     cmd.AddValue("csiAgeMs", "CSI age for aging; continuous sampling with this feedback delay", csiAgeMs);
     cmd.AddValue("transmissionMs", "Transmission time relative to frozen initial channel", transmissionMs);
     cmd.AddValue("rotationRateDegPerMs", "Explicit TX-basis rotation rate; zero is static", rotationRate);
-    cmd.AddValue("input", "Raw ChannelStateResponse protobuf file for analyze", input);
+    cmd.AddValue("input", "Raw ChannelStateResponse; transmission snapshot for physical-aging", input);
+    cmd.AddValue("csiInput", "Raw sounding ChannelStateResponse for physical-aging", csiInput);
     cmd.AddValue("output", "Raw SimInitMessage file (config) or diagnostic CSV (analyze)", output);
     cmd.AddValue("spacingLambda", "TX/RX horizontal antenna spacing in wavelengths", spacingLambda);
     cmd.AddValue("txSpacingLambda", "Override TX spacing; otherwise use spacingLambda", txSpacingOverride);
@@ -387,6 +469,13 @@ main(int argc, char* argv[])
                         std::abs(rotationRate) <= 360.0,
                     "Invalid CSI timing or rotation rate");
             Analyze(input, output, action == "aging", csiAgeMs, transmissionMs, rotationRate);
+        }
+        else if (action == "physical-aging")
+        {
+            Require(!input.empty(), "Provide --input=<path> for physical-aging");
+            Require(!csiInput.empty(), "Provide --csiInput=<path> for physical-aging");
+            Require(input != output && csiInput != output, "Input and output paths must differ");
+            Analyze(input, output, false, 0.0, 0.0, 0.0, csiInput);
         }
         else
         {

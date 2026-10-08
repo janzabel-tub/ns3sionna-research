@@ -1,13 +1,9 @@
 # ns3sionna: MIMO-Abstraktionsmodell für IEEE 802.11ax/be
 
-Stand: 7. Oktober 2026, Phase 4 einschließlich Unterphase 4.8 implementiert;
-Unterphase 5.1 für HE MCS 0/BCC/32 Byte/1x1 anhand von Link-Level-Daten validiert;
-Unterphasen 5.2.1 bis 5.2.5 mit Kanal-, Konvergenz-, Cache-/IPC-, Arrayabstands- und CSI-Alterungssensitivität implementiert;
-R1 als eine native CPU-Unterphase mit Seed-/Run-/Streams und portablen Bundles abgeschlossen;
-erstes R1/R3-Inkrement mit portabler Provenienz, CPU-CI und deaktiviertem Cache implementiert;
-zweites R3-Inkrement mit Cachekorrektheitsregressionen, Belegungszählern und inaktiver Linkbereinigung implementiert;
-drittes R3-Inkrement mit Allokations-/Antwort-/Speicherbudgets und Look-ahead-Tiefenprüfung implementiert;
-viertes R3-Inkrement mit gemessener CFR-Kopierreduktion und Getter-/MU-Eigentumsregressionen implementiert
+Stand: 8. Oktober 2026. Phasen 1–4 implementiert; Phase 5 mit enger
+HE-MCS-0-Kalibrierung und begrenzten CPU-Studien teilweise validiert.
+R1–R5 sind im jeweils festgelegten CPU-Umfang abgeschlossen; R6 bleibt offen.
+R5 ergänzt getrennte physikalische Sounding-/Sendekanäle mit Bewegung und Doppler.
 
 Arbeitszweig: feature/su-mimo-minimal
 
@@ -1037,43 +1033,24 @@ statische Cachepaarungen; getrennte Kalt-/Folgelatenzen und Prozess-RSS/HWM;
 Cache-/Pool-/Mobilitätsnutzbytes separat; erhaltene Fehlerartefakte und
 sequenzielle CPU-Regressionen. Zeit-/RSS-Werte sind deskriptive Beobachtungen
 mit festem Samplebudget, keine Leistungsgrenze oder Konvergenzfreigabe.
-MU-/MAC-Scheduling, physikalische Alterung und GPU-Abnahme bleiben R5/R6 bzw.
-spätere Arbeit. Weitere Optimierungen gehören nicht zu diesem R4-Abschluss.
+MU-/MAC-Scheduling bleibt spätere Arbeit; R5 schließt die begrenzte
+physikalische CPU-Alterung ab, GPU-Abnahme bleibt R6. Weitere Optimierungen gehören nicht zu diesem R4-Abschluss.
 
 Die vollständige Methodik steht in 5.27, die Abnahme in 7.25 und im
 [R4-Vertrag](doc/r4-live-scaling.md).
 
-##### R5: Physikalische CSI-Alterung und breitere Sensitivität
+##### R5: Physikalische CSI-Alterung (abgeschlossen)
 
-Abhängigkeit: R1; kalibrierte PER-Ausgaben zusätzlich R2.
-
-- Vorhandene Abstands-/Winkel-/Konvergenzmatrizen wiederverwenden.
-  Gezielte 0,75-Lambda-, Elevations-/Rollfälle und eine weitere
-  Multipath-/NLOS-Szene mit konkreter Untersuchungsfrage ergänzen.
-  Gesamtleistung, Rauschen und Solveroptionen kontrollieren sowie
-  tatsächliche Geometrie und Apertur ausgeben.
-- Einen physikalischen Bewegungs-/Dopplervertrag mit getrennten Sounding-
-  und Sendekanälen festlegen. Frisches und verzögertes CSI gegen denselben
-  tatsächlichen Sendekanal auswerten; Updateintervall, Feedbackdauer und
-  Zeitstempel von der Propagationcache-Gültigkeit unterscheiden.
-- Die bestehende analytische Rotation als Kontrolle erhalten. Ihre
-  Energie-/Singularwertinvarianz prüft Numerik, nicht Doppler.
-  Gleichleistungs-SVD unterstützt Alterung; MRT benötigt aktuelles
-  perfektes CSI, Wasserfüllung schließt Alterung/Quantisierung aus.
-- Unsicherheit über Seeds/Geometrien ergänzen. Die finale Anzahl unabhängiger
-  Realisationen anhand eines Piloten bestimmen; ein Start mit zehn gepaarten
-  Seeds ist ein Planungswert. Deterministische Wiederholungen zählen nicht
-  als unabhängige statistische Stichproben.
-- Historische Toleranzen erhalten: 0,5 dB Verlust/effektive SINR, 1 dB
-  Ton-SINR, die Rang-/Singularwertkriterien und 0,2 bit/s/Hz MI-Effizienz.
-  Neue Szenen oder strengere Ziele benötigen vorab festgelegte Kriterien.
-  Nach R2 kalibrierte Nutzdaten-PER und beobachtete PHY-Ergebnisse ergänzen;
-  MI, vorhergesagte PER, Präambelfehler, Payloadfehler, Retries und Goodput
-  getrennt berichten.
-
-Abnahmekriterium: Physikalische Alterung besitzt reproduzierbare Bewegung,
-CSI-Zeiten, unabhängige Kontrollen, Unsicherheit und erklärten Gültigkeitsbereich.
-Eine 1x1-Kalibrierung wird nicht ungeprüft auf 2x2 oder MU übertragen.
+R5 wurde als eine vollständige, vorab begrenzte CPU-Unterphase abgeschlossen:
+physikalische Bewegung und lokale Pfad-Dopplerentwicklung mit getrennten
+Sounding-/Sendekanälen, unabhängigen Kontrollen und reproduzierbaren Zeitstempeln.
+Feste Abnahme: zwei bestehende Arrayorientierungen in `simple_room`, stationär/1 m/s,
+fünf Alter, drei Seeds und zwei Wiederholungen bei 100000 Samples; alle nativen
+SVD/MMSE-/MI-, Pfadsummen-, Export- und CPU-Regressionen bestanden.
+Umfang, Formeln, Zahlen und Grenzen stehen in Abschnitt 7.26 sowie im
+[R5-Vertrag](doc/r5-physical-aging.md). Weitere Abstand-/Winkel-/NLOS-Matrizen,
+größere statistische Studien und PER-/Goodput-Erweiterungen sind spätere Arbeit.
+Die vorhandene 1x1-Kalibrierung wird nicht auf 2x2 oder MU übertragen.
 
 ##### R6: CUDA-CI, Backendvergleich und Phase-5-Abschluss
 
@@ -5684,7 +5661,7 @@ Neue Pläne, Rohantworten, CSVs, Logs und Eingangsbytes sind lokal im
 zugänglich. Das verschobene 39-Dateien-Paket verifiziert vollständig; ein neuer nativer
 CPU-Lauf reproduziert alle deterministischen Speicher-/Trajektorienfelder exakt. Historische
 Messhashes und R1/R2 bleiben unverändert. R3 besitzt keine Live-RT/PHY-Latenz-,
-physikalische Doppler-, CFR-/Protobuf-Allokator- oder RSS-Freigabe; R4 ist gemäß Abschnitt 7.25 abgeschlossen, R5/R6 bleiben offen.
+physikalische Doppler-, CFR-/Protobuf-Allokator- oder RSS-Freigabe; R4 ist gemäß Abschnitt 7.25 abgeschlossen, R5 ist im festgelegten CPU-Umfang abgeschlossen; R6 bleibt offen.
 
 ### 7.25 R4-Abschluss: Live-CPU-Server-/PHY-Skalierung
 
@@ -5759,7 +5736,134 @@ Fehler-/Kontrolldaten erhalten und werden nicht als bestandene Abnahme gezählt.
 
 R4 ist im festgelegten instrumentierten CPU-Messumfang abgeschlossen.
 Weitere Szenen, PHY-/MU-/MAC-Lasten, Pools, universelle RSS-/Leistungsgrenzen,
-physikalische Alterung und GPU-Abnahme sind spätere Arbeit beziehungsweise R5/R6.
+R5 schließt die begrenzte physikalische CPU-Alterung ab; GPU-Abnahme bleibt R6.
+
+### 7.26 R5-Abschluss: physikalische CSI-Alterung
+
+Am 8. Oktober 2026 wurde R5 als **eine vollständige Unterphase** im vorab
+festgelegten CPU-Umfang abgeschlossen. Der [R5-Vertrag](doc/r5-physical-aging.md)
+definiert den begrenzten Umfang; `tools/benchmark_physical_aging.py` führt ihn
+mit dem bestehenden nativen Beispiel `ns3_wifi_sumimo_benchmark.cc` aus.
+
+**Bewegungs-/Dopplervertrag.** `simple_room`, 5180 MHz, 20 MHz mit 256 FFT-Bins,
+2x2-Arrays mit 0,5 Lambda, TX/RX bei (3,2,2)/(4,3,1) m und Azimute 90/90 oder
+90/0 Grad bleiben fest. RX bewegt sich mit v=(1,0,0) m/s beziehungsweise
+v=0 als Kontrolle; TX und Szeneobjekte sind stationär. Run 1/Streams 0–1,
+Seeds 42/43/44, 100000 Samples, Tiefe 3 und ein LLVM-Thread bilden die feste
+Abnahme. Zwei frische Wiederholungen je Einstellung prüfen Determinismus.
+Senden erfolgt bei 50 ms; Sounding liegt 0/1/5/20/50 ms davor.
+
+`position` verwendet die produktive `SionnaEnv.compute_cfr`-Berechnung mit
+konstanter Geschwindigkeit/Richtung und tatsächlicher Position
+\(p_{rx}(t)=p_{rx}(0)+vt\) an jedem Anfragezeitpunkt, ohne Wandkontakt.
+`doppler` berechnet echte Sionna-RT-Pfade an der Ausgangsgeometrie und ruft
+`Paths.cfr` mit RX-Geschwindigkeit, 1 kHz und 51 Zeitpunkten auf. Für jeden
+Antennenpfad gilt lokal
+
+\[
+ \widetilde H[k,t]=\sum_p a_p(0)
+   e^{j2\pi\nu_p t}e^{-j2\pi f_k\tau'_p}.
+\]
+
+\(\nu_p\) stammt aus der physikalischen Geschwindigkeitsprojektion der
+Sionna-Pfade; \(\tau'_p\) verwendet dieselbe Delay-Normierung wie der Server.
+Bei stationären Streuern/TX gilt \(|\nu_p|\leq |v|f_c/c\), hier etwa 17,28 Hz.
+Doppler hält Pfadtopologie, Amplituden, Richtungen und Delays an der
+Ausgangsgeometrie fest. Seine exportierten Positionen beschreiben die
+korrespondierende lineare Trajektorie; `configuration.pb` und `paths.npz`
+halten den tatsächlichen Zeit-null-Anker. Das ist eine lokale physikalische
+Näherung und wird getrennt von der geometrisch nachgeführten Berechnung
+berichtet. Beide Modelle werden nur am Zeit-null-Anker auf Gleichheit geprüft.
+
+Jeder Zeit-Snapshot erhält seine eigene Leistungsnormierung und seinen
+Wideband-Verlust, ohne künstliche Energie-/Singularwertinvarianz:
+
+\[
+ q(t)=\frac{1}{4N_{sc}}\sum_{k,r,x}|\widetilde H_{rx}[k,t]|^2,\qquad
+ H[k,t]=\widetilde H[k,t]/\sqrt{q(t)},\quad L_{wb}(t)=-10\log_{10}q(t).
+\]
+
+**Getrennte CSI und native Abstraktion.** Die neue native Aktion
+`physical-aging --input=<Sendesnapshot> --csiInput=<Soundingsnapshot>` prüft
+gerichtete IDs 0->1, explizite 2x2-Dimensionen, passende streng aufsteigende
+256-Ton-Gitter, endliche Positionen/Koeffizienten/Verluste, Normierung und
+Nanosekundenintervalle, bevor sie eine Ausgabe anlegt. Der Runner prüft
+zusätzlich das feste Gitter (-128..127)*78125 Hz und tatsächliche Geometrie.
+Aus \(\hat H[k,t_{csi}]\) erzeugt `MimoCsiAgingModel::Select` gleichleistungs-
+SVD \(W[k]=V_{csi}[k]\), \(\|W[k]\|_F^2=2\). MMSE verwendet ausschließlich
+\(H[k,t_{tx}]W[k]\) und den Sendekanalverlust \(L_{wb}(t_{tx})\):
+
+\[
+ E[k]=\left(I+\frac{\rho(t_{tx})}{2}
+ W^H[k]H^H[k,t_{tx}]H[k,t_{tx}]W[k]\right)^{-1},\qquad
+ \gamma_s[k]=1/E_{ss}[k]-1.
+\]
+
+Gesamtleistung 20 dBm, 290 K und 7 dB Rauschzahl bleiben unverändert.
+Alle Alter verwenden denselben unveränderten Sendesnapshot. Perfekte RX-CSI
+bleibt erhalten. `csi_time_ns`, `transmission_time_ns` und `csi_age_ns` stammen
+aus den zwei Rohantworten; `initial_time_ns` bezeichnet in dieser Aktion den
+Soundingsnapshot, nicht den Doppleranker. Updateintervall ist explizit null,
+Feedbackdauer entspricht dem Alter. Die 5-ms-Cachegültigkeit ist weder
+CSI-Alter noch Feedbackdauer und wird hier nicht als Precoder-Ablauf benutzt.
+Die bestehende analytische Rotation bleibt als separate Numerikkontrolle erhalten.
+
+Die phaseninvariante Tonkorrelation lautet
+\(C_k=|\langle\hat H_k,H_k\rangle|/(\|\hat H_k\|_F\|H_k\|_F)\).
+Der relative Koeffizientenunterschied verwendet \(\|H_k-\hat H_k\|_F/\|H_k\|_F\).
+Exportiert werden beide Verluste, Delays, Zeitstempel, Ton-SINRs, Rang,
+Singularwerte, MI-SINRs, MI-Effizienz und deskriptive Laufzeiten.
+
+**Abnahme.** 48 frische Trajektorien ergeben 240 gespeicherte Zeit-Snapshots,
+24 vollständige Doppler-Pfadsätze und 240 native Sounding-/Sendeauswertungen.
+Alle bestehen: unabhängige NumPy-SVD/MMSE/MI und Sendebudget mit rtol/atol
+1e-8, Singularwerte 1e-10; unabhängige Doppler-Pfadsumme mit rtol 2e-4/atol
+2e-9; stationäre/Nullalter-Kontrollen, physikalische Geschwindigkeitsgrenze,
+Delay-/Geometrie-/Gitterprüfungen, identische rohe Wiederholungskanäle und
+deterministische native Metriken. Frische Vollstream-SVD erreicht den separat
+geprüften gleichen-Leistungs-Logdetwert; verzögerte MMSE-MI überschreitet ihn
+nicht. Positive Bewegungsalter verändern den Kanal nachweislich. Eine monotone
+Per-Stream-SINR- oder MI-Abnahme wird weder vorausgesetzt noch behauptet.
+
+Bei 1 m/s und 50 ms Alter ergeben sich folgende Werte. Die Korrelation ist der
+Median über 256 Töne. Bereiche betreffen genau drei numerisch gepaarte Seeds,
+nur Wiederholung 0; Wiederholung 1 liefert dieselben Werte.
+
+| TX/RX-Azimut | Modell | Tonkorrelation Median [Seedbereich] | MI-Verlust Median [Seedbereich], bit/s/Hz |
+| --- | --- | --- | --- |
+| 90/90 Grad | position | 0.966705 [0.966705, 0.966744] | 1.551614 [1.551614, 1.553167] |
+| 90/90 Grad | doppler | 0.968684 [0.968684, 0.968718] | 1.556055 [1.556051, 1.557541] |
+| 90/0 Grad | position | 0.744658 [0.744544, 0.744658] | 0.795591 [0.795219, 0.795592] |
+| 90/0 Grad | doppler | 0.752550 [0.752435, 0.752550] | 0.733664 [0.733184, 0.733665] |
+
+Die engen Seedbereiche sind Sample-/Solver-Sensitivität bei derselben Geometrie,
+keine unabhängigen Szenenrealisationen oder statistischen Konfidenzintervalle.
+Der Verlust kann mit dem Alter nichtmonoton verlaufen; die Rohreihen bei
+0/1/5/20/50 ms und der Plot erhalten diese Information. 100000 Samples sind
+hier ein festes Budget und kein neuer Konvergenznachweis.
+
+Sequenzielle CPU-Regressionen: sieben native Suites mit 60 Fällen sowie
+153 Python-Tests, davon 148 bestanden und fünf optionale ältere Exportprüfungen
+übersprungen. Alle elf R5-Tests wurden ausgeführt, einschließlich kompletter
+Exportabnahme und absichtlich fehlender Pfade, geänderter Konfiguration/Policy
+und veränderter/regehashter nativer SINR-Daten. Alte SU-/analytische Alterungs-
+und MU-Verträge bleiben durch ihre bestehenden Tests abgedeckt.
+
+Der [R5-Artefaktkatalog](experiments/r5/catalog.json) enthält das lokale
+vollständige 574-Dateien-Bundle, seinen externen Indexhash, Rohdaten, Plan,
+Quell-/Laufidentitäten und Prüfprotokolle. Die verschobene Kopie verifiziert
+vollständig. Das ist Integritätsprüfung, kein neuer portabler Live-RT-Replay.
+Der frühe 10000-Sample-Smoke und der wegen ungenauer geerbter Seed-/Zeit-
+Metadaten gestoppte erste 100000-Sample-Lauf bleiben separate Kontrolldaten.
+Nur `acceptance-final` zählt zur Abnahme; historische R1–R4-Messhashes bleiben
+unverändert. Die PDF wird nach der finalen Dokumentationsänderung genau einmal
+im vorhandenen CPU-Environment erzeugt und separat validiert.
+
+R5 ist damit im festgelegten physikalischen CPU-Alterungsumfang abgeschlossen.
+Automatisches Sounding, MAC-Feedback, produktiver Server-Dopplerdispatch,
+bewegte Streuer, neue Abstand-/Elevations-/Roll-/NLOS-Szenen, größere statistische
+Studien, PER-/Goodput-Kalibrierung und GPU-Nachweise bleiben spätere Arbeit.
+Phase 5 insgesamt bleibt wegen R6 und der dokumentierten Profil-/Szenengrenzen offen.
 
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 
@@ -6043,6 +6147,23 @@ Server-/Native-Logs und Protokolldaten werden auch bei Fehlern erhalten.
 Den ausgegebenen Bundleindexhash extern aufbewahren und die verschobene Kopie
 mit `experiment_bundle.py verify` gegen diesen Hash prüfen. Messgrenzen und
 Rohdatenschemata stehen im [R4-Vertrag](doc/r4-live-scaling.md).
+
+R5-Physikalische-Alterungsabnahme im vorhandenen CPU-Environment:
+
+    ./ns3 build -j 2 ns3_wifi_sumimo_benchmark sionna-test
+    python contrib/sionna/tools/benchmark_physical_aging.py --output=/tmp/r5-study
+    PHYSICAL_AGING_RESULTS=/tmp/r5-study python contrib/sionna/tools/run_cpu_regressions.py
+    python contrib/sionna/tools/benchmark_physical_aging.py \
+      --output=/tmp/r5-study --validate-export
+    python contrib/sionna/tools/experiment_bundle.py export \
+      --study=/tmp/r5-study --output=/tmp/r5-bundle \
+      --input=contrib/sionna/tools/benchmark_physical_aging.py \
+      --input=contrib/sionna/examples/ns3_wifi_sumimo_benchmark.cc
+
+Andere Samples/Wiederholungen benötigen neue Ordner und sind keine feste Abnahme.
+`--validate-export --binary=<nativer-Pfad>` führt zusätzlich native Paarreplays aus.
+Den Bundleindexhash separat behalten und die verschobene Kopie mit `verify` prüfen.
+Der [R5-Vertrag](doc/r5-physical-aging.md) erklärt die zwei physikalischen Modelle.
 
 PDF neu erzeugen:
 
