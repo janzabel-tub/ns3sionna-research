@@ -374,6 +374,84 @@
       "raw_sha256": "31587cf08cc714c15af046312120ea4c365a3e321000895cbb6336b9b0426834"
     }
   },
+  "runner_overlay_update": {
+    "cause": "Updated Python companions invoked the old bundled shell runner, which rejected --use-existing-environment during CPU regressions; no fresh remote CPU/CUDA study had started.",
+    "date": "2026-10-12",
+    "documentation": {
+      "all_page_footers_verified": true,
+      "new_formatted_lines_verified": 12,
+      "pages": 72,
+      "pdf": {
+        "bytes": 445412,
+        "raw_sha256": "54a4687957287257a81fedbb50c6848d8854e01bffa5f03574186e8c95607031"
+      },
+      "render_count": 1,
+      "source": {
+        "bytes": 221937,
+        "raw_sha256": "f9f92303b884509388ee93c99429a918c5ef99c2e4b650cee498a7fae14a6f82"
+      },
+      "source_snapshot": "experiments/r6/checks/runner-overlay-pdf-source.md",
+      "staged_snapshot": "experiments/r6/checks/runner-overlay-committed-layout.md",
+      "staged_source": {
+        "bytes": 335916,
+        "raw_sha256": "c3d31fd349ea7336dc9aa4b62ba1235d54b6bf2c07d7e8502825142984617669"
+      },
+      "visual_inspection": "page69 passed"
+    },
+    "fix": "Overlay and hash all three companions, including run_r6_gpu.sh; regression checks stale originals, replacement bytes and per-file hashes.",
+    "original_bundle_index_unchanged": "d983c092468268785e544d842c461907adcc069e43af6e7a905e1144c73a487b",
+    "recovery": "Reuse r6-results-3/ns-3.40 with --source and a new r6-results-4 output; rerun checks and fresh study without a full clean rebuild.",
+    "reports": {
+      "experiments/r6/checks/runner-overlay-committed-layout.md": {
+        "bytes": 335916,
+        "raw_sha256": "c3d31fd349ea7336dc9aa4b62ba1235d54b6bf2c07d7e8502825142984617669"
+      },
+      "experiments/r6/checks/runner-overlay-focused.log": {
+        "bytes": 3185,
+        "raw_sha256": "55ec125b7d8510b04acc9eda68a96b758d1ed5a90ba08de068a8721620ca907b"
+      },
+      "experiments/r6/checks/runner-overlay-pdf-info.txt": {
+        "bytes": 616,
+        "raw_sha256": "a0efa19f42b96a0b4de21e133eb82f73e36ef02cf08a2e77f75bc2fbb5db1a57"
+      },
+      "experiments/r6/checks/runner-overlay-pdf-preview.png": {
+        "bytes": 172105,
+        "raw_sha256": "cfbf1d7733885e54f49b7f06a51f001441c5f938e8fae43138ce9db0b6d0718f"
+      },
+      "experiments/r6/checks/runner-overlay-pdf-render.log": {
+        "bytes": 0,
+        "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "experiments/r6/checks/runner-overlay-pdf-source.md": {
+        "bytes": 221937,
+        "raw_sha256": "f9f92303b884509388ee93c99429a918c5ef99c2e4b650cee498a7fae14a6f82"
+      },
+      "experiments/r6/checks/runner-overlay-pdf-text.txt": {
+        "bytes": 231016,
+        "raw_sha256": "dda8ef8db9010daa330a5fc2306d3682e5765e0dc1fee4a4883fab2f9480d40d"
+      },
+      "experiments/r6/checks/runner-overlay-pdf-validation.json": {
+        "bytes": 158,
+        "raw_sha256": "01ea508cf54ab2a0479b0c2ba70cbf833864b2726092240c102253178794aab2"
+      }
+    },
+    "status": "local_fix_validated_remote_rerun_pending",
+    "tests": {
+      "archive_members_byte_verified": true,
+      "passed": 18,
+      "r6_tests": 18,
+      "shell_syntax": "passed",
+      "stale_shell_regression_reproduced_before_fix": true
+    },
+    "transfer": {
+      "identity": {
+        "bytes": 16538,
+        "raw_sha256": "1df57b90d7645aab27f3a61bf96f033242486f67172815cdf79cb9d2e3edf83d"
+      },
+      "path": "experiments/r6/r6-runner-overlay-update.tar.gz",
+      "remote_execution": "User transfers and executes; no remote actions performed."
+    }
+  },
   "schema": "ns3sionna.r6-artifact-catalog",
   "schema_version": 1,
   "scope": "One R6 implementation increment: explicit fresh-process LLVM/CUDA tracing, paired static 2x2 native MMSE/MI diagnostics, shared exact package lock, manual self-hosted CUDA CI, source/result packaging and RTX3060 remote script.",

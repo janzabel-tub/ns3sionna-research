@@ -91,6 +91,25 @@ interpreter. Regenerated bindings, native build, CPU regression, CUDA execution,
 scientific checks and result packaging still run. No changes to the installed
 Conda packages are made. Use a fresh output directory after each failure.
 
+The first existing-environment remote regression exposed an incomplete overlay:
+the two Python companions were updated but the extracted shell runner still
+rejected `--use-existing-environment`. The corrected overlay copies all three
+companions, including `run_r6_gpu.sh`, and records their original/applied hashes.
+The shell-path regression now starts with stale versions of all three files and
+checks every copied file and hash. This failure occurred before the fresh
+CPU/CUDA study; it does not constitute a GPU measurement.
+
+The follow-up archive is `experiments/r6/r6-runner-overlay-update.tar.gz`.
+After transferring and extracting it, reuse the already compiled source while
+retaining the failed logs and starting a new results directory:
+
+    bash r6-env-update/run_r6_gpu.sh --use-existing-environment \
+      --source "$PWD/r6-results-3/ns-3.40" --output "$PWD/r6-results-4"
+
+This uses the source already verified against the original trusted bundle.
+Configure/build still run, regenerate bindings and reuse the existing build.
+The original input bundle and its index hash remain unchanged.
+
 The initial Python-3.12 guard was too restrictive for an existing environment;
 simply deleting it still left venv creation and the incompatible NumPy 2.5.2
 pin active. The explicit existing-environment mode corrects both paths rather

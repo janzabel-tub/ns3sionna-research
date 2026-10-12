@@ -128,7 +128,7 @@ if (( r6_existing )); then
 import hashlib, json, pathlib, shutil, sys
 support, source, report = map(pathlib.Path, sys.argv[1:])
 updates = {}
-for name in ('benchmark_backends.py', 'test_benchmark_backends.py'):
+for name in ('run_r6_gpu.sh', 'benchmark_backends.py', 'test_benchmark_backends.py'):
     origin = support / name
     target = source / 'contrib/sionna/tools' / name
     if not origin.is_file():

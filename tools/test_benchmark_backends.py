@@ -162,7 +162,7 @@ class TestRemoteVerifier(unittest.TestCase):
             tools.mkdir(parents=True)
             for name in ("run_r6_gpu.sh", "benchmark_backends.py", "test_benchmark_backends.py"):
                 shutil.copyfile(Path(backend.__file__).parent / name, support / name)
-            for name in ("benchmark_backends.py", "test_benchmark_backends.py"):
+            for name in ("run_r6_gpu.sh", "benchmark_backends.py", "test_benchmark_backends.py"):
                 (tools / name).write_text("old source\n")
             (tools / "check_cpu_environment.py").write_text("print('environment reused'); raise SystemExit(17)\n")
             native = source / "ns3"
@@ -183,8 +183,13 @@ class TestRemoteVerifier(unittest.TestCase):
             self.assertFalse((output / "venv").exists())
             overlay = json.loads((output / "logs/runner-overlay.json").read_text())
             self.assertEqual(overlay["python_executable"], sys.executable)
-            self.assertEqual((tools / "benchmark_backends.py").read_bytes(),
-                             (support / "benchmark_backends.py").read_bytes())
+            for name in ("run_r6_gpu.sh", "benchmark_backends.py", "test_benchmark_backends.py"):
+                with self.subTest(companion=name):
+                    self.assertEqual((tools / name).read_bytes(), (support / name).read_bytes())
+                    self.assertEqual(overlay["overlays"][name]["original_sha256"],
+                                     hashlib.sha256(b"old source\n").hexdigest())
+                    self.assertEqual(overlay["overlays"][name]["applied_sha256"],
+                                     backend.base.sha256(support / name))
 
     def test_verifier_checks_external_trust_and_refuses_unsafe_archive(self):
         script = (Path(backend.__file__).parent / "run_r6_gpu.sh").read_text()

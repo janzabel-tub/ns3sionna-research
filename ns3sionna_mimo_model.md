@@ -6019,6 +6019,19 @@ nach dieser abschließenden Dokumentationsänderung einmal erzeugte PDF werden
 im R6-Katalog mit getrennten Prüfnachweisen festgehalten. Die eigentliche
 RTX-3060-Messung und CUDA-CI-Abnahme bleiben ausstehend.
 
+Der erste Remote-Regressionslauf im bestehenden Environment zeigte einen
+unvollständigen Overlay: Die Python-Dateien waren aktualisiert, der im Bundle
+enthaltene Shell-Launcher jedoch noch unverändert. Dessen erneuter Aufruf im
+Shellpfad-Test wies `--use-existing-environment` zurück, bevor eine frische
+CPU-/CUDA-Messung begann. Die Korrektur kopiert alle drei Begleitdateien,
+einschließlich `run_r6_gpu.sh`, und protokolliert ihre Original-/Updatehashes.
+Der Regressionstest beginnt mit drei veralteten Dateien und prüft deren
+vollständige Ersetzung sowie die Hashnachweise. Das lokale Folgearchiv heißt
+`experiments/r6/r6-runner-overlay-update.tar.gz`. Mit `--source` kann der Anwender
+den bereits kompilierten, zuvor bundleverifizierten Quellbaum wiederverwenden;
+ein neues Ausgabeverzeichnis bewahrt die ursprünglichen Fehlerlogs. Die
+wissenschaftlichen Kriterien und der ursprüngliche Bundleindex bleiben gleich.
+
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 
 - SionnaMimoHelper überträgt eine gemeinsame TX- und RX-Geometrie für die
