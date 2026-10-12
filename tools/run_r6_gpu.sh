@@ -8,6 +8,7 @@ Usage:
   bash run_r6_gpu.sh --bundle BUNDLE --index-sha256 HASH --output NEW_DIRECTORY
   bash run_r6_gpu.sh --source NS3_SOURCE --output NEW_DIRECTORY
   bash run_r6_gpu.sh --use-existing-environment --bundle BUNDLE --index-sha256 HASH --output NEW_DIRECTORY
+  bash run_r6_gpu.sh --use-existing-build --source NS3_SOURCE --output NEW_DIRECTORY
 
 Prerequisites: Linux x86_64, NVIDIA driver >=535 (nvidia-smi), Python 3.12,
 Python venv support, g++, CMake, pkg-config, patch, LLVM, ZeroMQ and Protobuf.
@@ -24,6 +25,11 @@ This mode requires Python >=3.11, reuses its interpreter and installs nothing.
 It records all package versions and deviations from the reference lock. Keep
 benchmark_backends.py and test_benchmark_backends.py beside this script when
 using an older source bundle; their applied hashes are recorded separately.
+With --use-existing-build, --source must name your existing ns-3 checkout.
+This also reuses the active Python environment. No configure, build, binding
+regeneration, source extraction, venv creation or package installation runs.
+Required R6 binaries and bindings must already exist; missing files cause an
+explicit failure. Only the three companion runner files are updated in place.
 EOF
 }
 
@@ -32,6 +38,7 @@ r6_hash=''
 r6_source=''
 r6_output=''
 r6_existing=0
+r6_existing_build=0
 r6_support_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 while (( $# )); do
   case "$1" in
@@ -40,10 +47,15 @@ while (( $# )); do
     --source) r6_source="${2:?missing source}"; shift 2 ;;
     --output) r6_output="${2:?missing output}"; shift 2 ;;
     --use-existing-environment) r6_existing=1; shift ;;
+    --use-existing-build) r6_existing_build=1; r6_existing=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; exit 2 ;;
   esac
 done
+if (( r6_existing_build )) && { [[ -z "$r6_source" ]] || [[ -n "$r6_bundle" ]]; }; then
+  echo '--use-existing-build requires --source pointing to an existing ns-3 checkout.' >&2
+  exit 2
+fi
 if [[ -z "$r6_output" ]] || { [[ -z "$r6_source" ]] && [[ -z "$r6_bundle" ]]; } ||
    { [[ -n "$r6_source" ]] && [[ -n "$r6_bundle" ]]; }; then
   usage >&2
@@ -133,9 +145,10 @@ for name in ('run_r6_gpu.sh', 'benchmark_backends.py', 'test_benchmark_backends.
     target = source / 'contrib/sionna/tools' / name
     if not origin.is_file():
         raise SystemExit(f'Missing companion {origin}; unpack the entire runner update beside the script')
-    original_hash = hashlib.sha256(target.read_bytes()).hexdigest()
+    original_hash = hashlib.sha256(target.read_bytes()).hexdigest() if target.is_file() else None
     updated_hash = hashlib.sha256(origin.read_bytes()).hexdigest()
     if origin.resolve() != target.resolve():
+        target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(origin, target)
     updates[name] = {'original_sha256': original_hash, 'applied_sha256': updated_hash}
 report.write_text(json.dumps({'mode': 'existing', 'python_executable': sys.executable,
@@ -151,9 +164,47 @@ else
   export PATH="$r6_output/venv/bin:$PATH"
 fi
 cd "$r6_source"
-rm -f contrib/sionna/model/message.pb.cc contrib/sionna/model/message.pb.h contrib/sionna/model/ns3sionna/common/message_pb2.py
-./ns3 configure --enable-examples --enable-tests --enable-modules=sionna,wifi,internet,applications,buildings 2>&1 | tee "$r6_output/logs/configure.log"
-./ns3 build -j 2 test-runner sionna-test ns3_wifi_sumimo_benchmark ns3_sionna_cache_ipc_benchmark ns3_sionna_live_benchmark 2>&1 | tee "$r6_output/logs/build.log"
+if (( r6_existing_build )); then
+  "$r6_python" - "$r6_source" "$r6_output/logs/build-reuse.json" <<'BUILD'
+import hashlib, json, os, pathlib, sys
+source, report = map(pathlib.Path, sys.argv[1:])
+patterns = {
+    'test-runner': 'build/utils/*test-runner-*',
+    'sionna-test': 'build/lib/libns3.40-sionna-test-*.so',
+    **{name: f'build/contrib/sionna/examples/ns3.40-{name}-*' for name in (
+        'ns3_wifi_sumimo_benchmark', 'ns3_sionna_cache_ipc_benchmark',
+        'ns3_sionna_live_benchmark')},
+    **{name: 'contrib/sionna/' + name for name in (
+        'model/message.pb.cc', 'model/message.pb.h',
+        'model/ns3sionna/common/message_pb2.py')},
+}
+files, failures = {}, []
+for name, pattern in patterns.items():
+    paths = sorted(path for path in source.glob(pattern) if path.is_file())
+    executable = name == 'test-runner' or name.startswith('ns3_')
+    if len(paths) != 1 or not paths[0].stat().st_size or (
+            executable and not os.access(paths[0], os.X_OK)):
+        failures.append(name)
+        continue
+    path = paths[0]
+    files[name] = {'path': str(path),
+                   'raw_sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+report.write_text(json.dumps({'mode': 'existing', 'source': str(source),
+    'configure_executed': False, 'build_executed': False,
+    'bindings_regenerated': False, 'clean_build_claimed': False,
+    'files': files, 'failures': failures,
+    'status': 'failed' if failures else 'success'}, indent=2) + '\n')
+if failures:
+    raise SystemExit('Existing ns-3 build is missing required files, has ambiguous matches, '
+                     'or non-executable binaries: ' + ', '.join(failures) +
+                     '. No build was attempted; select a checkout with these R6 targets already built.')
+print('Reusing existing ns-3 build:', source, '; no configure, build or binding regeneration')
+BUILD
+else
+  rm -f contrib/sionna/model/message.pb.cc contrib/sionna/model/message.pb.h contrib/sionna/model/ns3sionna/common/message_pb2.py
+  ./ns3 configure --enable-examples --enable-tests --enable-modules=sionna,wifi,internet,applications,buildings 2>&1 | tee "$r6_output/logs/configure.log"
+  ./ns3 build -j 2 test-runner sionna-test ns3_wifi_sumimo_benchmark ns3_sionna_cache_ipc_benchmark ns3_sionna_live_benchmark 2>&1 | tee "$r6_output/logs/build.log"
+fi
 "$r6_python" contrib/sionna/tools/check_cpu_environment.py > "$r6_output/logs/environment.json"
 "$r6_python" contrib/sionna/tools/run_cpu_regressions.py 2>&1 | tee "$r6_output/logs/regressions.log"
 "$r6_python" contrib/sionna/tools/benchmark_backends.py probe --backend=cuda | tee "$r6_output/logs/cuda-probe.json"

@@ -70,6 +70,28 @@ reproduction targets. CPU-only packaging retains `gpu_pending` explicitly.
 
 ## RTX 3060 remote run
 
+To use the original working ns-3 checkout and its existing Conda environment,
+transfer and extract `experiments/r6/r6-existing-ns3-update.tar.gz`. From the
+transfer directory on `hpc3`, run:
+
+    conda activate sionna2
+    bash r6-env-update/run_r6_gpu.sh --use-existing-build \
+      --source "$HOME/ns-allinone-3.40/ns-3.40" \
+      --output "$PWD/r6-results-existing"
+
+This mode requires `--source`, implies `--use-existing-environment`, and does
+not extract another ns-3 copy, configure, compile, regenerate bindings, create
+a venv or install packages. The three companion runner files are updated in
+the selected checkout; existing bindings and binaries are preserved.
+`logs/build-reuse.json` records the selected checkout and hashes of the required
+test runner, Sionna test library, three benchmark executables and three bindings.
+Missing or ambiguous binaries/bindings cause an explicit failure without an
+automatic build. The existing freshness checks, CPU regressions, real CUDA
+probe, paired study, NumPy/native checks and portable result packaging still run.
+Source and binary identities are recorded separately; reusing an existing build
+does not establish that its binaries were freshly built from the recorded source.
+The supplied source checkout must contain the R6 prerequisites and built targets.
+
 For the existing `sionna2` Conda environment on `hpc3`, the corrected runner
 installs no packages and creates no venv. Copy the small update separately
 to `experiments/r6/r6-env-update/`; the original trusted bundle remains unchanged.

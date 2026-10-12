@@ -153,6 +153,28 @@ class TestBackendPolicy(unittest.TestCase):
 
 class TestRemoteVerifier(unittest.TestCase):
     def test_existing_environment_shell_path_creates_no_venv_or_package_install(self):
+        self._check_existing_shell(reuse_build=False)
+
+    def test_existing_build_preserves_bindings_and_never_calls_ns3(self):
+        for complete, missing_companions in ((True, False), (True, True), (False, False)):
+            with self.subTest(complete_build=complete, missing_companions=missing_companions):
+                self._check_existing_shell(reuse_build=True, complete=complete,
+                                           missing_companions=missing_companions)
+
+    def test_existing_build_requires_source_without_bundle_extraction(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / 'output'
+            script = Path(backend.__file__).parent / 'run_r6_gpu.sh'
+            for source_args in ([], ['--bundle', str(Path(temporary) / 'bundle')]):
+                with self.subTest(source_args=source_args):
+                    result = subprocess.run(['bash', str(script), '--use-existing-build',
+                                             '--output', str(output), *source_args],
+                                            capture_output=True, text=True, timeout=60)
+                    self.assertEqual(result.returncode, 2)
+                    self.assertIn('--use-existing-build requires --source', result.stderr)
+                    self.assertFalse(output.exists())
+
+    def _check_existing_shell(self, *, reuse_build, complete=True, missing_companions=False):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             support, source, fakebin = (root / name for name in ("support", "source", "bin"))
@@ -163,22 +185,42 @@ class TestRemoteVerifier(unittest.TestCase):
             for name in ("run_r6_gpu.sh", "benchmark_backends.py", "test_benchmark_backends.py"):
                 shutil.copyfile(Path(backend.__file__).parent / name, support / name)
             for name in ("run_r6_gpu.sh", "benchmark_backends.py", "test_benchmark_backends.py"):
-                (tools / name).write_text("old source\n")
+                if not missing_companions:
+                    (tools / name).write_text("old source\n")
             (tools / "check_cpu_environment.py").write_text("print('environment reused'); raise SystemExit(17)\n")
             native = source / "ns3"
-            native.write_text("#!/usr/bin/env bash\nexit 0\n")
+            native.write_text("#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" >> native-calls.txt\nexit 0\n")
             native.chmod(0o755)
+            bindings = ('model/message.pb.cc', 'model/message.pb.h',
+                        'model/ns3sionna/common/message_pb2.py')
+            for name in bindings:
+                path = source / 'contrib/sionna' / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b'existing binding\n')
+            built = ('build/utils/ns3.40-test-runner-default',
+                     'build/lib/libns3.40-sionna-test-default.so',
+                     'build/contrib/sionna/examples/ns3.40-ns3_wifi_sumimo_benchmark-default',
+                     'build/contrib/sionna/examples/ns3.40-ns3_sionna_cache_ipc_benchmark-default',
+                     'build/contrib/sionna/examples/ns3.40-ns3_sionna_live_benchmark-default')
+            for name in built:
+                path = source / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b'#!/bin/sh\nexit 0\n')
+                path.chmod(0o755)
+            if not complete:
+                (source / built[-1]).unlink()
             for name in ("id", "nvidia-smi", "pkg-config", "g++", "cmake", "patch", "protoc"):
                 path = fakebin / name
                 path.write_text("#!/usr/bin/env bash\n" + ("echo 1000\n" if name == "id" else "exit 0\n"))
                 path.chmod(0o755)
             output = root / "output"
             result = subprocess.run(["bash", str(support / "run_r6_gpu.sh"), "--use-existing-environment",
-                                     "--source", str(source), "--output", str(output)],
+                                     "--source", str(source), "--output", str(output),
+                                     *(['--use-existing-build'] if reuse_build else [])],
                                     env={**os.environ, "R6_PYTHON": sys.executable,
                                          "PATH": str(fakebin) + os.pathsep + os.environ["PATH"]},
                                     capture_output=True, text=True, timeout=60)
-            self.assertEqual(result.returncode, 17, result.stdout + result.stderr)
+            self.assertEqual(result.returncode, 17 if complete else 1, result.stdout + result.stderr)
             self.assertIn("no packages will be installed", result.stdout)
             self.assertFalse((output / "venv").exists())
             overlay = json.loads((output / "logs/runner-overlay.json").read_text())
@@ -187,9 +229,35 @@ class TestRemoteVerifier(unittest.TestCase):
                 with self.subTest(companion=name):
                     self.assertEqual((tools / name).read_bytes(), (support / name).read_bytes())
                     self.assertEqual(overlay["overlays"][name]["original_sha256"],
-                                     hashlib.sha256(b"old source\n").hexdigest())
+                                     None if missing_companions else hashlib.sha256(b"old source\n").hexdigest())
                     self.assertEqual(overlay["overlays"][name]["applied_sha256"],
                                      backend.base.sha256(support / name))
+            if reuse_build:
+                self.assertFalse((source / 'native-calls.txt').exists())
+                self.assertFalse((output / 'logs/configure.log').exists())
+                self.assertFalse((output / 'logs/build.log').exists())
+                for name in bindings:
+                    self.assertEqual((source / 'contrib/sionna' / name).read_bytes(),
+                                     b'existing binding\n')
+                report = json.loads((output / 'logs/build-reuse.json').read_text())
+                self.assertEqual(report['source'], str(source))
+                self.assertFalse(report['configure_executed'])
+                self.assertFalse(report['build_executed'])
+                self.assertFalse(report['bindings_regenerated'])
+                self.assertFalse(report['clean_build_claimed'])
+                self.assertEqual(report['status'], 'success' if complete else 'failed')
+                if complete:
+                    self.assertIn('no configure, build or binding regeneration', result.stdout)
+                    self.assertEqual(len(report['files']), 8)
+                    for item in report['files'].values():
+                        self.assertEqual(item['raw_sha256'], backend.base.sha256(Path(item['path'])))
+                else:
+                    self.assertIn('ns3_sionna_live_benchmark', result.stdout)
+                    self.assertEqual(report['failures'], ['ns3_sionna_live_benchmark'])
+            else:
+                calls = (source / 'native-calls.txt').read_text().splitlines()
+                self.assertTrue(calls[0].startswith('configure '))
+                self.assertTrue(calls[1].startswith('build '))
 
     def test_verifier_checks_external_trust_and_refuses_unsafe_archive(self):
         script = (Path(backend.__file__).parent / "run_r6_gpu.sh").read_text()

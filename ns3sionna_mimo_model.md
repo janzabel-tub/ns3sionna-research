@@ -6032,6 +6032,22 @@ den bereits kompilierten, zuvor bundleverifizierten Quellbaum wiederverwenden;
 ein neues Ausgabeverzeichnis bewahrt die ursprünglichen Fehlerlogs. Die
 wissenschaftlichen Kriterien und der ursprüngliche Bundleindex bleiben gleich.
 
+Auf Wunsch des Anwenders verwendet `--use-existing-build --source=<ns3-Pfad>`
+den ursprünglichen vorhandenen ns-3-Quellbaum und dessen kompilierte Programme
+sowie das aktive Conda-Environment. Dieser Modus extrahiert keine neue Kopie,
+konfiguriert und kompiliert nicht, regeneriert keine Bindings und installiert
+keine Pakete. Lediglich die drei Begleitdateien des R6-Launchers werden im
+gewählten Quellbaum aktualisiert. `logs/build-reuse.json` dokumentiert Pfade
+und Hashes des vorhandenen Testrunners, der Sionna-Testbibliothek, der drei
+Benchmarkprogramme und der drei Bindings. Fehlende oder mehrdeutige Artefakte
+werden ohne automatischen Build abgewiesen. Regressionen, CUDA-Probe,
+gepaarte Messungen, unabhängige und native Prüfung sowie Paketierung bleiben
+erforderlich. Die Tests prüfen vorhandene und fehlende Buildartefakte,
+unveränderte Bindings und das Ausbleiben jeglichen ns-3-Aufrufs. Quell- und
+Binäridentitäten werden getrennt aufgezeichnet; ein frischer Buildnachweis wird
+bei Wiederverwendung nicht behauptet. Das lokale Übertragungsarchiv heißt
+`experiments/r6/r6-existing-ns3-update.tar.gz`.
+
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 
 - SionnaMimoHelper überträgt eine gemeinsame TX- und RX-Geometrie für die

@@ -243,6 +243,94 @@
       "path": "experiments/r6/r6-existing-environment-update.tar.gz"
     }
   },
+  "existing_ns3_update": {
+    "behavior": "--use-existing-build requires --source, reuses installed Python and existing native binaries/bindings; no source extraction, configure, build, binding regeneration, venv creation or package installation; only three runner companions are updated.",
+    "checks": "Required binaries and bindings are hashed in build-reuse.json. Missing or ambiguous artifacts fail without an automatic build. Existing environment, regression, scientific and packaging checks remain enabled. No clean-build or current-source-to-binary equivalence claimed.",
+    "date": "2026-10-12",
+    "documentation": {
+      "all_page_footers_verified": true,
+      "new_formatted_lines_verified": 15,
+      "pages": 73,
+      "pdf": {
+        "bytes": 447709,
+        "raw_sha256": "522ba2bc2373ed41239da50c9fd8a086823e7924e52b9d81b9817b7ae498e1aa"
+      },
+      "preview_page": 69,
+      "render_count": 1,
+      "source": {
+        "bytes": 223063,
+        "raw_sha256": "020004e39e8981c2da6d3035e50d7d1e817dfdb40b660b1fd6d6ede4788262cf"
+      },
+      "source_snapshot": "experiments/r6/checks/existing-build-pdf-source.md",
+      "staged_snapshot": "experiments/r6/checks/existing-build-committed-layout.md",
+      "staged_source": {
+        "bytes": 337042,
+        "raw_sha256": "f7812e30c711d30f53717bc0ce593cf4ca93473337c754b2af4eaaf29c1de871"
+      },
+      "status": "passed",
+      "visual_inspection": "page69 passed"
+    },
+    "recommended_output": "experiments/r6/r6-results-existing",
+    "recommended_source_on_hpc3": "~/ns-allinone-3.40/ns-3.40",
+    "reports": {
+      "experiments/r6/checks/existing-build-committed-layout.md": {
+        "bytes": 337042,
+        "raw_sha256": "f7812e30c711d30f53717bc0ce593cf4ca93473337c754b2af4eaaf29c1de871"
+      },
+      "experiments/r6/checks/existing-build-focused.log": {
+        "bytes": 3531,
+        "raw_sha256": "fa348f1e6091c1bfd2b01387eed428cdd7f36833d886ae664cc2bf398e4e5dac"
+      },
+      "experiments/r6/checks/existing-build-local-preflight.json": {
+        "bytes": 2372,
+        "raw_sha256": "de6c7c9ecbe1cfed809bbcea3e141f639795c05b575854d304156a707d9d77a5"
+      },
+      "experiments/r6/checks/existing-build-pdf-info.txt": {
+        "bytes": 616,
+        "raw_sha256": "bf6c894eebbc39cc83ef0c8e3554d8e96f75753393b580e00676abf70da5d9e4"
+      },
+      "experiments/r6/checks/existing-build-pdf-preview.png": {
+        "bytes": 169901,
+        "raw_sha256": "bb8f1cd0102893a5cf882eed914a01f535674d5f68bf797d11e14494421c2c08"
+      },
+      "experiments/r6/checks/existing-build-pdf-render.log": {
+        "bytes": 0,
+        "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "experiments/r6/checks/existing-build-pdf-source.md": {
+        "bytes": 223063,
+        "raw_sha256": "020004e39e8981c2da6d3035e50d7d1e817dfdb40b660b1fd6d6ede4788262cf"
+      },
+      "experiments/r6/checks/existing-build-pdf-text.txt": {
+        "bytes": 232144,
+        "raw_sha256": "994b5193bc8fd9bb8cf9b77ab5fe5e35423df1bacadabb84b8eb7a4883234693"
+      },
+      "experiments/r6/checks/existing-build-pdf-validation.json": {
+        "bytes": 158,
+        "raw_sha256": "a3440899a8b2b5bae0fc271cd00e7c8e6f92d968cc7c3f52ff08e071257487b0"
+      }
+    },
+    "status": "local_existing_build_checks_passed_remote_run_pending",
+    "tests": {
+      "actual_local_existing_build_preflight": "passed: five native artifacts and three bindings",
+      "archive_members_byte_verified": true,
+      "bindings_preserved": true,
+      "fresh_gpu_study": "not executed locally",
+      "no_ns3_invocation_on_reuse": true,
+      "passed": 20,
+      "r6_tests": 20,
+      "reuse_shell_cases": "complete build, missing native target, companions absent from existing checkout",
+      "shell_syntax": "passed"
+    },
+    "transfer": {
+      "identity": {
+        "bytes": 18165,
+        "raw_sha256": "2de00b6da0f9f96302d2e3d08ee93bca4554d93bac0a7e4aa50dc94af30929dc"
+      },
+      "path": "experiments/r6/r6-existing-ns3-update.tar.gz",
+      "remote_execution": "User transfers and runs; no remote actions performed."
+    }
+  },
   "hardware_acceptance": {
     "cpu": "passed",
     "cuda": "not executed; local probe explicitly failed without GPU",
