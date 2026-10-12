@@ -466,3 +466,21 @@ prerequisites; the contract lists the one-time installation commands. Return
 CUDA CI uses a self-hosted runner with labels `self-hosted,linux,x64,gpu`.
 Local CPU acceptance passed; actual GPU acceptance and CUDA CI execution remain
 pending. CPU-only runs and packages explicitly record `gpu_pending`.
+
+For an existing Conda environment, activate it and use
+`--use-existing-environment`; this mode creates no venv and installs no packages.
+It supports Python >=3.11, records resolved package versions and lock deviations,
+and requires matching CPU/CUDA environments with the supported Sionna RT stack.
+Copy `experiments/r6/r6-existing-environment-update.tar.gz` separately, extract it
+beside the existing `bundle/`, and run its three-file update together:
+
+```sh
+conda activate sionna2
+bash r6-env-update/run_r6_gpu.sh --use-existing-environment \
+  --bundle "$PWD/bundle" \
+  --index-sha256 d983c092468268785e544d842c461907adcc069e43af6e7a905e1144c73a487b \
+  --output "$PWD/r6-results-3"
+```
+
+The original bundle/hash remain unchanged; applied runner/test hashes are logged
+after verification. See the R6 contract for provenance and validation details.

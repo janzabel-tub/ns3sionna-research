@@ -75,6 +75,174 @@
     "status": "passed",
     "visual_inspection": "page66 passed"
   },
+  "environment_update": {
+    "behavior": "--use-existing-environment reuses the active Python >=3.11 interpreter; no venv or package installation; supported Sionna/RT/Mitsuba/DrJit versions retained; full resolved distribution versions and reference lock deviations recorded; identical CPU/CUDA environments required.",
+    "date": "2026-10-12",
+    "documentation": {
+      "all_environment_fix_lines_verified": true,
+      "all_page_footers_verified": true,
+      "new_formatted_lines": 34,
+      "pages": 72,
+      "pdf": {
+        "bytes": 444038,
+        "raw_sha256": "4e9c13583dd62623ca506801a7e89362122a3cd69de06beb63d7cb6c3a9e7b46"
+      },
+      "render_count": 1,
+      "section_pages": [
+        68
+      ],
+      "source": {
+        "bytes": 221008,
+        "raw_sha256": "e22130fb06065a14e2f3d73c50c2c63342b31f9c4def7a8bc3d9feab6198a5ab"
+      },
+      "source_snapshot": "experiments/r6/checks/existing-env-pdf-source.md",
+      "staged_snapshot": "experiments/r6/checks/existing-env-committed-layout.md",
+      "staged_source": {
+        "bytes": 334987,
+        "raw_sha256": "f452f01f8f0977ae23bd7afd5976872644a9f2b540991103c6371bb7570e799e"
+      },
+      "status": "passed",
+      "visual_inspection": "page68 passed"
+    },
+    "local_bundle": {
+      "environment_mode": "existing",
+      "index_sha256": "3656162d2b7ef26a3828fd38c2e9e63332541e35506bc6072b9740ab78ad997d",
+      "integrity": "passed",
+      "native_replays": 12,
+      "path": "experiments/r6/existing-env-bundle-relocated",
+      "reproduction_instructions": "existing environment; no pip install",
+      "source_snapshot": "recorded before final relative-path replay normalization; measurement/source identities remain immutable"
+    },
+    "local_cpu_study": {
+      "gpu_validation": "not executed",
+      "mode": "existing",
+      "path": "experiments/r6/existing-env-cpu-final",
+      "run": {
+        "bytes": 86171,
+        "lf_sha256": "373bb698a0ae98dcdf1a2dfacc7728aa0b751ff68d38fa01b923aa30a92a6e61",
+        "raw_sha256": "373bb698a0ae98dcdf1a2dfacc7728aa0b751ff68d38fa01b923aa30a92a6e61",
+        "text_hash_version": 1
+      },
+      "status": "passed",
+      "tone_evaluations": 3072,
+      "traces": 12
+    },
+    "original_bundle_identity_unchanged": "d983c092468268785e544d842c461907adcc069e43af6e7a905e1144c73a487b",
+    "preserved_diagnostics": {
+      "early_local_existing_env_run": "experiments/r6/existing-env-cpu",
+      "reason": "Version collection initially rejected duplicate vendored dist-info; final resolver uses importlib.metadata.version and final fresh study passes."
+    },
+    "reports": {
+      "experiments/r6/checks/existing-env-bundle-export.json": {
+        "bytes": 258,
+        "lf_sha256": "abd0c71622156588f79a5a25d9febb1e52acdf02ee7784a0c9531f185c3782be",
+        "raw_sha256": "abd0c71622156588f79a5a25d9febb1e52acdf02ee7784a0c9531f185c3782be",
+        "text_hash_version": 1
+      },
+      "experiments/r6/checks/existing-env-bundle-export.log": {
+        "bytes": 0,
+        "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "experiments/r6/checks/existing-env-bundle-verify.json": {
+        "bytes": 235,
+        "lf_sha256": "9c228bbade532e8839fcbe173f7caf80978fa772e551c5ca1fc629618e6895cd",
+        "raw_sha256": "9c228bbade532e8839fcbe173f7caf80978fa772e551c5ca1fc629618e6895cd",
+        "text_hash_version": 1
+      },
+      "experiments/r6/checks/existing-env-committed-layout.md": {
+        "bytes": 334987,
+        "raw_sha256": "f452f01f8f0977ae23bd7afd5976872644a9f2b540991103c6371bb7570e799e"
+      },
+      "experiments/r6/checks/existing-env-cpu-final.log": {
+        "bytes": 9174,
+        "raw_sha256": "390fe084755f07f944704e976aefa0fff832b7948e4a0113913648c51fe31c5e"
+      },
+      "experiments/r6/checks/existing-env-cpu.log": {
+        "bytes": 1490,
+        "raw_sha256": "45c0549854e2f3808d773385b45620ed0bca769aabab9614b445ec2f73a18fe7"
+      },
+      "experiments/r6/checks/existing-env-pdf-info.txt": {
+        "bytes": 616,
+        "lf_sha256": "838a6ee49d9c12fe7eca14995c7211c7ea01817d9d4b21cd9a5838c6f9a259c6",
+        "raw_sha256": "838a6ee49d9c12fe7eca14995c7211c7ea01817d9d4b21cd9a5838c6f9a259c6",
+        "text_hash_version": 1
+      },
+      "experiments/r6/checks/existing-env-pdf-page-68.png": {
+        "bytes": 180454,
+        "raw_sha256": "e8a852cf7b3bfa0fc1d9e9acd37b2cc00c167a9fe7541e6c17c4cfcc4bcd69e9"
+      },
+      "experiments/r6/checks/existing-env-pdf-preview.log": {
+        "bytes": 0,
+        "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "experiments/r6/checks/existing-env-pdf-render.log": {
+        "bytes": 0,
+        "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "experiments/r6/checks/existing-env-pdf-source.md": {
+        "bytes": 221008,
+        "raw_sha256": "e22130fb06065a14e2f3d73c50c2c63342b31f9c4def7a8bc3d9feab6198a5ab"
+      },
+      "experiments/r6/checks/existing-env-pdf-text.txt": {
+        "bytes": 230099,
+        "lf_sha256": "6167939b32ab6f64b3dfcfae2f9b0ec57849510eb72356367a5df6d2aeb6f68d",
+        "raw_sha256": "6167939b32ab6f64b3dfcfae2f9b0ec57849510eb72356367a5df6d2aeb6f68d",
+        "text_hash_version": 1
+      },
+      "experiments/r6/checks/existing-env-pdf-validation.json": {
+        "bytes": 358,
+        "lf_sha256": "f59a7703c6b37286a3d2e3001d5c456e14d077fc729dd633b62f1d0b8120c1f0",
+        "raw_sha256": "f59a7703c6b37286a3d2e3001d5c456e14d077fc729dd633b62f1d0b8120c1f0",
+        "text_hash_version": 1
+      },
+      "experiments/r6/checks/existing-env-relocated-audit.json": {
+        "bytes": 146,
+        "lf_sha256": "c3b4342533e9938a042a0f1024617df3c7f052c21108ae4f8d97a400d89404c0",
+        "raw_sha256": "c3b4342533e9938a042a0f1024617df3c7f052c21108ae4f8d97a400d89404c0",
+        "text_hash_version": 1
+      },
+      "experiments/r6/checks/existing-environment-focused-final.log": {
+        "bytes": 3185,
+        "raw_sha256": "19b383749a241984841fd3b3d96ec96cbbf924d9ae66e10ab1592f5cf3f4e1fd"
+      },
+      "experiments/r6/checks/existing-environment-focused-handoff.log": {
+        "bytes": 3185,
+        "raw_sha256": "fb471fe35a91444ee516fe6d171df633c850fe67e1f4dc63639b204eced1cf5f"
+      },
+      "experiments/r6/checks/existing-environment-focused.log": {
+        "bytes": 3185,
+        "raw_sha256": "56f2e0b0f2021e7cebbdf4b05a01a1e0160bace14d2d0b9ef0c23b7814809c76"
+      },
+      "experiments/r6/checks/existing-environment-regressions.log": {
+        "bytes": 37044,
+        "raw_sha256": "7e87dda072d8d86e1f9b5745d9e3852b6dceb731dee9a14452d9e57a619b01f1"
+      }
+    },
+    "status": "local_existing_environment_fix_validated_remote_run_pending",
+    "tests": {
+      "focused_passed": 18,
+      "focused_tests": 18,
+      "native_cases": 60,
+      "native_suites": 7,
+      "python_passed": 166,
+      "python_skipped": 5,
+      "python_tests": 171,
+      "relative_native_replay": "passed in final focused tests after normalization of study paths"
+    },
+    "transfer": {
+      "identity": {
+        "bytes": 16309,
+        "raw_sha256": "463c5c7042141f64e4e722f3c63480d1b7a7473caa3dcc2b4da41a2b781e0f8a"
+      },
+      "instructions": "User transfers this update and starts the remote job; no further remote action requested.",
+      "members": [
+        "r6-env-update/run_r6_gpu.sh",
+        "r6-env-update/benchmark_backends.py",
+        "r6-env-update/test_benchmark_backends.py"
+      ],
+      "path": "experiments/r6/r6-existing-environment-update.tar.gz"
+    }
+  },
   "hardware_acceptance": {
     "cpu": "passed",
     "cuda": "not executed; local probe explicitly failed without GPU",

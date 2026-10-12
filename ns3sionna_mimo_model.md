@@ -1,6 +1,6 @@
 # ns3sionna: MIMO-Abstraktionsmodell für IEEE 802.11ax/be
 
-Stand: 8. Oktober 2026. Phasen 1–4 implementiert; Phase 5 mit enger
+Stand: 12. Oktober 2026. Phasen 1–4 implementiert; Phase 5 mit enger
 HE-MCS-0-Kalibrierung und begrenzten CPU-Studien teilweise validiert.
 R1–R5 sind im jeweils festgelegten CPU-Umfang abgeschlossen. R6 ist implementiert;
 CPU-Abnahme erfolgreich, RTX-3060-/CUDA-CI-Hardwareabnahme ausstehend.
@@ -5980,6 +5980,44 @@ Der Anwender führt das Transferpaket auf der RTX 3060 aus und liefert
 `r6-results.tar.gz` zurück. Erst nach unabhängiger Prüfung dieser tatsächlichen
 GPU-Ergebnisse und gesondertem CI-Nachweis kann R6 als hardwarevalidiert
 abgeschlossen werden. Bis dahin bleibt Phase 5 in diesem Punkt offen.
+
+
+Die Korrektur vom 12. Oktober 2026 unterstützt nun ausdrücklich bereits
+installierte Conda-Umgebungen durch `--use-existing-environment`. Dieser Modus
+verwendet den aktiven Interpreter mit Python >=3.11, erzeugt keine neue venv
+und installiert keine Pakete. Das ursprüngliche pauschale Python-3.12-Gate und
+der NumPy-2.5.2-Lock passten nicht zur vorhandenen Python-3.11-/NumPy-2.4.4-
+Umgebung. Die Korrektur bewahrt die wissenschaftlichen Mess- und Backendkriterien:
+Sionna/Sionna RT 2.0.1, Mitsuba 3.8.0 und Dr.Jit 1.3.1 bleiben erforderlich;
+alle aufgelösten Paketversionen, die tatsächliche Python-Version sowie
+Abweichungen vom ursprünglichen Lock werden dokumentiert. CPU und CUDA müssen
+dieselben aufgezeichneten Python-/Paketversionen verwenden. CUDA-PyTorch
+2.9.1+cu128 ist dadurch zulässig; die Link-Abstraktion bleibt in ns-3.
+Vendored Distribution-Metadaten werden über dieselbe Versionsauflösung wie
+beim bisherigen Lockcheck behandelt. Ein bestehendes Environment wird nicht
+nachträglich als exakte Reproduktion des CPU-Locks bezeichnet.
+
+Das kleine lokale Updatearchiv
+`experiments/r6/r6-existing-environment-update.tar.gz` enthält drei zusammen
+zu übertragende Dateien. Nach Prüfung des unveränderten ursprünglichen Bundles
+kopiert der aktualisierte Launcher Runner und Tests in den extrahierten
+Quellbaum. `logs/runner-overlay.json` hält Original-/Updatehashes und den
+verwendeten Interpreter fest. Der Anwender aktiviert auf `hpc3` seine bestehende
+`sionna2`-Umgebung, entpackt das Update neben `bundle/` und startet
+`r6-env-update/run_r6_gpu.sh --use-existing-environment` mit einem neuen
+Ausgabeverzeichnis. Das Originalbundle und dessen externer Indexhash bleiben
+unverändert. Die Remote-Ausführung übernimmt der Anwender.
+
+Lokal bestanden alle 18 R6-Tests, einschließlich des tatsächlich ausgeführten
+Shellpfads ohne venv-/Paketinstallation, Python-3.11-/CUDA-PyTorch-Provenienz,
+Ablehnung verschiedener CPU-/CUDA-Umgebungen, unabhängiger Auswertung vorhandener
+Exporte und sicherer Bundleextraktion. Zwölf frische CPU-Traces unter dem neuen
+Modus bestanden erneut native MMSE-/MI- und NumPy-Prüfungen. Der aufgezeichnete
+Environmentmodus und die Abweichungen bleiben auch beim verlagerten Audit
+sichtbar. Die vollständigen CPU-Regressionen, das lokale Updatearchiv und die
+nach dieser abschließenden Dokumentationsänderung einmal erzeugte PDF werden
+im R6-Katalog mit getrennten Prüfnachweisen festgehalten. Die eigentliche
+RTX-3060-Messung und CUDA-CI-Abnahme bleiben ausstehend.
 
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 

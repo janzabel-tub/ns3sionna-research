@@ -11,6 +11,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import benchmark_backends as backend
@@ -93,8 +94,98 @@ class TestBackendPolicy(unittest.TestCase):
                 self.assertTrue((output / "cpu.log").is_file())
                 self.assertTrue((output / "run.error.log").is_file())
 
+    def test_existing_environment_records_python311_cuda_torch_and_lock_deviations(self):
+        versions = {**backend.CORE_VERSIONS, "numpy": "2.4.4", "torch": "2.9.1+cu128",
+                    "protobuf": "6.33.6", "pyzmq": "27.1.0", "scipy": "1.17.1",
+                    "matplotlib": "3.10.9", "tensorflow": "2.20.0", "packaging": "26.2"}
+        distributions = [SimpleNamespace(metadata={"Name": name}, version=version)
+                         for name, version in versions.items()]
+        distributions.append(SimpleNamespace(metadata={"Name": "packaging"}, version="25.0"))
+        with patch.object(backend.importlib.metadata, "distributions", return_value=distributions), \
+             patch.object(backend.importlib.metadata, "version", side_effect=versions.__getitem__), \
+             patch.object(backend.platform, "python_version", return_value="3.11.14"):
+            report = backend.environment_snapshot("existing")
+        self.assertEqual(report["python_version"], "3.11.14")
+        self.assertEqual(report["versions"], versions)
+        self.assertEqual(report["lock_deviations"]["numpy"]["observed"], "2.4.4")
+        self.assertEqual(report["lock_deviations"]["torch"]["observed"], "2.9.1+cu128")
+        backend.check_recorded_environment(versions, "existing")
+        with self.assertRaises(ValueError):
+            backend.check_recorded_environment(versions, "locked")
+        for package in ("sionna", "mitsuba", "numpy"):
+            broken = {**versions}
+            del broken[package]
+            with self.assertRaises(ValueError):
+                backend.check_recorded_environment(broken, "existing")
+        self.assertEqual(backend.plan(mode="existing")["environment_mode"], "existing")
+        self.assertNotIn("environment_mode", backend.plan())
+
+    def test_existing_mode_propagates_to_fresh_worker_without_installation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "run"
+            with patch.dict(os.environ, {backend.ENVIRONMENT_VARIABLE: "existing"}), \
+                 patch.object(backend.subprocess, "run", side_effect=subprocess.CalledProcessError(1, ["worker"])) as call, \
+                 patch.object(backend.provenance, "source_identity", return_value={}), \
+                 patch.object(backend.provenance, "ns3_identity", return_value={}), \
+                 patch.object(backend.provenance, "tool_versions", return_value={}):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    backend.run(output, None, cpu_only=True)
+                self.assertEqual(os.environ[backend.ENVIRONMENT_VARIABLE], "existing")
+            self.assertIn("worker", call.call_args.args[0])
+            self.assertNotIn("install", call.call_args.args[0])
+            self.assertEqual(json.loads((output / "plan.json").read_text())["policy"]["environment_mode"], "existing")
+
+    def test_cpu_cuda_comparison_rejects_different_recorded_environments(self):
+        policy = backend.plan(mode="existing")
+        data = (policy, {}, {}, [])
+        cpu_probe = {"environment_mode": "existing", "python_version": "3.11.14",
+                     "versions": {"numpy": "2.4.4"}}
+        cuda_probe = {**cpu_probe, "versions": {"numpy": "2.5.2"}}
+        def read(path):
+            if Path(path).name == "plan.json":
+                return {"policy": policy, "requested_backends": ["cpu", "cuda"]}
+            return cpu_probe if Path(path).parent.name == "cpu" else cuda_probe
+        with patch.object(backend, "validate_backend", return_value=data), \
+             patch.object(backend.bundles, "json_file", side_effect=read):
+            with self.assertRaisesRegex(ValueError, "environments differ"):
+                backend.validate(Path("/study"))
+
 
 class TestRemoteVerifier(unittest.TestCase):
+    def test_existing_environment_shell_path_creates_no_venv_or_package_install(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            support, source, fakebin = (root / name for name in ("support", "source", "bin"))
+            support.mkdir()
+            fakebin.mkdir()
+            tools = source / "contrib/sionna/tools"
+            tools.mkdir(parents=True)
+            for name in ("run_r6_gpu.sh", "benchmark_backends.py", "test_benchmark_backends.py"):
+                shutil.copyfile(Path(backend.__file__).parent / name, support / name)
+            for name in ("benchmark_backends.py", "test_benchmark_backends.py"):
+                (tools / name).write_text("old source\n")
+            (tools / "check_cpu_environment.py").write_text("print('environment reused'); raise SystemExit(17)\n")
+            native = source / "ns3"
+            native.write_text("#!/usr/bin/env bash\nexit 0\n")
+            native.chmod(0o755)
+            for name in ("id", "nvidia-smi", "pkg-config", "g++", "cmake", "patch", "protoc"):
+                path = fakebin / name
+                path.write_text("#!/usr/bin/env bash\n" + ("echo 1000\n" if name == "id" else "exit 0\n"))
+                path.chmod(0o755)
+            output = root / "output"
+            result = subprocess.run(["bash", str(support / "run_r6_gpu.sh"), "--use-existing-environment",
+                                     "--source", str(source), "--output", str(output)],
+                                    env={**os.environ, "R6_PYTHON": sys.executable,
+                                         "PATH": str(fakebin) + os.pathsep + os.environ["PATH"]},
+                                    capture_output=True, text=True, timeout=60)
+            self.assertEqual(result.returncode, 17, result.stdout + result.stderr)
+            self.assertIn("no packages will be installed", result.stdout)
+            self.assertFalse((output / "venv").exists())
+            overlay = json.loads((output / "logs/runner-overlay.json").read_text())
+            self.assertEqual(overlay["python_executable"], sys.executable)
+            self.assertEqual((tools / "benchmark_backends.py").read_bytes(),
+                             (support / "benchmark_backends.py").read_bytes())
+
     def test_verifier_checks_external_trust_and_refuses_unsafe_archive(self):
         script = (Path(backend.__file__).parent / "run_r6_gpu.sh").read_text()
         verifier = script.split("<<'PY'\n", 1)[1].split("\nPY\n", 1)[0]
@@ -154,6 +245,41 @@ class TestBackendExport(unittest.TestCase):
     def test_all_saved_channels_match_native_and_numpy(self):
         policy, metrics, _, _ = backend.validate_backend(self.output / "cpu", backend.base.executable())
         self.assertEqual(len(metrics), len(backend.identities(policy)))
+        binary = backend.base.executable()
+        previous = Path.cwd()
+        try:
+            os.chdir(self.output.parent)
+            _, relative_metrics, _, _ = backend.validate_backend(Path(self.output.name) / "cpu", binary)
+        finally:
+            os.chdir(previous)
+        self.assertEqual(len(relative_metrics), len(metrics))
+
+    def test_existing_environment_export_audits_without_matching_audit_host_packages(self):
+        directory = self.corrupt_copy()
+        manifest = json.loads((directory / "manifest.json").read_text())
+        manifest["environment_mode"] = "existing"
+        policy = backend.plan(manifest["controls"]["samples_per_src"],
+                              manifest["sweep"]["repetitions"], "existing")
+        backend.provenance.atomic_json(directory / "plan.json", policy)
+        probe = json.loads((directory / "probe.json").read_text())
+        versions = {**backend.CORE_VERSIONS, "numpy": "2.4.4", "torch": "2.9.1+cu128",
+                    "protobuf": "6.33.6", "pyzmq": "27.1.0", "scipy": "1.17.1",
+                    "matplotlib": "3.10.9"}
+        probe.update(environment_mode="existing", python_version="3.11.14", versions=versions,
+                     lock_deviations=backend.lock_deviations(versions))
+        backend.provenance.atomic_json(directory / "probe.json", probe)
+        for name in ("plan.json", "probe.json"):
+            manifest["files"][name] = backend.base.sha256(directory / name)
+        self.save_manifest(directory, manifest)
+        policy, metrics, _, _ = backend.validate_backend(directory)
+        self.assertEqual(policy["environment_mode"], "existing")
+        self.assertEqual(len(metrics), 12)
+        probe["lock_deviations"] = {}
+        backend.provenance.atomic_json(directory / "probe.json", probe)
+        manifest["files"]["probe.json"] = backend.base.sha256(directory / "probe.json")
+        self.save_manifest(directory, manifest)
+        with self.assertRaisesRegex(ValueError, "lock deviations"):
+            backend.validate_backend(directory)
 
     def test_cpu_only_is_gpu_pending_and_paired_results_are_recomputed(self):
         result = backend.validate(self.output)

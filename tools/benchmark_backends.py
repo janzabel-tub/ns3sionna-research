@@ -7,6 +7,7 @@ import csv
 import importlib.metadata
 import json
 import os
+import platform
 from pathlib import Path
 import subprocess
 import sys
@@ -25,12 +26,72 @@ VARIANTS = {"cpu": "llvm_ad_mono_polarized", "cuda": "cuda_ad_mono_polarized"}
 CASES = (("case_00", 90.0, 90.0), ("case_01", 90.0, 0.0))
 SEEDS = (42, 43, 44)
 SCHEMA = "ns3sionna.r6-backends"
+ENVIRONMENT_VARIABLE = "NS3SIONNA_R6_ENVIRONMENT_MODE"
+CORE_VERSIONS = {"sionna": "2.0.1", "sionna-rt": "2.0.1",
+                 "mitsuba": "3.8.0", "drjit": "1.3.1"}
 
 
-def plan(samples=100000, repetitions=2):
+def environment_mode():
+    mode = os.environ.get(ENVIRONMENT_VARIABLE, "locked")
+    if mode not in ("locked", "existing"):
+        raise ValueError("Unknown R6 environment mode")
+    return mode
+
+
+def normalized_name(name):
+    return name.lower().replace("_", "-").replace(".", "-")
+
+
+def lock_deviations(versions):
+    installed = {normalized_name(name): value for name, value in versions.items()}
+    return {name: {"expected": expected, "observed": installed.get(normalized_name(name))}
+            for name, expected in environment.locked_versions(environment.LOCK).items()
+            if installed.get(normalized_name(name)) != expected}
+
+
+def check_recorded_environment(versions, mode):
+    """Check measured versions without requiring the audit host to match them."""
+    if not isinstance(versions, dict) or not all(isinstance(key, str) and
+            isinstance(value, str) and value for key, value in versions.items()):
+        raise ValueError("Invalid recorded package versions")
+    if mode == "locked":
+        if versions != environment.locked_versions(environment.LOCK):
+            raise ValueError("Wrong recorded package versions")
+    elif mode == "existing":
+        installed = {normalized_name(name): value for name, value in versions.items()}
+        for name, expected in CORE_VERSIONS.items():
+            if installed.get(name) != expected:
+                raise ValueError(f"Existing environment requires {name}=={expected}")
+        for name in ("numpy", "torch", "protobuf", "pyzmq", "scipy", "matplotlib"):
+            if not installed.get(name):
+                raise ValueError(f"Existing environment lacks {name}")
+    else:
+        raise ValueError("Unknown recorded environment mode")
+
+
+def environment_snapshot(mode):
+    if mode == "existing":
+        names = {normalized_name(dist.metadata["Name"])
+                 for dist in importlib.metadata.distributions() if dist.metadata.get("Name")}
+        # Setuptools can expose vendored dist-info alongside the active package.
+        # Resolve each name through the same API used by the exact-lock checks.
+        versions = {name: importlib.metadata.version(name) for name in sorted(names)}
+    else:
+        versions = {name: importlib.metadata.version(name)
+                    for name in environment.locked_versions(environment.LOCK)}
+    check_recorded_environment(versions, mode)
+    return {"environment_mode": mode, "python_version": platform.python_version(),
+            "python_executable": sys.executable, "versions": versions,
+            "lock_sha256": base.sha256(environment.LOCK),
+            "lock_deviations": lock_deviations(versions)}
+
+
+def plan(samples=100000, repetitions=2, mode="locked"):
     if type(samples) is not int or samples <= 0 or type(repetitions) is not int or repetitions < 2:
         raise ValueError("Positive samples and at least two repetitions are required")
-    return {"schema": SCHEMA, "schema_version": 1, "subphase": "R6",
+    if mode not in ("locked", "existing"):
+        raise ValueError("Unknown R6 environment mode")
+    policy = {"schema": SCHEMA, "schema_version": 1, "subphase": "R6",
             "controls": {**base.CONTROLS, "samples_per_src": samples,
                          "seed_ns3": "paired sweep", "seed_sionna": "paired sweep"},
             "sweep": {"cases": [list(case) for case in CASES], "seeds": list(SEEDS),
@@ -38,12 +99,17 @@ def plan(samples=100000, repetitions=2):
             "tolerances": convergence.TOLERANCES,
             "fixed_acceptance": samples == 100000 and repetitions == 2,
             "scope": "static RT/open-loop MMSE/MI; no PER, speedup or convergence claim"}
+    if mode == "existing":
+        policy["environment_mode"] = mode
+    return policy
 
 
 def backend_runtime(backend):
     """Select before Sionna imports any variant-specific classes; never fall back."""
     if backend not in VARIANTS:
         raise ValueError("Unknown backend")
+    if sys.version_info < (3, 11):
+        raise RuntimeError("R6 requires Python >=3.11")
     if backend == "cpu":
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
     import mitsuba as mi
@@ -62,18 +128,12 @@ def backend_runtime(backend):
     if observed != [2.0, 3.0]:
         raise RuntimeError("Backend evaluation failed")
     provenance.backend_selected(mi.variant())
-    versions = {name: importlib.metadata.version(name)
-                for name in environment.locked_versions(environment.LOCK)}
-    deviations = {name: {"expected": version, "observed": versions[name]}
-                  for name, version in environment.locked_versions(environment.LOCK).items()
-                  if versions[name] != version}
-    if deviations:
-        raise RuntimeError(f"R6 requires the shared exact package lock: {deviations}")
+    snapshot = environment_snapshot(environment_mode())
     device = environment.command(["nvidia-smi", "--query-gpu=name,uuid,driver_version",
                                   "--format=csv,noheader"])
     return SionnaEnv, {"status": "success", "backend": backend, "variant": mi.variant(),
                        "evaluation": observed, "drjit_threads": dr.thread_count(),
-                       "versions": versions, "lock_sha256": base.sha256(environment.LOCK),
+                       **snapshot,
                        "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
                        "nvidia_smi": device}
 
@@ -119,7 +179,7 @@ def aggregate_rows(path):
 
 
 def worker(output, binary, backend, samples, repetitions):
-    policy = plan(samples, repetitions)
+    policy = plan(samples, repetitions, environment_mode())
     output = bundles.output_available(output)
     output.mkdir(parents=True, exist_ok=True)
     provenance.atomic_json(output / "plan.json", policy)
@@ -181,12 +241,13 @@ def worker(output, binary, backend, samples, repetitions):
 
 def validate_backend(output, binary=None):
     """Audit saved bytes and recompute references; distrust stored success verdicts."""
-    output = Path(output)
+    output = Path(output).absolute()
     manifest = bundles.json_file(output / "manifest.json")
     backend = manifest.get("backend")
     if backend not in VARIANTS:
         raise ValueError("Unknown recorded backend")
-    policy = plan(manifest["controls"]["samples_per_src"], manifest["sweep"]["repetitions"])
+    mode = manifest.get("environment_mode", "locked")
+    policy = plan(manifest["controls"]["samples_per_src"], manifest["sweep"]["repetitions"], mode)
     if bundles.json_file(output / "plan.json") != policy:
         raise ValueError("R6 plan differs from fixed policy")
     for key in policy:
@@ -210,8 +271,18 @@ def validate_backend(output, binary=None):
             probe["lock_sha256"]) != ("success", backend, VARIANTS[backend], [2, 3],
                                        base.sha256(environment.LOCK)):
         raise ValueError("Wrong actual backend, evaluation or environment lock")
-    if probe["versions"] != environment.locked_versions(environment.LOCK):
-        raise ValueError("Wrong recorded package versions")
+    if probe.get("environment_mode", "locked") != mode:
+        raise ValueError("Probe environment mode differs from plan")
+    check_recorded_environment(probe["versions"], mode)
+    if mode == "existing":
+        try:
+            python = tuple(int(value) for value in probe["python_version"].split("."))
+        except (KeyError, ValueError, AttributeError) as error:
+            raise ValueError("Invalid recorded Python version") from error
+        if len(python) != 3 or python < (3, 11, 0):
+            raise ValueError("Existing environment requires Python >=3.11")
+        if probe.get("lock_deviations") != lock_deviations(probe["versions"]):
+            raise ValueError("Recorded lock deviations differ from installed versions")
     metrics, responses, repeats = {}, {}, []
     all_tones = aggregate_rows(output / "tones.csv")
     if len(all_tones) != len(records) * 256:
@@ -296,6 +367,10 @@ def validate(output, binary=None):
     output = Path(output)
     top = bundles.json_file(output / "plan.json")
     cpu = validate_backend(output / "cpu", binary)
+    cpu_probe = bundles.json_file(output / "cpu/probe.json")
+    observed_environment = {key: cpu_probe[key] for key in
+                            ("environment_mode", "python_version", "versions", "lock_sha256",
+                             "lock_deviations") if key in cpu_probe}
     if cpu[0] != top["policy"]:
         raise ValueError("Top-level and backend plans differ")
     if top["requested_backends"] == ["cpu"]:
@@ -303,14 +378,20 @@ def validate(output, binary=None):
             raise ValueError("Unexpected CUDA artifacts in CPU-only run")
         return {"schema": SCHEMA, "schema_version": 1, "status": "gpu_pending",
                 "fixed_acceptance": cpu[0]["fixed_acceptance"], "cpu_traces": len(cpu[1]),
-                "repeatability": {"cpu": cpu[3]}, "gpu_validation": "not executed"}
+                "repeatability": {"cpu": cpu[3]}, "gpu_validation": "not executed",
+                "environment": observed_environment}
     if top["requested_backends"] != ["cpu", "cuda"]:
         raise ValueError("Invalid requested backend set")
-    return compare_backends(cpu, validate_backend(output / "cuda", binary))
+    cuda = validate_backend(output / "cuda", binary)
+    cuda_probe = bundles.json_file(output / "cuda/probe.json")
+    if any(cpu_probe.get(key) != cuda_probe.get(key) for key in
+           ("environment_mode", "python_version", "versions", "lock_sha256", "lock_deviations")):
+        raise ValueError("CPU/CUDA recorded environments differ")
+    return {**compare_backends(cpu, cuda), "environment": observed_environment}
 
 
 def run(output, binary, cpu_only=False, samples=100000, repetitions=2, timeout=1800):
-    policy = plan(samples, repetitions)
+    policy = plan(samples, repetitions, environment_mode())
     output = bundles.output_available(output)
     output.mkdir(parents=True, exist_ok=True)
     backends = ["cpu"] if cpu_only else ["cpu", "cuda"]
@@ -388,19 +469,26 @@ def package(output, destination, extra_studies=()):
         provenance.atomic_json(source / "manifest.json", {"schema_version": 1, "subphase": "R6.sources",
             "controls": {"scene": base.SCENE}, "validation": report,
             "source_archive": archive.name, "semantics": "local source snapshot; dependencies require installation"})
+        existing = report.get("environment", {}).get("environment_mode") == "existing"
+        environment_instructions = (
+            "Activate an existing Python >=3.11 environment matching the recorded versions in comparison.json.\n"
+            "The measurement used existing packages; no package installation is required.\n"
+            if existing else
+            "Use Python 3.12.12, pip 26.0.1 and the native libraries in doc/r6-backend-completion.md.\n"
+            "python -m pip install --no-deps -r contrib/sionna/model/ns3sionna/requirements_cpu_ci.lock\n"
+            "python -m pip check\n")
         (source / "REPRODUCE.md").write_text(
             "Verify the portable bundle using its externally retained index SHA-256 first.\n"
             "Extract ns3-source.tar.gz into an empty directory, then cd ns-3.40.\n"
-            "Use Python 3.12.12, pip 26.0.1 and the native libraries in doc/r6-backend-completion.md.\n"
-            "python -m pip install --no-deps -r contrib/sionna/model/ns3sionna/requirements_cpu_ci.lock\n"
-            "python -m pip check\n"
+            + environment_instructions +
             "./ns3 configure --enable-examples --enable-tests\n"
             "./ns3 build -j 2 test-runner sionna-test ns3_wifi_sumimo_benchmark ns3_sionna_cache_ipc_benchmark ns3_sionna_live_benchmark\n"
             "python contrib/sionna/tools/run_cpu_regressions.py\n"
             "For each packaged backend study, replay every saved response:\n"
             "python contrib/sionna/tools/benchmark_backends.py audit --study=<backend-study> --native\n"
             "Fresh measurement (use --cpu-only without CUDA; preserve samples/repetitions in plan.json):\n"
-            "python contrib/sionna/tools/benchmark_backends.py run --output=<new-output>\n",
+            "python contrib/sionna/tools/benchmark_backends.py run " +
+            ("--use-existing-environment " if existing else "") + "--output=<new-output>\n",
             encoding="utf-8")
         studies = [output / "cpu"]
         if report["status"] != "gpu_pending":
@@ -414,10 +502,12 @@ def main():
     commands = parser.add_subparsers(dest="command", required=True)
     probe = commands.add_parser("probe")
     probe.add_argument("--backend", choices=VARIANTS, required=True)
+    probe.add_argument("--use-existing-environment", action="store_true")
     for name in ("run", "worker", "validate", "audit", "package"):
         command = commands.add_parser(name)
         command.add_argument("--output" if name != "audit" else "--study", type=Path, required=True)
         if name in ("run", "worker"):
+            command.add_argument("--use-existing-environment", action="store_true")
             command.add_argument("--binary", type=Path)
             command.add_argument("--samples", type=int, default=100000)
             command.add_argument("--repetitions", type=int, default=2)
@@ -432,6 +522,8 @@ def main():
             command.add_argument("--bundle", type=Path, required=True)
             command.add_argument("--study", type=Path, action="append", default=[])
     args = parser.parse_args()
+    if getattr(args, "use_existing_environment", False):
+        os.environ[ENVIRONMENT_VARIABLE] = "existing"
     if args.command == "probe":
         try:
             result = backend_runtime(args.backend)[1]

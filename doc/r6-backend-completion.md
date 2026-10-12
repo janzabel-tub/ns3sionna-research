@@ -15,7 +15,13 @@ variant, package versions, configuration/channel/metric hashes, raw channels,
 native commands, initialization and CFR wall times are retained. The shared
 CPU lock is intentional: Sionna RT CUDA runs through Mitsuba/Dr.Jit; PyTorch
 remains on CPU so both sides use the identical Python environment. No GPU
-PyTorch PHY calibration or GPU ns-3 execution is claimed.
+PyTorch PHY calibration or GPU ns-3 execution is claimed. The explicit
+`--use-existing-environment` mode also supports an already installed Conda
+environment (Python >=3.11, including CUDA-enabled PyTorch). It records all
+installed package versions and deviations from the reference lock, keeps the
+Sionna/Sionna RT 2.0.1, Mitsuba 3.8.0 and Dr.Jit 1.3.1 requirements, and requires
+identical recorded Python/package environments for the paired CPU/CUDA runs.
+This is a measured existing environment, not an exact-lock reproduction.
 
 The existing native open-loop MMSE/MI analyzer evaluates every response.
 Independent NumPy checks apply the established SINR tolerances 1e-8, singular
@@ -63,6 +69,33 @@ native channels, or execute a fresh backend study; exact wall times are not
 reproduction targets. CPU-only packaging retains `gpu_pending` explicitly.
 
 ## RTX 3060 remote run
+
+For the existing `sionna2` Conda environment on `hpc3`, the corrected runner
+installs no packages and creates no venv. Copy the small update separately
+to `experiments/r6/r6-env-update/`; the original trusted bundle remains unchanged.
+From the transfer directory, run:
+
+    conda activate sionna2
+    bash r6-env-update/run_r6_gpu.sh --use-existing-environment \
+      --bundle "$PWD/bundle" \
+      --index-sha256 d983c092468268785e544d842c461907adcc069e43af6e7a905e1144c73a487b \
+      --output "$PWD/r6-results-3"
+
+Locally prepared archive: `experiments/r6/r6-existing-environment-update.tar.gz`.
+Extract it in the transfer directory to obtain `r6-env-update/`. The three
+companion files (`run_r6_gpu.sh`, `benchmark_backends.py`,
+`test_benchmark_backends.py`) must stay together. The original bundle is verified
+before the updated runner/tests are copied into the extracted source. Separate
+`logs/runner-overlay.json` records original/applied hashes and the actual
+interpreter. Regenerated bindings, native build, CPU regression, CUDA execution,
+scientific checks and result packaging still run. No changes to the installed
+Conda packages are made. Use a fresh output directory after each failure.
+
+The initial Python-3.12 guard was too restrictive for an existing environment;
+simply deleting it still left venv creation and the incompatible NumPy 2.5.2
+pin active. The explicit existing-environment mode corrects both paths rather
+than relaxing channel, numerical or backend acceptance. The original isolated
+exact-lock workflow below remains available for provisioned CI.
 
 Copy the prepared `experiments/r6/r6-gpu-input.tar.gz` to the GPU machine. Keep
 the trusted index SHA-256 from `experiments/r6/catalog.json` separately. The

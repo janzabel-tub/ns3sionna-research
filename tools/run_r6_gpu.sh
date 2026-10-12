@@ -7,6 +7,7 @@ usage() {
 Usage:
   bash run_r6_gpu.sh --bundle BUNDLE --index-sha256 HASH --output NEW_DIRECTORY
   bash run_r6_gpu.sh --source NS3_SOURCE --output NEW_DIRECTORY
+  bash run_r6_gpu.sh --use-existing-environment --bundle BUNDLE --index-sha256 HASH --output NEW_DIRECTORY
 
 Prerequisites: Linux x86_64, NVIDIA driver >=535 (nvidia-smi), Python 3.12,
 Python venv support, g++, CMake, pkg-config, patch, LLVM, ZeroMQ and Protobuf.
@@ -18,6 +19,11 @@ Set R6_PYTHON to a Python executable (Python 3.12.12 is the reference).
 The bundle must be unpacked; copy this script separately and retain the hash
 from the local catalog. --source is for an already trusted source checkout.
 Results, source, isolated venv and logs are retained under NEW_DIRECTORY.
+With --use-existing-environment, activate your existing Conda environment first.
+This mode requires Python >=3.11, reuses its interpreter and installs nothing.
+It records all package versions and deviations from the reference lock. Keep
+benchmark_backends.py and test_benchmark_backends.py beside this script when
+using an older source bundle; their applied hashes are recorded separately.
 EOF
 }
 
@@ -25,12 +31,15 @@ r6_bundle=''
 r6_hash=''
 r6_source=''
 r6_output=''
+r6_existing=0
+r6_support_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 while (( $# )); do
   case "$1" in
     --bundle) r6_bundle="${2:?missing bundle}"; shift 2 ;;
     --index-sha256) r6_hash="${2:?missing hash}"; shift 2 ;;
     --source) r6_source="${2:?missing source}"; shift 2 ;;
     --output) r6_output="${2:?missing output}"; shift 2 ;;
+    --use-existing-environment) r6_existing=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; exit 2 ;;
   esac
@@ -55,7 +64,11 @@ exec > >(tee "$r6_output/logs/remote.log") 2>&1
 trap 'r6_exit=$?; printf "%s\n" "$r6_exit" > "$r6_output/exit-code.txt"; if (( r6_exit )); then echo "R6 failed; retain $r6_output/logs for diagnosis."; fi' EXIT
 
 r6_python="${R6_PYTHON:-python3}"
-"$r6_python" -c 'import sys; assert sys.version_info[:2] == (3,12), "Python 3.12 required (3.12.12 reference)"'
+if (( r6_existing )); then
+  "$r6_python" -c 'import sys; assert sys.version_info >= (3,11), "Python >=3.11 required"'
+else
+  "$r6_python" -c 'import sys; assert sys.version_info[:2] == (3,12), "Python 3.12 required (3.12.12 reference)"'
+fi
 nvidia-smi --query-gpu=name,uuid,driver_version,memory.total --format=csv
 for r6_tool in g++ cmake pkg-config patch protoc; do
   command -v "$r6_tool" >/dev/null
@@ -105,12 +118,38 @@ else
   r6_source="$(cd "$r6_source" && pwd)"
 fi
 
-"$r6_python" -m venv "$r6_output/venv"
-r6_python="$r6_output/venv/bin/python"
-"$r6_python" -m pip install pip==26.0.1
-"$r6_python" -m pip install --no-deps -r "$r6_source/contrib/sionna/model/ns3sionna/requirements_cpu_ci.lock"
-"$r6_python" -m pip check
-export PATH="$r6_output/venv/bin:$PATH"
+if (( r6_existing )); then
+  r6_python="$("$r6_python" -c 'import sys; print(sys.executable)')"
+  export NS3SIONNA_R6_ENVIRONMENT_MODE=existing
+  export PATH="$(dirname "$r6_python"):$PATH"
+  # Verify the original bundle first; apply this explicit runner update to the
+  # extracted source, preserving the trusted input bundle and its identities.
+  "$r6_python" - "$r6_support_dir" "$r6_source" "$r6_output/logs/runner-overlay.json" <<'UPDATE'
+import hashlib, json, pathlib, shutil, sys
+support, source, report = map(pathlib.Path, sys.argv[1:])
+updates = {}
+for name in ('benchmark_backends.py', 'test_benchmark_backends.py'):
+    origin = support / name
+    target = source / 'contrib/sionna/tools' / name
+    if not origin.is_file():
+        raise SystemExit(f'Missing companion {origin}; unpack the entire runner update beside the script')
+    original_hash = hashlib.sha256(target.read_bytes()).hexdigest()
+    updated_hash = hashlib.sha256(origin.read_bytes()).hexdigest()
+    if origin.resolve() != target.resolve():
+        shutil.copyfile(origin, target)
+    updates[name] = {'original_sha256': original_hash, 'applied_sha256': updated_hash}
+report.write_text(json.dumps({'mode': 'existing', 'python_executable': sys.executable,
+                              'python_version': sys.version, 'overlays': updates}, indent=2) + '\n')
+print('Reusing existing interpreter:', sys.executable, '; no packages will be installed')
+UPDATE
+else
+  "$r6_python" -m venv "$r6_output/venv"
+  r6_python="$r6_output/venv/bin/python"
+  "$r6_python" -m pip install pip==26.0.1
+  "$r6_python" -m pip install --no-deps -r "$r6_source/contrib/sionna/model/ns3sionna/requirements_cpu_ci.lock"
+  "$r6_python" -m pip check
+  export PATH="$r6_output/venv/bin:$PATH"
+fi
 cd "$r6_source"
 rm -f contrib/sionna/model/message.pb.cc contrib/sionna/model/message.pb.h contrib/sionna/model/ns3sionna/common/message_pb2.py
 ./ns3 configure --enable-examples --enable-tests --enable-modules=sionna,wifi,internet,applications,buildings 2>&1 | tee "$r6_output/logs/configure.log"
