@@ -196,6 +196,7 @@ class HeDlMuMimoSelectedToneTest : public TestCase
             {{3, 0}});
 
         auto abstraction = CreateObject<HeDlMuMimoLinkAbstraction>();
+        abstraction->SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel::EESM);
         abstraction->SetEesmBeta(0, 2.0);
         const auto selected = abstraction->Calculate(
             baselineSnapshot,

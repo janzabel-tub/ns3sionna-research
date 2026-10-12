@@ -88,11 +88,7 @@ enum class SionnaMimoChannelNormalization
 };
 
 /** Effective-SINR mappings represented by the high-level API. */
-enum class SionnaMimoEffectiveSinrModel
-{
-    EESM,
-    MUTUAL_INFORMATION
-};
+// Selector is declared in he-effective-sinr-mapping.h.
 
 /** Channel-dependent SU beamforming algorithms exposed by the helper. */
 enum class SionnaMimoBeamformingMethod
@@ -168,7 +164,7 @@ struct SionnaMimoConfiguration
     SionnaMimoChannelNormalization channelNormalization{
         SionnaMimoChannelNormalization::UNIT_AVERAGE_PAIR_POWER};
     double receiverNoiseFigureDb{7.0};
-    SionnaMimoEffectiveSinrModel effectiveSinrModel{SionnaMimoEffectiveSinrModel::EESM};
+    SionnaMimoEffectiveSinrModel effectiveSinrModel{SionnaMimoEffectiveSinrModel::MEAN_UNCODED_BER};
     std::map<uint8_t, double> eesmBetaLinear;
     /** Exact PHY contexts with measured AWGN SNR corrections; empty by default. */
     std::map<HeAwgnCalibrationKey, double> awgnSnrOffsetsDb;
@@ -274,9 +270,9 @@ class SionnaMimoHelper
     /**
      * Prevalidate an HE MCS and apply the complete configuration.
      *
-     * This convenience entry point rejects a missing SU-MIMO EESM beta before
-     * any Sionna, PHY-helper, or propagation-model state is changed. SISO keeps
-     * the legacy scalar path and therefore requires no beta.
+     * This convenience entry point validates the used MCS before changing objects.
+     * Only explicitly selected EESM requires an MCS-specific beta. General
+     * reception also applies the common mapping to 1x1 payloads.
      *
      * \param heMcs HE MCS used by the configured link (0--11)
      * \param sionnaHelper existing Sionna IPC helper
@@ -394,7 +390,7 @@ class SionnaMimoHelper
     /**
      * Validate the configuration for use with a particular HE MCS.
      *
-     * Open-loop SU-MIMO and SU beamforming require an explicit EESM beta.
+     * Explicit EESM requires a beta for every used MCS; general mode needs none.
      * SISO preserves the Phase-1 scalar path and therefore does not require
      * one.
      */

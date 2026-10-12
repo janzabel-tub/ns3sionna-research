@@ -59,7 +59,7 @@ class HeDlMuMimoUserResult
     double m_packetSuccessRate{0.0};
 };
 
-/** Per-user EESM/PER results, ordered by stable user ID. */
+/** Per-user effective-SINR/PER results, ordered by stable user ID. */
 class HeDlMuMimoLinkResult
 {
   public:
@@ -74,7 +74,7 @@ class HeDlMuMimoLinkResult
 
 /**
  * \ingroup sionna
- * Applies the existing HE SU EESM and ErrorRateModel contract independently
+ * Applies the existing HE SU mapping and ErrorRateModel contract independently
  * to every Phase-4.2 downlink MU user.
  */
 class HeDlMuMimoLinkAbstraction : public Object
@@ -86,6 +86,8 @@ class HeDlMuMimoLinkAbstraction : public Object
 
     void SetErrorRateModel(Ptr<ErrorRateModel> errorRateModel);
     Ptr<ErrorRateModel> GetErrorRateModel() const;
+    void SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel model);
+    SionnaMimoEffectiveSinrModel GetEffectiveSinrModel() const;
     void SetEesmBeta(uint8_t mcs, double betaLinear);
     void SetEesmBetaDb(uint8_t mcs, double betaDb);
     void SetAwgnSnrOffsetDb(const HeAwgnCalibrationKey& key, double offsetDb);

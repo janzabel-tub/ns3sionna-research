@@ -8,6 +8,7 @@
 #define HE_SU_MIMO_LINK_ABSTRACTION_H
 
 #include "su-mimo-link-model.h"
+#include "he-effective-sinr-mapping.h"
 #include "wifi-link-budget.h"
 
 #include "ns3/object.h"
@@ -72,9 +73,8 @@ class HeSuMimoLinkResult
 /**
  * \ingroup sionna
  *
- * Maps post-MMSE SINRs to an HE packet error probability. EESM calibration
- * parameters are explicit and MCS-dependent: no default beta values are
- * supplied.
+ * Maps post-MMSE data SINRs to coded HE packet error probability.
+ * Mean uncoded BER is the default. Explicit EESM uses caller-supplied betas.
  */
 class HeSuMimoLinkAbstraction : public Object
 {
@@ -86,9 +86,10 @@ class HeSuMimoLinkAbstraction : public Object
     void SetErrorRateModel(Ptr<ErrorRateModel> errorRateModel);
     Ptr<ErrorRateModel> GetErrorRateModel() const;
 
-    /**
-     * Set the EESM beta for an HE MCS in linear SINR units.
-     */
+    /** Select the common mapping; configuring beta alone does not select EESM. */
+    void SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel model);
+    SionnaMimoEffectiveSinrModel GetEffectiveSinrModel() const;
+    /** Set an explicit EESM beta in linear SINR units. */
     void SetEesmBeta(uint8_t mcs, double betaLinear);
 
     /**
@@ -113,9 +114,10 @@ class HeSuMimoLinkAbstraction : public Object
     /**
      * Compress every tone and spatial-stream SINR into one effective SINR.
      */
-    double CalculateEffectiveSinr(const SuMimoLinkResult& mimoResult, uint8_t mcs) const;
+    double CalculateEffectiveSinr(const SuMimoLinkResult& mimoResult, uint8_t mcs,
+                                  const std::vector<uint32_t>& dataIndices = {}) const;
 
-    /** Compress an explicit non-empty collection of SINR samples with EESM. */
+    /** Compress an explicit non-empty collection of SINR samples with the selected mapping. */
     double CalculateEffectiveSinr(const std::vector<double>& sinrLinear, uint8_t mcs) const;
 
     /**
@@ -124,7 +126,8 @@ class HeSuMimoLinkAbstraction : public Object
     HeSuMimoLinkResult Calculate(const MimoChannelMatrix& channel,
                                  const WifiLinkBudgetResult& linkBudget,
                                  const WifiTxVector& txVector,
-                                 uint32_t packetSizeBytes) const;
+                                 uint32_t packetSizeBytes,
+                                 const std::vector<uint32_t>& dataIndices = {}) const;
 
     /**
      * Calculate the complete HE result after applying fixed precoding.
@@ -133,9 +136,11 @@ class HeSuMimoLinkAbstraction : public Object
                                  const MimoPrecodingMatrix& precoding,
                                  const WifiLinkBudgetResult& linkBudget,
                                  const WifiTxVector& txVector,
-                                 uint32_t packetSizeBytes) const;
+                                 uint32_t packetSizeBytes,
+                                 const std::vector<uint32_t>& dataIndices = {}) const;
 
   private:
+    SionnaMimoEffectiveSinrModel m_effectiveSinrModel{SionnaMimoEffectiveSinrModel::MEAN_UNCODED_BER};
     Ptr<ErrorRateModel> m_errorRateModel;
     std::map<uint8_t, double> m_eesmBetaLinear;
     std::map<HeAwgnCalibrationKey, double> m_awgnSnrOffsetsDb;

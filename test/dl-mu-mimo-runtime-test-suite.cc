@@ -135,6 +135,7 @@ class DlMuMimoRuntimeSelectionTest : public TestCase
         NS_TEST_ASSERT_MSG_EQ(SamePrecoder(retained.GetPrecoding(), first.GetPrecoding()), true,
                               "exact state lookup changed precoding");
         auto adapter = CreateObject<SionnaSpectrumPropagationLossModel>();
+        adapter->SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel::EESM);
         runtime.Install(*adapter, 42, selectedInfo, {{7, 3}, {15, 12}}, NanoSeconds(100));
         NS_TEST_ASSERT_MSG_EQ(adapter->HasDlMuMimoState(), true, "runtime install did not retain state");
 
@@ -440,6 +441,7 @@ class DlMuMimoRuntimeFixedTransmissionTest : public TestCase
         const auto selectedInfo = MakeInfo({7, 15});
         const std::vector<DlMuMimoStaUserBinding> selectedBindings{{7, 3}, {15, 12}};
         auto adapter = CreateObject<SionnaSpectrumPropagationLossModel>();
+        adapter->SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel::EESM);
         runtime.Install(*adapter,
                         42,
                         selectedInfo,

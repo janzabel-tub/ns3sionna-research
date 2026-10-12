@@ -28,9 +28,10 @@ namespace
 class HeDlMuSpectrumRuTest : public TestCase
 {
   public:
-    HeDlMuSpectrumRuTest() : TestCase("runtime RU tones exclude nulls and other allocations") {}
+    HeDlMuSpectrumRuTest(bool general = false) : TestCase(general ? "General BER RU masks exclude pilots, nulls and other allocations" : "runtime RU tones exclude nulls and other allocations"), m_general(general) {}
 
   private:
+    bool m_general;
     void DoRun() override
     {
         // Hard-coded 20 MHz occupied-tone ranges are independent of the adapter's
@@ -137,8 +138,12 @@ class HeDlMuSpectrumRuTest : public TestCase
             MimoPrecodingMatrix::FrequencyFlat(n, 2, 2, {{1, 0}, {0, 0}, {0, 0}, {1, 0}}),
             {{1, 0}, {2, 0}});
         auto adapter = CreateObject<SionnaSpectrumPropagationLossModel>();
+        if (!m_general)
+        {
+            adapter->SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel::EESM);
+            adapter->SetEesmBeta(0, 2);
+        }
         adapter->SetReceiverNoiseFigureDb(7);
-        adapter->SetEesmBeta(0, 2);
         MimoChannelMatrix fallback(n, 1, 1);
         for (uint32_t sc = 0; sc < n; ++sc) fallback.Set(sc, 0, 0, {1, 0});
         adapter->SetFixedChannelMatrix(fallback);
@@ -202,17 +207,25 @@ class HeDlMuSpectrumRuTest : public TestCase
                     return sum;
                 };
                 const double rho = integrate(*psd) / noise;
+                std::vector<double> dataSinrs;
                 double exponentialSum = 0;
                 uint32_t count = 0;
                 for (int tone = lo; tone <= hi; ++tone)
                 {
                     if (!allocated(tone, u)) continue;
+                    // Independent 20 MHz pilot indices, selected by RU family.
+                    const int a = std::abs(tone);
+                    const bool pilot = type == HeRu::RU_26_TONE ? a == 10 :
+                                       a == 22 || a == 48 || a == 90 || a == 116;
+                    if (m_general && pilot) continue;
                     const double gain = (centre + tone) % 2 ? 4.0 : 1.0;
                     const double sinr = rho * gain * (type == HeRu::RU_106_TONE ? 2 : 1);
                     exponentialSum += std::exp(-sinr / 2);
+                    dataSinrs.push_back(sinr);
                     ++count;
                 }
-                const double expected = -2 * std::log(exponentialSum / count);
+                const double expected = m_general ? HeEffectiveSinrMapping::MeanUncodedBer(dataSinrs, 0).effectiveSinrLinear
+                                                  : -2 * std::log(exponentialSum / count);
                 const auto output = adapter->CalcRxPowerSpectralDensity(
                     params, aps.Get(0)->GetObject<MobilityModel>(),
                     stas.Get(u)->GetObject<MobilityModel>());
@@ -270,6 +283,7 @@ class HeDlMuSpectrumRuSuite : public TestSuite
     HeDlMuSpectrumRuSuite() : TestSuite("he-dl-mu-spectrum-ru", UNIT)
     {
         AddTestCase(new HeDlMuSpectrumRuTest, TestCase::QUICK);
+        AddTestCase(new HeDlMuSpectrumRuTest(true), TestCase::QUICK);
     }
 } g_heDlMuSpectrumRuSuite;
 } // namespace

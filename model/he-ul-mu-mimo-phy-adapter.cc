@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 
 #include "he-ul-mu-mimo-phy-adapter.h"
+#include "he-data-tone-mask.h"
 
 #include "ns3/ctrl-headers.h"
 #include "ns3/error-rate-model.h"
@@ -144,6 +145,17 @@ HeUlMuMimoPhyAdapter::GetErrorRateModel() const
 }
 
 void
+HeUlMuMimoPhyAdapter::SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel model)
+{
+    m_abstraction->SetEffectiveSinrModel(model);
+}
+SionnaMimoEffectiveSinrModel
+HeUlMuMimoPhyAdapter::GetEffectiveSinrModel() const
+{
+    return m_abstraction->GetEffectiveSinrModel();
+}
+
+void
 HeUlMuMimoPhyAdapter::SetEesmBeta(uint8_t mcs, double betaLinear)
 {
     m_abstraction->SetEesmBeta(mcs, betaLinear);
@@ -168,11 +180,16 @@ HeUlMuMimoPhyAdapter::Calculate(
     uint8_t apRxAntennas,
     double receiverNoiseFigureDb,
     UlMuMimoDetector detector,
-    double rankTolerance) const
+    double rankTolerance,
+    uint8_t apPrimary20Index) const
 {
     if (!trigger.IsBasic() || trigger.GetVariant() != TriggerFrameVariant::HE)
     {
         Reject("only HE Basic Trigger frames can coordinate data HE-TB PPDUs");
+    }
+    if (apPrimary20Index >= trigger.GetUlBandwidth() / 20)
+    {
+        Reject("AP primary 20 MHz index is outside the Trigger bandwidth");
     }
     if (triggerUid == 0)
     {
@@ -232,7 +249,8 @@ HeUlMuMimoPhyAdapter::Calculate(
         {
             Reject("Phase 4.8 supports exactly one local stream per user");
         }
-        if (!m_abstraction->HasEesmBeta(triggerUser->GetUlMcs()))
+        if (GetEffectiveSinrModel() == SionnaMimoEffectiveSinrModel::EESM &&
+            !m_abstraction->HasEesmBeta(triggerUser->GetUlMcs()))
         {
             Reject("each Trigger MCS requires an explicit EESM beta");
         }
@@ -280,7 +298,7 @@ HeUlMuMimoPhyAdapter::Calculate(
     std::map<HeRu::RuSpec,
              std::vector<const HeUlMuMimoPpduReception*>,
              HeRu::RuSpecCompare>
-        simultaneousByRu{HeRu::RuSpecCompare(trigger.GetUlBandwidth(), 0)};
+        simultaneousByRu{HeRu::RuSpecCompare(trigger.GetUlBandwidth(), apPrimary20Index)};
     for (const auto& [staId, binding] : bindingBySta)
     {
         static_cast<void>(binding);
@@ -316,13 +334,20 @@ HeUlMuMimoPhyAdapter::Calculate(
                                                               bandwidthHz,
                                                               WIFI_NOISE_TEMPERATURE_K,
                                                               receiverNoiseFigureDb);
+            auto selected = reception->subcarrierIndices;
+            if (GetEffectiveSinrModel() == SionnaMimoEffectiveSinrModel::MEAN_UNCODED_BER)
+            {
+                selected = HeDataToneMask::Select(trigger.GetUlBandwidth(), ru.GetRuType(),
+                    ru.GetPhyIndex(trigger.GetUlBandwidth(), apPrimary20Index),
+                    snapshotByUser.at(binding.userId)->channel.GetNumSubcarriers(), selected);
+            }
             transmissions.push_back({binding.userId,
                                      linkBudget,
                                      trigger.GetHeTbTxVector(reception->staId),
                                      reception->packetSizeBytes,
                                      0,
                                      reception->staId,
-                                     reception->subcarrierIndices});
+                                     selected});
         }
 
         HeUlMuMimoPhyGroupResult groupResult;

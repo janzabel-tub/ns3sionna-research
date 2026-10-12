@@ -110,6 +110,7 @@ SionnaMimoConfiguration
 MakeTwoByTwoConfiguration(uint8_t mcs, double eesmBetaLinear)
 {
     SionnaMimoConfiguration configuration;
+    configuration.effectiveSinrModel = SionnaMimoEffectiveSinrModel::EESM;
     configuration.mode = SionnaMimoMode::SU_MIMO_SPATIAL_MULTIPLEXING;
     configuration.txArray.numColumns = 2;
     configuration.rxArray.numColumns = 2;
@@ -537,6 +538,7 @@ main(int argc, char* argv[])
         SionnaMimoHelper fixedHelper(fixedConfiguration);
 
         SionnaMimoConfiguration mrtConfiguration;
+        mrtConfiguration.effectiveSinrModel = SionnaMimoEffectiveSinrModel::EESM;
         mrtConfiguration.mode = SionnaMimoMode::SU_BEAMFORMING;
         mrtConfiguration.txArray.numColumns = 2;
         mrtConfiguration.numTxAntennas = 2;

@@ -42,7 +42,7 @@ DlMuMimoRuntimeConfiguration Runtime(Method method,double alpha,bool aged) {
   return c;
 }
 SionnaMimoConfiguration Configuration(Method method,uint8_t mcs,double beta,double alpha,bool aged) {
-  SionnaMimoConfiguration c; c.mode=SionnaMimoMode::MU_MIMO; c.txArray.numColumns=2; c.numTxAntennas=2; c.rxArray.numColumns=1; c.numRxAntennas=1; c.maxNss=1; c.receiverNoiseFigureDb=7; c.eesmBetaLinear.emplace(mcs,beta); c.dlMu=Runtime(method,alpha,aged); return c;
+  SionnaMimoConfiguration c; c.effectiveSinrModel=SionnaMimoEffectiveSinrModel::EESM; c.mode=SionnaMimoMode::MU_MIMO; c.txArray.numColumns=2; c.numTxAntennas=2; c.rxArray.numColumns=1; c.numRxAntennas=1; c.maxNss=1; c.receiverNoiseFigureDb=7; c.eesmBetaLinear.emplace(mcs,beta); c.dlMu=Runtime(method,alpha,aged); return c;
 }
 class TraceCollector
 {
@@ -225,6 +225,7 @@ RunUplink(uint8_t mcs, double beta)
             {9, 2, UlPpdu(trigger, 9, duration, triggerUid), start, end, snr2 * noise, 1200, {0}}};
     };
     auto adapter = CreateObject<HeUlMuMimoPhyAdapter>();
+    adapter->SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel::EESM);
     adapter->SetErrorRateModel(CreateObject<TableBasedErrorRateModel>());
     adapter->SetEesmBeta(mcs, beta);
 

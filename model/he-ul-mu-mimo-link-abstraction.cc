@@ -136,6 +136,17 @@ HeUlMuMimoLinkAbstraction::GetErrorRateModel() const
 }
 
 void
+HeUlMuMimoLinkAbstraction::SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel model)
+{
+    m_suAbstraction->SetEffectiveSinrModel(model);
+}
+SionnaMimoEffectiveSinrModel
+HeUlMuMimoLinkAbstraction::GetEffectiveSinrModel() const
+{
+    return m_suAbstraction->GetEffectiveSinrModel();
+}
+
+void
 HeUlMuMimoLinkAbstraction::SetEesmBeta(uint8_t mcs, double betaLinear)
 {
     m_suAbstraction->SetEesmBeta(mcs, betaLinear);
@@ -213,7 +224,8 @@ HeUlMuMimoLinkAbstraction::Calculate(
         {
             Reject("every link budget must contain a finite positive reference SNR");
         }
-        if (!m_suAbstraction->HasEesmBeta(mode.GetMcsValue()))
+        if (GetEffectiveSinrModel() == SionnaMimoEffectiveSinrModel::EESM &&
+            !m_suAbstraction->HasEesmBeta(mode.GetMcsValue()))
         {
             Reject("every user's HE MCS requires an explicit EESM beta");
         }

@@ -10,6 +10,9 @@ Arbeitszweig: feature/su-mimo-minimal
 
 Basis: ns-3.40, ns3sionna c896b858; Auftragsbasis 46d73fa; Sionna und Sionna RT 2.0.1
 
+Aktueller HE-Default: parameterfreie Mittelung uncodierter BER nach dem Detektor
+(Abschnitt 5.20). EESM und der kalibrierte Pilot bleiben explizite Optionen.
+
 ## 1. Ziel und Abgrenzung
 
 Sionna RT berechnet die komplexe, frequenzselektive
@@ -26,8 +29,8 @@ dimensionssicheren MIMO-Datenvertrag, explizit kalibrierbare
 schmale Einkopplung in den SpectrumWifiPhy-Empfangspfad. SionnaMimoHelper legt
 den High-Level-API-Vertrag und dessen zentrale Validierung fest und wendet ihn
 nun konsistent auf Sionna-IPC, Phase-1-Linkabstraktion und SpectrumWifiPhy an.
-Der MCS-bezogene ApplyForHeMcs-Aufruf prüft eine für SU-MIMO erforderliche
-EESM-Kalibrierung vor jeder Zustandsänderung. Das reproduzierbare Beispiel
+Der MCS-bezogene ApplyForHeMcs-Aufruf prüft Konfiguration und MCS vor jeder
+Zustandsänderung; nur explizit gewähltes EESM verlangt ein Beta. Das reproduzierbare Beispiel
 konfiguriert 1x1 und Vollrang-2x2 ausschließlich über SionnaMimoHelper und
 deckt mit dem deterministischen Kanalpfad SpectrumWifiPhy end-to-end ab.
 Integrationsnahe Negativläufe prüfen widersprüchliche NSS, nicht unterstützte
@@ -1424,7 +1427,10 @@ Abschnitt 5.8. Ein zusätzlicher pauschaler RX-Diversity-Gewinn wird nicht
 aufgeschlagen: Array- und Detektorgewinn sind bereits in \(\mathbf H[k]\) und
 den Post-MMSE-SINRs enthalten.
 
-### 5.6 MCS-abhängige EESM-Kompression
+### 5.6 Optional gewählte MCS-abhängige EESM-Kompression
+
+Der allgemeine Default steht in Abschnitt 5.20; dieser Abschnitt beschreibt
+die explizite Kompatibilitätsoption EESM.
 
 Für HE MCS \(m\) komprimiert EESM alle \(N_\mathrm{sc}N_s\)
 Post-MMSE-SINRs mit gleicher Gewichtung:
@@ -1460,7 +1466,7 @@ Für einen flachen Kanal mit identischen SINRs ist das Ergebnis unabhängig von
 \(\beta_m\) exakt diese SINR. Das ermöglicht die SISO-AWGN-Paritätsprüfung.
 
 Es werden bewusst keine Default-Betas ausgeliefert. Jeder HE MCS von 0 bis 11
-muss vor der Nutzung explizit konfiguriert werden. Damit enthält der Code keine
+muss bei explizit gewähltem EESM vor der Nutzung konfiguriert werden. Damit enthält der Code keine
 unbelegten Kalibrierkonstanten. Die in analytischen Tests verwendeten positiven
 Werte sind ausschließlich Formel-Sentinels und ausdrücklich keine
 802.11ax-Kalibrierung. Unterphase 5.1 versioniert erstmals einen
@@ -1473,7 +1479,8 @@ kalibrierte PER-Abbildung ausgegeben.
 ### 5.7 Abbildung auf ns-3-PER
 
 HeSuMimoLinkAbstraction übernimmt WifiTxVector einschließlich HE-MCS, NSS und
-Codeart. NSS muss der Zahl der übertragenen Streams entsprechen. Nach EESM wird
+Codeart. NSS muss der Zahl der übertragenen Streams entsprechen. Nach der
+ausgewählten effektiven SINR-Abbildung wird
 die vorhandene Schnittstelle verwendet:
 
 \[
@@ -1486,8 +1493,8 @@ die vorhandene Schnittstelle verwendet:
   PER = 1-P_\mathrm{succ},
 \]
 
-wobei \(L\) die Paketlänge in Byte ist. Ohne eine exakt passende
-Phase-5.1-Kalibrierung gilt \(\delta_c=0\). ErrorRateModel ist als ns-3-Attribut
+wobei \(L\) die Paketlänge in Byte ist. Im allgemeinen BER-Modus und ohne eine exakt passende
+EESM-Phase-5.1-Kalibrierung gilt \(\delta_c=0\). ErrorRateModel ist als ns-3-Attribut
 und über SetErrorRateModel konfigurierbar. Standard ist
 TableBasedErrorRateModel, also das ns-3.40-Defaultmodell für 802.11n/ac/ax.
 
@@ -1573,7 +1580,9 @@ Zeitvariable Interferenz wirkt weiterhin über SpectrumWifiPhy, jedoch als
 skalare Nachbewertung und nicht als subcarrierabhängige
 Interferenzkovarianz im MMSE-Detektor.
 
-Der bisherige 1x1-Pfad bleibt unverändert skalar und benötigt kein EESM-Beta.
+Der explizite LEGACY_SISO-Modus erhält den früheren skalaren 1x1-Pfad.
+Der allgemeine HE-Default verwendet den Payload-Wrapper aus Abschnitt 5.20;
+beide benötigen kein EESM-Beta.
 Nicht-HE-Kontrollrahmen einer MIMO-PHY verwenden während Phase 1 das erste
 Antennenpaar, damit Beacon, Association und ACK ohne vorweggenommene
 Streamauswahl funktionieren. Der letzte Guard-Bin und das bestehende
@@ -3573,6 +3582,175 @@ Produktionsserver nicht; automatische MAC-/MU-Steuerung, Doppler und GPU
 bleiben außerhalb dieser Abnahme. Details stehen im
 [R4-Vertrag](doc/r4-live-scaling.md).
 
+
+### 5.20 Allgemeine HE-Abstraktion durch gemittelte uncodierte BER
+
+Diese vollständige Unterphase macht `MEAN_UNCODED_BER` zum Default für die
+unterstützten HE-Datenpfade: 1x1, SU Spatial Multiplexing, festes Precoding,
+MRT/SVD, Downlink MU und Uplink MU. Antennenzahl, NSS, Stationszahl,
+Bandbreite und Ausrichtung beeinflussen weiterhin Kanal, Leistungsaufteilung,
+Precoding und Detektor. Die anschließende Abbildung braucht weder Beta noch
+szenariospezifische Fitparameter. Die gemeinsamen numerischen Funktionen
+liegen in `model/he-effective-sinr-mapping.{h,cc}`.
+
+Zuerst berechnet der bestehende Empfänger je Nutzer die Symbol-SINRs
+$\gamma_{u,s}[k]$ nach räumlicher Verarbeitung. Danach gilt
+
+\[
+ b_{u,s}[k]=b_M(\gamma_{u,s}[k]),\qquad
+ \overline b_u=\frac{1}{K_uS_u}\sum_{k,s}b_{u,s}[k],\qquad
+ \gamma_{\mathrm{eff},u}=b_M^{-1}(\overline b_u).
+\]
+
+$K_u$ enthält ausschließlich zugeteilte Datentöne. Alle ausgewählten Töne
+und Streams tragen bei gleichem MCS gleich viele codierte Bits und erhalten
+daher gleiches Gewicht. Leistungsgewichtung würde starke Samples überbewerten.
+MU-Nutzer werden getrennt gemittelt. Kanalmatrizen oder Antennenleistungen
+werden vor dem Detektor nicht gemittelt; Rang und Rauschverstärkung bleiben
+in seinen SINRs erhalten.
+
+Die SINR ist $E_s/N_0$, nicht uncodiertes $E_b/N_0$. Für BPSK und QPSK:
+
+\[
+ b_2(\gamma)=\tfrac12\operatorname{erfc}(\sqrt\gamma),\qquad
+ b_4(\gamma)=\tfrac12\operatorname{erfc}(\sqrt{\gamma/2}).
+\]
+
+Für Gray-codiertes quadratisches QAM mit $A=\sqrt M$ und $p=\log_2 A$
+verwendet der Mapper die vollständige AWGN-BER-Reihe:
+
+\[
+ b_M(\gamma)=\frac{2}{Ap}\sum_{j=1}^{p}
+ \sum_{i=0}^{A-A/2^j-1}
+ (-1)^{\lfloor i2^{j-1}/A\rfloor}
+ \left(2^{j-1}-\lfloor i2^{j-1}/A+1/2\rfloor\right)
+ Q\left((2i+1)\sqrt{3\gamma/(M-1)}\right).
+\]
+
+Die veröffentlichte $E_b/N_0$-Form wird dabei mit $\gamma/\log_2M$ ausgewertet.
+Dies sind Konstellationskoeffizienten, keine Kalibrierwerte. MCS 0 verwendet
+BPSK; 1/2 QPSK; 3/4 16-QAM; 5/6/7 64-QAM; 8/9 256-QAM; 10/11 1024-QAM.
+MCS mit gleicher Modulation teilen dieselbe BER-Kurve. Codeart und Coderate
+wirken anschließend im vorhandenen ns-3-Fehlermodell. MCS 10/11 verwenden
+LDPC; die Abstraktion erweitert keine PHY-Codierungskombinationen.
+
+Die Konstellationskoeffizienten werden einmal vorab berechnet und gleiche
+Gaussian-Tail-Terme zusammengefasst. Die Summen verwenden kompensierte
+Addition. Alle Eingaben müssen endlich und nichtnegativ sein, die Sammlung
+nichtleer. $b_M(0)=1/2$ wird exakt zurückgegeben. Identische SINRs werden direkt
+zurückgegeben. Die inverse Suche führt 80 Bisektionsschritte in
+$x=\log(1+\gamma)$ zwischen Eingabeminimum und -maximum aus. Falls alle BERs
+numerisch zu null unterlaufen, ist das endliche Minimum der konservative
+Rückgabewert. Bei sonstigen Eingaben liegt die effektive SINR ebenfalls
+zwischen Minimum und Maximum.
+
+Zwei gleich gewichtete BPSK-Samples mit 10 dB und 0 dB haben BERs von rund
+0,00039 Prozent und 7,86 Prozent. Der Mittelwert 3,93 Prozent entspricht
+1,8928 dB effektiver SINR. Lineare SINR-Mittelung ergäbe 7,40 dB.
+Ein sehr guter Stream kann den Fehlerbeitrag eines schwachen Streams somit
+nicht beliebig ausgleichen. Dies beweist keine exakte Gleichheit der
+codierten Paketfehlerraten in beiden Kanälen.
+
+Für eine direkte Paketberechnung gilt unverändert
+
+\[
+ PER_u=1-\mathrm{ErrorRateModel::GetChunkSuccessRate}
+ (MCS_u,\mathrm{TxVector}_u,\gamma_{\mathrm{eff},u},8L_u,N_{\mathrm{rx},u}).
+\]
+
+Die Formel $1-(1-\overline b_u)^{8L_u}$ wird ausdrücklich nicht für codierte
+PER verwendet. $\overline b_u$ ist eine Diagnose vor FEC, keine residuale
+Decoder-BER. Die PHY behält ihre MPDU- und Interferenz-Chunk-Fenster bei.
+
+**Datentöne und PHY-Einkopplung.** `HeDataToneMask` wählt SU-Vollband oder
+die jeweilige MU-RU, ohne Piloten, DC und Guards. Die unabhängige Referenz
+`data/he_data_tone_reference.json` wurde mit MATLAB WLAN Toolbox R2026a,
+`wlanHEOFDMInfo('HE-Data',...)`, für alle 254 RU-Größen/-Positionen bei
+20/40/80/160 MHz erzeugt. Vollband zählt 234/468/980/1960 Datentöne;
+26/52/106/242/484/996/2x996-Ton-RUs zählen 24/48/102/234/468/980/1960.
+Für 2x996 schließt die Auswahl auch die inneren 80-MHz-DC-/Guard-Lücken aus.
+Numerische APIs ohne physikalisches Tonlayout behandeln ihre übergebenen
+Samples als Datensamples. Der UL-Adapter filtert bekannte FFT-/Spectrumgrids
+auch bei expliziten Teilmengen; vollständige belegte RU-Listen anderer Grids
+werden nach Tonposition gefiltert. Kleine explizite Listen ohne physikalisches
+Grid sind bereits ausgewählte numerische Datensamples. Bei einer 160-MHz-AP-PHY
+mit oberem primären 80-MHz-Segment übergibt der UL-Aufrufer zusätzlich den
+`apPrimary20Index`; dessen Default null erhält bestehende Aufrufe.
+
+Bei allgemeinem 1x1 installiert der Spectrumadapter automatisch einen
+empfängerlokalen `HeBerErrorRateModel`-Wrapper. Dieser speichert Datenton-SNRs
+pro PPDU, skaliert sie für jeden skalaren Interferenzzustand mit
+$\gamma_{\mathrm{scalar,chunk}}/\gamma_{\mathrm{scalar,snapshot}}$, berechnet
+die BER-Abbildung erneut und delegiert die native Chunk-Bitzahl an das
+vorhandene Fehlermodell. Header und CCA behalten die physikalische 1x1-PSD.
+Snapshots laufen eine Nanosekunde nach dem PPDU-Ende aus, damit EndOfMpdu
+noch Zugriff hat. Der Trace `MappingApplied` meldet PPDU-UID, mittlere BER,
+effektive SINR, codierte Chunk-Erfolgswahrscheinlichkeit und Bitzahl.
+Die Helper-Konfiguration überträgt die passende Empfängerrauschzahl;
+direkte Spectrumadapter-Aufrufer müssen sie weiterhin passend zur PHY setzen.
+
+Mehrantennen-SU/MU behalten die äquivalente Leistungsdarstellung und die
+bisherige skalare externe Interferenzkonvention aus Abschnitt 5.8. Insbesondere
+wird ns-3s zusätzlicher AWGN-Diversitätsfaktor weiterhin herausgerechnet,
+weil der Detektor bereits kombiniert. Externe Interferenz wird bei diesen
+Pfaden nicht noch einmal in den ursprünglichen Ton-SINRs ausgewertet.
+
+**Kompatibilität.** Die Enumwerte EESM=0 und MUTUAL_INFORMATION=1 bleiben
+stabil; MEAN_UNCODED_BER=2 und LEGACY_SISO=3 werden ergänzt. Ein Beta alleine
+ändert das ausgewählte Modell nicht. Nur explizites EESM verlangt für jeden
+verwendeten MCS ein Beta; bisherige EESM-Tonauswahl und Zahlenreferenzen bleiben
+erhalten. `LoadHeCalibrationProfile` wählt ausdrücklich EESM und behält alle
+engen Pilotprofil-, Offset- und Installationsprüfungen. Allgemeiner Modus
+wendet keine EESM-AWGN-Offsets an. `LEGACY_SISO` ist auf 1x1 beschränkt und
+behält den früheren skalaren PHY-Payloadpfad ohne allgemeinen Wrapper.
+Mutual Information als PER-Selector bleibt unimplementiert und abgelehnt.
+Der Selector wird durch Helper, Adapter und Rekonstruktion bei Konfigurations-
+ersatz weitergegeben. Die eingefrorenen EESM-Beispiele wählen EESM ausdrücklich.
+
+**Validierung und Grenzen.** Die neue Suite `he-effective-sinr-mapping`
+prüft die BPSK-/QPSK-Formen, alle QAM-Ordnungen gegen unabhängige
+Gray-Decision-Region-Integration, inverse Eigenschaften und AWGN-Parität der
+22 unterstützten MCS/Codierungspaare (BCC 0–9, LDPC 0–11) bei 32/1200 Byte.
+Beta-freie SU-Fälle umfassen ausgewogene/ungleiche Streams, Rangverlust,
+MRT, SVD und festes Precoding; DL/UL-MU prüfen getrennte Nutzer und
+orthogonale/interferierende Kanäle. Die nativen PHY-Suiten prüfen automatische
+1x1-Installation, Headerempfang, unterschiedliche PSDU-Längen/GI,
+Snapshotbereinigung, skalare Interferenz, explizites Legacy-1x1 sowie
+DL/UL-Datentonauswahl und die bestehende Diversitätskompensation.
+
+Das Beispiel `ns3_wifi_ber_mapping` gibt Selector, mittlere uncodierte BER,
+effektive SINR und codierte PER als CSV aus. Gegen den vorhandenen unabhängigen
+MCS-0/BCC/32-Byte/1x1-Pilot ohne Fit/Offset ergibt der allgemeine Modus:
+
+| Referenz | Punkte | Mittlerer absoluter PER-Fehler | Größter absoluter Fehler |
+|---|---:|---:|---:|
+| AWGN | 5 | 0,104106 | 0,215098 |
+| Frequenzselektiv | 15 | 0,122673 | 0,438636 |
+
+Diese Zahlen beschreiben nur diesen Pilot. Sein kalibriertes EESM-Profil hat
+weiterhin seine eigenen train/validation-Ergebnisse und wird unverändert
+regressionsgeprüft. Weder dessen Fehlergrenze noch die obigen Werte sind eine
+universelle Abnahmegrenze. Abnahme stützt sich auf Mathematik, AWGN-Parität
+und konsistente SU/MU-Anwendung.
+
+Die gemeinsame Regel ist eine parameterfreie allgemeine Näherung mit den
+bestehenden ns-3-AWGN-Kurven. Sie setzt Gaussian-äquivalente Störungen nach
+Detektion voraus und komprimiert Bitzuverlässigkeit zu einem Mittelwert.
+Fehlerpositionen, Korrelationen, vollständige Soft-Information und Codewörter
+bleiben unmodelliert. Sie ergänzt weder unvollkommene Kanalschätzung noch
+räumliche/frequenzabhängige Kovarianz externer Interferenz. Antennen- oder
+Stationszahlen benötigen keine neuen Mappingparameter, garantieren aber keine
+gleichmäßige absolute PER-Genauigkeit. Allgemeine EESM-Tabellen oder gepoolte
+MCS-/Codierungsfamilien-Fits und ein umfassendes Profilsystem bleiben spätere
+Arbeit.
+
+Quellen: [exakte AWGN-BER-Ausdrücke](https://www.mathworks.com/help/comm/ug/analytical-expressions-used-in-berawgn-function-and-bit-error-rate-analysis-app.html),
+[HE-OFDM-Toninformation](https://www.mathworks.com/help/wlan/ref/wlanheofdminfo.html),
+[HE-Codierungsbedingungen](https://www.mathworks.com/help/wlan/ref/wlanhesuconfig.html).
+[Halperin et al.](https://www.halper.in/pubs/comm356s-halperin.pdf) motivieren die
+BER-Mittelung über Subcarrier/MIMO-Streams für 802.11n; daraus folgt keine
+HE-/MU-Genauigkeitsgarantie.
+
 ## 6. High-Level-API-Vertrag bis Unterphase 4.8
 
 ### 6.1 Typen, Besitz und Defaults
@@ -3616,11 +3794,11 @@ festgeschriebenen Defaults sind:
 - linearer MMSE-Empfänger und gemeinsame Unit-Average-Power-Normalisierung
   über alle Subcarrier und Antennenpaare gemäß Abschnitt 4.3;
 - 7 dB Empfängerrauschzahl entsprechend dem ns-3.40-WifiPhy-Default;
-- EESM als HE-Effective-SINR-Modell, aber weiterhin keine impliziten
-  MCS-Betas;
+- MEAN_UNCODED_BER als HE-Effective-SINR-Modell ohne Mappingparameter;
+  EESM ist explizit wählbar, ohne implizite MCS-Betas;
 - weder ein fester Precoder noch Beamformingoptionen oder eine ausgewählte
-  Precodingmomentaufnahme. Dadurch nehmen alle bisherigen 1x1- und offenen
-  Mehrstromkonfigurationen weiterhin exakt den Phase-2-Pfad.
+  Precodingmomentaufnahme. Die Kanal-/Detektorpfade bleiben erhalten; die anschließende
+  BER-Abbildung ist nun der allgemeine Default.
 
 SetNodeOrientation, ClearNodeOrientation und GetNodeOrientation verwalten die
 knotenbezogenen Winkel. SetEesmBeta, HasEesmBeta und GetEesmBeta verwalten
@@ -6347,6 +6525,12 @@ Andere Samples/Wiederholungen benötigen neue Ordner und sind keine feste Abnahm
 `--validate-export --binary=<nativer-Pfad>` führt zusätzlich native Paarreplays aus.
 Den Bundleindexhash separat behalten und die verschobene Kopie mit `verify` prüfen.
 Der [R5-Vertrag](doc/r5-physical-aging.md) erklärt die zwei physikalischen Modelle.
+
+Allgemeinen BER-Vergleich ausführen:
+
+    ./ns3 run ns3_wifi_ber_mapping
+    ./ns3 run "ns3_wifi_ber_mapping --reference=contrib/sionna/data/he_mcs0_bcc_32_matlab_r2026a.json"
+    ./ns3 run "ns3_wifi_ber_mapping --mapping=EESM --beta=2 --mcs=3 --sinrs=1,10"
 
 PDF neu erzeugen:
 

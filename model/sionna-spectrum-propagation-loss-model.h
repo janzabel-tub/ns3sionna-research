@@ -120,6 +120,8 @@ class SionnaSpectrumPropagationLossModel : public SpectrumPropagationLossModel
     void SetReceiverNoiseFigureDb(double noiseFigureDb);
 
     /** Configure the explicit EESM beta for one HE MCS in linear units. */
+    void SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel model);
+    SionnaMimoEffectiveSinrModel GetEffectiveSinrModel() const;
     void SetEesmBeta(uint8_t mcs, double betaLinear);
 
     /** Configure the explicit EESM beta for one HE MCS in dB. */
@@ -196,7 +198,8 @@ class SionnaSpectrumPropagationLossModel : public SpectrumPropagationLossModel
         uint8_t rxPhyAntennas,
         double bandwidthHz,
         double receiverNoiseFigureDb,
-        Ptr<ErrorRateModel> errorRateModel) const;
+        Ptr<ErrorRateModel> errorRateModel,
+        const std::vector<uint32_t>& dataIndices = {}) const;
 
     /**
      * Evaluate one complete HE-DL-MU transmission before scalar PSD conversion.

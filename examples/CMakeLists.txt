@@ -127,3 +127,9 @@ build_lib_example(
     SOURCE_FILES ns3_sionna_live_benchmark.cc
     LIBRARIES_TO_LINK ${libsionna} ${libwifi} ${libnetwork} ${libmobility} ${libspectrum}
 )
+
+build_lib_example(
+    NAME ns3_wifi_ber_mapping
+    SOURCE_FILES ns3_wifi_ber_mapping.cc
+    LIBRARIES_TO_LINK ${libsionna} ${libwifi} ${Protobuf_LIBRARIES}
+)

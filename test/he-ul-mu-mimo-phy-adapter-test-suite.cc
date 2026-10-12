@@ -8,11 +8,13 @@
 #include "ns3/packet.h"
 #include "ns3/table-based-error-rate-model.h"
 #include "ns3/test.h"
+#include "ns3/simulator.h"
 #include "ns3/wifi-mac-header.h"
 #include "ns3/wifi-phy-operating-channel.h"
 #include "ns3/wifi-psdu.h"
 
 #include <cmath>
+#include <map>
 #include <complex>
 #include <stdexcept>
 #include <utility>
@@ -51,11 +53,11 @@ MakeSnapshot(const std::vector<MultiUserChannel>& users)
 WifiTxVector
 MakeTriggerVector(const std::vector<std::tuple<uint16_t, HeRu::RuSpec, uint8_t>>& users,
                   Time requestedDuration,
-                  Time& duration)
+                  Time& duration, uint16_t width = 20)
 {
     WifiTxVector vector;
     vector.SetPreambleType(WIFI_PREAMBLE_HE_TB);
-    vector.SetChannelWidth(20);
+    vector.SetChannelWidth(width);
     vector.SetGuardInterval(1600);
     for (const auto& [staId, ru, mcs] : users)
     {
@@ -72,7 +74,7 @@ MakeTriggerVector(const std::vector<std::tuple<uint16_t, HeRu::RuSpec, uint8_t>>
 
 Ptr<const HePpdu>
 MakePpdu(const CtrlTriggerHeader& trigger, uint16_t staId, uint32_t bytes, Time duration,
-         uint64_t uid = TRIGGER_UID)
+         uint64_t uid = TRIGGER_UID, uint16_t width = 20, uint8_t primary20 = 0)
 {
     WifiMacHeader header;
     header.SetType(WIFI_MAC_QOSDATA);
@@ -81,11 +83,14 @@ MakePpdu(const CtrlTriggerHeader& trigger, uint16_t staId, uint32_t bytes, Time 
     header.SetAddr2(staId == 7 ? Mac48Address("00:00:00:00:00:07")
                               : Mac48Address("00:00:00:00:00:09"));
     WifiConstPsduMap psdus{{staId, Create<WifiPsdu>(Create<Packet>(bytes), header)}};
-    static const WifiPhyOperatingChannel channel = [] {
-        WifiPhyOperatingChannel operatingChannel;
-        operatingChannel.SetDefault(20, WIFI_STANDARD_80211ax, WIFI_PHY_BAND_5GHZ);
-        return operatingChannel;
-    }();
+    static std::map<std::pair<uint16_t, uint8_t>, WifiPhyOperatingChannel> channels;
+    const auto inserted = channels.try_emplace({width, primary20});
+    auto& channel = inserted.first->second;
+    if (inserted.second)
+    {
+        channel.SetDefault(width, WIFI_STANDARD_80211ax, WIFI_PHY_BAND_5GHZ);
+        channel.SetPrimary20Index(primary20);
+    }
     return Create<HePpdu>(psdus,
                           trigger.GetHeTbTxVector(staId),
                           channel,
@@ -104,12 +109,71 @@ Ptr<HeUlMuMimoPhyAdapter>
 MakeAdapter()
 {
     auto adapter = CreateObject<HeUlMuMimoPhyAdapter>();
+        adapter->SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel::EESM);
     adapter->SetErrorRateModel(CreateObject<TableBasedErrorRateModel>());
     adapter->SetEesmBeta(0, 2.0);
     adapter->SetEesmBeta(3, 3.0);
     return adapter;
 }
 
+class HeUlBerPhysicalMaskTest : public TestCase
+{
+  public:
+    HeUlBerPhysicalMaskTest() : TestCase("General UL MU filters data tones before per-user BER mapping") {}
+  private:
+    void DoRun() override
+    {
+        RunCase(20, 0);
+        RunCase(160, 0);
+        RunCase(160, 4);
+    }
+    void RunCase(uint16_t width, uint8_t primary20)
+    {
+        const unsigned n = 3 * width * 256 / 20;
+        const int shift = width == 160 ? (primary20 < 4 ? -512 : 512) : 0;
+        const HeRu::RuSpec ru(width == 20 ? HeRu::RU_242_TONE : HeRu::RU_996_TONE,1,true);
+        Time duration;
+        const CtrlTriggerHeader trigger(TriggerFrameType::BASIC_TRIGGER,
+            MakeTriggerVector({{7,ru,0},{9,ru,3}},MicroSeconds(200),duration,width));
+        MimoChannelMatrix h1(n,2,1), h2(n,2,1);
+        std::vector<double> samples1, samples2;
+        for (unsigned k = 0; k < n; ++k)
+        {
+            const int tone = int(k)-int(n/2)-shift;
+            const int a = std::abs(tone);
+            const bool data = width == 20 ?
+                a >= 2 && a <= 122 && a != 22 && a != 48 && a != 90 && a != 116 :
+                a >= 3 && a <= 500 && a != 24 && a != 92 && a != 158 && a != 226 &&
+                a != 266 && a != 334 && a != 400 && a != 468;
+            const double gain = tone < 0 ? 0.1 : 2.0;
+            h1.Set(k,0,0,{data ? std::sqrt(gain) : 100,0});
+            h2.Set(k,1,0,{data ? 1.0 : 100,0});
+            if (data) { samples1.push_back(4*gain); samples2.push_back(9); }
+        }
+        auto snapshot = MakeSnapshot({MakeUser(1,11,h1),MakeUser(2,22,h2)});
+        for (auto& user : snapshot.users)
+        {
+            user.frequencies.resize(n);
+            for (unsigned k = 0; k < n; ++k) { user.frequencies[k] = int(k) - int(n/2); }
+        }
+        const auto end = COORDINATED_START + duration;
+        const std::vector<HeUlMuMimoPpduReception> receptions{
+            {7,11,MakePpdu(trigger,7,400,duration,TRIGGER_UID,width,primary20),COORDINATED_START,end,ReceivedPowerForSnr(4,ru),400,{}},
+            {9,22,MakePpdu(trigger,9,900,duration,TRIGGER_UID,width,primary20),COORDINATED_START,end,ReceivedPowerForSnr(9,ru),900,{}}};
+        auto adapter = CreateObject<HeUlMuMimoPhyAdapter>();
+        adapter->SetErrorRateModel(CreateObject<TableBasedErrorRateModel>());
+        const auto result = adapter->Calculate(snapshot,trigger,TRIGGER_UID,{{1,7,11},{2,9,22}},
+            receptions,COORDINATED_START,end,AP_NODE_ID,2,0,UlMuMimoDetector::LINEAR_MMSE,
+            UlMuMimoLinkModel::DEFAULT_RANK_TOLERANCE,primary20);
+        NS_TEST_ASSERT_MSG_EQ_TOL(result.GetUserById(1).GetEffectiveSinrLinear(),
+            HeEffectiveSinrMapping::MeanUncodedBer(samples1,0).effectiveSinrLinear,1e-11,"UL pilot/null contamination");
+        NS_TEST_ASSERT_MSG_EQ_TOL(result.GetUserById(2).GetEffectiveSinrLinear(),9,1e-11,"UL per-user modulation mapping");
+        const auto& user = result.GetUserById(2);
+        NS_TEST_ASSERT_MSG_EQ_TOL(result.GetEquivalentReceivedPowerW(2),
+            9*user.GetLinkBudget().GetReceiverNoisePowerW()/2,1e-24,"UL duplicated diversity gain");
+        Simulator::Destroy();
+    }
+};
 class HeUlMuMimoPhyAdapterIntegrationTest : public TestCase
 {
   public:
@@ -330,6 +394,7 @@ class HeUlMuMimoPhyAdapterTestSuite : public TestSuite
     HeUlMuMimoPhyAdapterTestSuite()
         : TestSuite("he-ul-mu-mimo-phy-adapter", UNIT)
     {
+        AddTestCase(new HeUlBerPhysicalMaskTest, TestCase::QUICK);
         AddTestCase(new HeUlMuMimoPhyAdapterIntegrationTest, TestCase::QUICK);
         AddTestCase(new HeUlMuMimoPhyAdapterParticipationTest, TestCase::QUICK);
     }

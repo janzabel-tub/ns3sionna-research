@@ -64,6 +64,9 @@ set(proto_source_files model/message.proto)
 
 # Module sources and headers
 set(SOURCE_FILES
+        model/he-data-tone-mask.cc
+        model/he-ber-error-rate-model.cc
+        model/he-effective-sinr-mapping.cc
         model/he-calibrated-error-rate-model.cc
         model/dl-mu-mimo-runtime.cc
         model/dl-mu-mimo-link-model.cc
@@ -90,6 +93,9 @@ set(SOURCE_FILES
 )
 
 set(HEADER_FILES
+        model/he-data-tone-mask.h
+        model/he-ber-error-rate-model.h
+        model/he-effective-sinr-mapping.h
         model/he-calibrated-error-rate-model.h
         model/dl-mu-mimo-runtime.h
         model/dl-mu-mimo-link-model.h
@@ -138,6 +144,7 @@ build_lib(
         ${ZeroMQ_LIBRARIES}
         ${Protobuf_LIBRARIES}
         TEST_SOURCES
+        test/he-effective-sinr-mapping-test-suite.cc
         test/sionna-test-suite.cc
         test/mimo-csi-feedback-test-suite.cc
         test/dl-mu-mimo-runtime-test-suite.cc

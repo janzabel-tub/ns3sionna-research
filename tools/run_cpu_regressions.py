@@ -35,7 +35,7 @@ def main():
     runner = list((NS3 / 'build/utils').glob('*test-runner-*'))
     if len(runner) != 1:
         raise RuntimeError('Build test-runner and sionna-test first')
-    for suite in ('sionna', 'sionna-mimo-csi-feedback', 'dl-mu-mimo-runtime',
+    for suite in ('he-effective-sinr-mapping', 'sionna', 'sionna-mimo-csi-feedback', 'dl-mu-mimo-runtime',
                   'dl-mu-mimo-ru', 'he-dl-mu-spectrum-ru', 'ul-mu-mimo',
                   'he-ul-mu-mimo-phy-adapter'):
         subprocess.run([str(runner[0]), '--suite=' + suite, '--verbose'], check=True, cwd=NS3)

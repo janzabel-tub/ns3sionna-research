@@ -19,6 +19,8 @@
 
 #include "sionna-spectrum-propagation-loss-model.h"
 #include "he-calibrated-error-rate-model.h"
+#include "he-data-tone-mask.h"
+#include "he-ber-error-rate-model.h"
 //#include "sionna-utils.h"
 
 #include "ns3/socket.h"
@@ -277,6 +279,17 @@ SionnaSpectrumPropagationLossModel::SetReceiverNoiseFigureDb(double noiseFigureD
 }
 
 void
+SionnaSpectrumPropagationLossModel::SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel model)
+{
+    m_linkAbstraction->SetEffectiveSinrModel(model);
+}
+SionnaMimoEffectiveSinrModel
+SionnaSpectrumPropagationLossModel::GetEffectiveSinrModel() const
+{
+    return m_linkAbstraction->GetEffectiveSinrModel();
+}
+
+void
 SionnaSpectrumPropagationLossModel::SetEesmBeta(uint8_t mcs, double betaLinear)
 {
     m_linkAbstraction->SetEesmBeta(mcs, betaLinear);
@@ -295,6 +308,7 @@ SionnaSpectrumPropagationLossModel::ConfigureEesmBetas(
     const std::map<uint8_t, double>& betas)
 {
     auto linkAbstraction = CreateObject<HeSuMimoLinkAbstraction>();
+    linkAbstraction->SetEffectiveSinrModel(GetEffectiveSinrModel());
     for (const auto& [mcs, betaLinear] : betas)
     {
         linkAbstraction->SetEesmBeta(mcs, betaLinear);
@@ -321,6 +335,7 @@ SionnaSpectrumPropagationLossModel::ConfigureAwgnSnrOffsetsDb(
     const std::map<HeAwgnCalibrationKey, double>& offsetsDb)
 {
     auto linkAbstraction = CreateObject<HeSuMimoLinkAbstraction>();
+    linkAbstraction->SetEffectiveSinrModel(GetEffectiveSinrModel());
     for (const auto& [mcs, betaLinear] : m_eesmBetas)
     {
         linkAbstraction->SetEesmBeta(mcs, betaLinear);
@@ -443,7 +458,8 @@ SionnaSpectrumPropagationLossModel::CalculateMimoRx(
     uint8_t rxPhyAntennas,
     double bandwidthHz,
     double receiverNoiseFigureDb,
-    Ptr<ErrorRateModel> errorRateModel) const
+    Ptr<ErrorRateModel> errorRateModel,
+    const std::vector<uint32_t>& dataIndices) const
 {
     NS_ABORT_MSG_IF(!std::isfinite(receivedPowerW) || receivedPowerW <= 0.0,
                     "Received MIMO power must be finite and positive");
@@ -482,11 +498,11 @@ SionnaSpectrumPropagationLossModel::CalculateMimoRx(
                                                              *m_precodingMatrix,
                                                              linkBudget,
                                                              txVector,
-                                                             packetSizeBytes)
+                                                             packetSizeBytes, dataIndices)
                               : m_linkAbstraction->Calculate(channel,
                                                              linkBudget,
                                                              txVector,
-                                                             packetSizeBytes);
+                                                             packetSizeBytes, dataIndices);
 
     // InterferenceHelper applies N_rx/N_ss for AWGN models. MMSE already contains
     // this array gain, so reduce the equivalent scalar signal by that exact factor.
@@ -642,6 +658,7 @@ SionnaSpectrumPropagationLossModel::CalculateHeDlMuMimoRx(
     }
 
     auto abstraction = CreateObject<HeDlMuMimoLinkAbstraction>();
+    abstraction->SetEffectiveSinrModel(GetEffectiveSinrModel());
     for (const auto& [mcs, beta] : m_eesmBetas)
     {
         abstraction->SetEesmBeta(mcs, beta);
@@ -803,6 +820,9 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
 
     if (isHeSu)
     {
+        NS_ABORT_MSG_IF(GetEffectiveSinrModel() == SionnaMimoEffectiveSinrModel::EESM &&
+                        !HasEesmBeta(wifiParams->ppdu->GetTxVector().GetMode().GetMcsValue()),
+                        "Every HE data MCS in EESM mode requires an explicit beta");
         const uint32_t expectedNss = m_precodingMatrix
                                          ? m_precodingMatrix->GetNumStreams()
                                          : channel.GetNumTxAntennas();
@@ -816,6 +836,9 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
 
     const bool legacySiso = channel.GetNumRxAntennas() == 1 &&
                             channel.GetNumTxAntennas() == 1;
+    NS_ABORT_MSG_IF(isHeSu && !legacySiso &&
+                    GetEffectiveSinrModel() == SionnaMimoEffectiveSinrModel::LEGACY_SISO,
+                    "LEGACY_SISO requires 1x1 reception");
     const bool scalarCompatibilityPath = legacySiso || !isHeSu;
 
     Ptr<const WifiPsdu> addressedMuPsdu;
@@ -915,6 +938,12 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
                 {
                     occupiedBins.push_back(bin);
                 }
+            }
+            if (GetEffectiveSinrModel() == SionnaMimoEffectiveSinrModel::MEAN_UNCODED_BER)
+            {
+                occupiedBins = HeDataToneMask::GetDataBins(width, ru.GetRuType(),
+                    ru.GetPhyIndex(width, txPhy->GetOperatingChannel().GetPrimaryChannelIndex(20)),
+                    psdSubcarriers / 2);
             }
             NS_ABORT_MSG_IF(occupiedBins.empty(), "HE MU RU contains no occupied tones");
             const double currentPathAttenuatedRuPowerW =
@@ -1073,6 +1102,14 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
 
         const double rxGainLinear = DbToRatio(rxPhy->GetRxGain());
         const double receivedPowerW = Integral(*params->psd) * rxGainLinear;
+        std::vector<uint32_t> dataIndices;
+        if (GetEffectiveSinrModel() == SionnaMimoEffectiveSinrModel::MEAN_UNCODED_BER)
+        {
+            const auto width = txVector.GetChannelWidth();
+            const auto type = width == 20 ? HeRu::RU_242_TONE : width == 40 ? HeRu::RU_484_TONE :
+                              width == 80 ? HeRu::RU_996_TONE : HeRu::RU_2x996_TONE;
+            dataIndices = HeDataToneMask::GetDataBins(width, type, 1, psdSubcarriers / 2);
+        }
         const auto mimoRx = CalculateMimoRx(channel,
                                             receivedPowerW,
                                             txVector,
@@ -1081,7 +1118,7 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
                                             rxPhy->GetNumberOfAntennas(),
                                             txVector.GetChannelWidth() * 1e6,
                                             m_receiverNoiseFigureDb,
-                                            GetErrorRateModel(rxPhy));
+                                            GetErrorRateModel(rxPhy), dataIndices);
 
         const double equivalentPowerBeforeRxGain =
             mimoRx.GetEquivalentReceivedPowerW() / rxGainLinear;
@@ -1096,6 +1133,41 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
                       mimoRx.GetLinkResult().GetEffectiveSinrLinear(),
                       mimoRx.GetLinkResult().GetPacketErrorRate(),
                       mimoRx.GetLinkResult().GetMimoResult().GetMinimumChannelRank());
+    }
+
+    if (isHeSu && legacySiso &&
+        GetEffectiveSinrModel() == SionnaMimoEffectiveSinrModel::MEAN_UNCODED_BER &&
+        DynamicCast<WifiSpectrumPhyInterface>(params->txPhy))
+    {
+        const auto txInterface = DynamicCast<WifiSpectrumPhyInterface>(params->txPhy);
+        const auto rxPhy = GetSpectrumWifiPhy(b, txInterface->GetChannel());
+        auto wrapper = DynamicCast<HeBerErrorRateModel>(GetErrorRateModel(rxPhy));
+        if (!wrapper)
+        {
+            wrapper = CreateObject<HeBerErrorRateModel>();
+            wrapper->Configure(GetErrorRateModel(rxPhy));
+            rxPhy->SetErrorRateModel(wrapper);
+        }
+        const auto txPhy = GetTransmitterSpectrumWifiPhy(params);
+        const auto width = wifiParams->ppdu->GetTxVector().GetChannelWidth();
+        const auto type = width == 20 ? HeRu::RU_242_TONE : width == 40 ? HeRu::RU_484_TONE :
+                          width == 80 ? HeRu::RU_996_TONE : HeRu::RU_2x996_TONE;
+        NS_ABORT_MSG_IF(!std::isfinite(m_receiverNoiseFigureDb),
+                        "Configure receiver noise figure to match SpectrumWifiPhy");
+        const double noise = WifiLinkBudget::Calculate(0.0, 0.0, width * 1e6,
+            WIFI_NOISE_TEMPERATURE_K, m_receiverNoiseFigureDb).GetReceiverNoisePowerW();
+        const double rxGain = DbToRatio(rxPhy->GetRxGain());
+        const double scalar = IntegralBand(*rxPsd, txPhy->GetBand(width).indices) * rxGain / noise;
+        if (scalar > 0)
+        {
+            std::vector<double> tones;
+            for (uint32_t bin : HeDataToneMask::GetDataBins(width, type, 1, psdSubcarriers / 2))
+            {
+                NS_ABORT_MSG_IF(bin >= channel.GetNumSubcarriers(), "HE data tone outside CFR grid");
+                tones.push_back((*rxPsd)[bin] * rxGain / (noise / (width * 1e6)));
+            }
+            wrapper->SetReception(wifiParams->ppdu->GetUid(), tones, scalar, params->duration);
+        }
     }
 
     // Calibration changes only payload error probabilities. Keep the physical

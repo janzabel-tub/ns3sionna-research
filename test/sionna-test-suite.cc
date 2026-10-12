@@ -5,6 +5,9 @@
  */
 
 #include "ns3/boolean.h"
+#include "ns3/he-ber-error-rate-model.h"
+#include "ns3/interference-helper.h"
+#include "ns3/pointer.h"
 #include "ns3/constant-position-mobility-model.h"
 #include "ns3/dl-mu-mimo-link-model.h"
 #include "ns3/double.h"
@@ -164,6 +167,7 @@ SionnaMimoConfiguration
 MakeOpenLoop2x2Configuration()
 {
     SionnaMimoConfiguration configuration;
+    configuration.effectiveSinrModel = SionnaMimoEffectiveSinrModel::EESM;
     configuration.mode = SionnaMimoMode::SU_MIMO_SPATIAL_MULTIPLEXING;
     configuration.txArray.polarization = SionnaMimoPolarization::DUAL;
     configuration.rxArray.numColumns = 2;
@@ -241,8 +245,8 @@ class SionnaMimoHelperDefaultsTest : public TestCase
                                   "The default no longer matches WifiPhy's 7 dB noise figure");
         NS_TEST_ASSERT_MSG_EQ(
             static_cast<int>(configuration.effectiveSinrModel),
-            static_cast<int>(SionnaMimoEffectiveSinrModel::EESM),
-            "The default effective-SINR model is not EESM");
+            static_cast<int>(SionnaMimoEffectiveSinrModel::MEAN_UNCODED_BER),
+            "The default effective-SINR model is not mean uncoded BER");
         NS_TEST_ASSERT_MSG_EQ(configuration.eesmBetaLinear.empty(),
                               true,
                               "The API must not invent EESM calibration values");
@@ -387,6 +391,7 @@ class SionnaMimoHelperBeamformingSelectionTest : public TestCase
     void DoRun() override
     {
         SionnaMimoConfiguration mrtConfiguration;
+        mrtConfiguration.effectiveSinrModel = SionnaMimoEffectiveSinrModel::EESM;
         mrtConfiguration.mode = SionnaMimoMode::SU_BEAMFORMING;
         mrtConfiguration.txArray.numColumns = 2;
         mrtConfiguration.numTxAntennas = 2;
@@ -473,6 +478,7 @@ class SionnaMimoHelperBeamformingSelectionTest : public TestCase
         SpectrumWifiPhyHelper txPhy;
         SpectrumWifiPhyHelper rxPhy;
         auto adapter = CreateObject<SionnaSpectrumPropagationLossModel>();
+        adapter->SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel::EESM);
         svdHelper.Apply(sionna, txPhy, rxPhy, adapter);
         const auto& adapterCoefficients =
             adapter->GetPrecodingMatrix().GetCoefficients();
@@ -614,7 +620,8 @@ class SionnaMimoHelperInvalidConfigurationTest : public TestCase
         expectRejected(configuration, "Overloaded open-loop MIMO was accepted");
 
         configuration = {};
-        configuration.mode = SionnaMimoMode::SU_MIMO_SPATIAL_MULTIPLEXING;
+        configuration.effectiveSinrModel = SionnaMimoEffectiveSinrModel::EESM;
+    configuration.mode = SionnaMimoMode::SU_MIMO_SPATIAL_MULTIPLEXING;
         expectRejected(configuration, "One-antenna spatial multiplexing was accepted");
 
         configuration = MakeOpenLoop2x2Configuration();
@@ -810,6 +817,7 @@ class SionnaMimoHelperIntegrationTest : public TestCase
             m_integrationCase == HelperIntegrationCase::FIXED_PRECODING_2X1;
         SionnaMimoConfiguration configuration =
             useMimo ? MakeOpenLoop2x2Configuration() : SionnaMimoConfiguration{};
+        if (!useMimo) { configuration.effectiveSinrModel = SionnaMimoEffectiveSinrModel::EESM; }
         if (usePrecoding)
         {
             configuration.maxNss = 1;
@@ -853,6 +861,7 @@ class SionnaMimoHelperIntegrationTest : public TestCase
                            configuration.maxNss,
                            noiseFigureDb);
         auto manualModel = CreateObject<SionnaSpectrumPropagationLossModel>();
+        manualModel->SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel::EESM);
         manualModel->SetReceiverNoiseFigureDb(noiseFigureDb);
         manualModel->SetEesmBeta(mcs, betaLinear);
         if (configuration.precodingMatrix)
@@ -864,6 +873,7 @@ class SionnaMimoHelperIntegrationTest : public TestCase
         SpectrumWifiPhyHelper highLevelTxPhyHelper;
         SpectrumWifiPhyHelper highLevelRxPhyHelper;
         auto highLevelModel = CreateObject<SionnaSpectrumPropagationLossModel>();
+        highLevelModel->SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel::EESM);
         highLevelSionna.ConfigureNodeOrientation(8, 1.0, 2.0, 3.0);
         highLevelModel->SetEesmBeta(staleMcs, 2.0);
         SionnaMimoHelper(configuration).ApplyForHeMcs(mcs,
@@ -1883,6 +1893,7 @@ class HeEesmFlatChannelTest : public TestCase
         const auto linkBudget = MakeReferenceSnrBudget(1.0);
         const auto txVector = MakeHeTxVector(HePhy::GetHeMcs0(), 2);
         auto abstraction = CreateObject<HeSuMimoLinkAbstraction>();
+        abstraction->SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel::EESM);
         // Any positive beta gives the same answer for a flat channel.
         abstraction->SetEesmBeta(0, 3.0);
 
@@ -1928,6 +1939,7 @@ class HeAwgnCalibrationContextTest : public TestCase
     {
         const HeAwgnCalibrationKey key{0, false, 32, 1, 1, 20, 800};
         auto abstraction = CreateObject<HeSuMimoLinkAbstraction>();
+        abstraction->SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel::EESM);
         abstraction->SetEesmBeta(0, 1.0);
         abstraction->SetAwgnSnrOffsetDb(key, -0.5);
         const auto txVector = MakeHeTxVector(HePhy::GetHeMcs0(), 1);
@@ -2133,6 +2145,7 @@ class HeCalibrationSpectrumReceptionTest : public TestCase
         m_profile = *helper.GetConfiguration().heCalibrationProfile;
         auto channel = CreateObject<MultiModelSpectrumChannel>();
         auto adapter = CreateObject<SionnaSpectrumPropagationLossModel>();
+        adapter->SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel::EESM);
         channel->AddSpectrumPropagationLossModel(adapter);
         SpectrumWifiPhyHelper txHelper, rxHelper;
         txHelper.SetChannel(channel);
@@ -2223,6 +2236,137 @@ class HeCalibrationSpectrumReceptionTest : public TestCase
     uint32_t m_payloads{0}, m_applied{0};
 };
 
+class HeBerSpectrumReceptionTest : public TestCase
+{
+  public:
+    HeBerSpectrumReceptionTest(bool general = true)
+        : TestCase(general ? "General HE BER mapping automatically wraps real 1x1 receptions and expires snapshots" :
+                            "Explicit LEGACY_SISO preserves scalar reception without payload wrapper"),
+          m_general(general) {}
+
+  private:
+    Ptr<ErrorRateModel> GetErrorModel(Ptr<SpectrumWifiPhy> phy)
+    {
+        PointerValue value; phy->GetAttribute("InterferenceHelper", value);
+        return value.Get<InterferenceHelper>()->GetErrorRateModel();
+    }
+    void Payload(WifiTxVector, Time) { ++m_payloads; }
+    void RxOk(Ptr<const WifiPsdu>, RxSignalInfo, WifiTxVector, std::vector<bool>) {}
+    void RxError(Ptr<const WifiPsdu>) {}
+    void Applied(uint64_t, double mean, double effective, double success, uint64_t bits)
+    {
+        ++m_applied;
+        NS_TEST_ASSERT_MSG_EQ_TOL(effective, m_expectedEffective, 1e-10, "Wrong data-tone BER mapping");
+        NS_TEST_ASSERT_MSG_EQ_TOL(mean, HeEffectiveSinrMapping::UncodedBer(effective, 0), 1e-12,
+                                  "Wrong mean uncoded BER");
+        auto base = CreateObject<TableBasedErrorRateModel>();
+        const auto tx = MakeHeTxVector(HePhy::GetHeMcs0(), 1);
+        NS_TEST_ASSERT_MSG_EQ_TOL(success, base->GetChunkSuccessRate(tx.GetMode(), tx, effective, bits, 1),
+                                  1e-12, "Native chunk bits did not reach base error model");
+    }
+    void DoRun() override
+    {
+        SionnaMimoConfiguration config;
+        if (!m_general) { config.effectiveSinrModel = SionnaMimoEffectiveSinrModel::LEGACY_SISO; }
+        SionnaMimoHelper helper(config);
+        auto channel = CreateObject<MultiModelSpectrumChannel>();
+        auto adapter = CreateObject<SionnaSpectrumPropagationLossModel>();
+
+        channel->AddSpectrumPropagationLossModel(adapter);
+        SpectrumWifiPhyHelper txHelper, rxHelper;
+        txHelper.SetChannel(channel);
+        rxHelper.SetChannel(channel);
+        SionnaHelper ipc("simple_room", "tcp://127.0.0.1:5555");
+        helper.Apply(ipc, txHelper, rxHelper, adapter);
+        constexpr double powerDbm = -80;
+        txHelper.Set("TxPowerStart", DoubleValue(powerDbm));
+        txHelper.Set("TxPowerEnd", DoubleValue(powerDbm));
+        NodeContainer nodes;
+        nodes.Create(2);
+        for (uint32_t i = 0; i < 2; ++i)
+        {
+            auto mobility = CreateObject<ConstantPositionMobilityModel>();
+            mobility->SetPosition({double(i), 0, 0});
+            nodes.Get(i)->AggregateObject(mobility);
+        }
+        WifiHelper wifi;
+        wifi.SetStandard(WIFI_STANDARD_80211ax);
+        WifiMacHelper mac;
+        mac.SetType("ns3::AdhocWifiMac");
+        auto txDevice = DynamicCast<WifiNetDevice>(wifi.Install(txHelper, mac, nodes.Get(0)).Get(0));
+        auto rxDevice = DynamicCast<WifiNetDevice>(wifi.Install(rxHelper, mac, nodes.Get(1)).Get(0));
+        auto txPhy = DynamicCast<SpectrumWifiPhy>(txDevice->GetPhy());
+        auto rxPhy = DynamicCast<SpectrumWifiPhy>(rxDevice->GetPhy());
+        txPhy->SetOperatingChannel({36, 20, WIFI_PHY_BAND_5GHZ, 0});
+        rxPhy->SetOperatingChannel({36, 20, WIFI_PHY_BAND_5GHZ, 0});
+
+        rxPhy->SetReceiveOkCallback(MakeCallback(&HeBerSpectrumReceptionTest::RxOk, this));
+        rxPhy->SetReceiveErrorCallback(MakeCallback(&HeBerSpectrumReceptionTest::RxError, this));
+        rxPhy->TraceConnectWithoutContext("PhyRxPayloadBegin",
+            MakeCallback(&HeBerSpectrumReceptionTest::Payload, this));
+        txPhy->AssignStreams(1);
+        rxPhy->AssignStreams(1);
+        auto txPsd = WifiSpectrumValueHelper::CreateHeOfdmTxPowerSpectralDensity(
+            5180, 20, std::pow(10.0, (powerDbm - 30) / 10.0), txPhy->GetGuardBandwidth(20));
+        const uint32_t nsc = txPsd->GetValuesN() - 1;
+        MimoChannelMatrix flat(nsc, 1, 1), selective(nsc, 1, 1);
+        for (uint32_t sc = 0; sc < nsc; ++sc)
+        {
+            flat.Set(sc, 0, 0, {1, 0});
+            selective.Set(sc, 0, 0, sc < nsc / 2 ? std::complex<double>{0, 0}
+                                                : std::complex<double>{std::sqrt(2.0), 0});
+        }
+        const double noise = WifiLinkBudget::Calculate(0, 0, 20e6, 290, 7).GetReceiverNoisePowerW();
+        const double rho = (*txPsd)[nsc / 2 + 2] / (noise / 20e6);
+        adapter->SetFixedChannelMatrix(flat, 0);
+        WifiMacHeader header;
+        header.SetType(WIFI_MAC_DATA);
+        header.SetAddr1(rxDevice->GetMac()->GetAddress());
+        header.SetAddr2(txDevice->GetMac()->GetAddress());
+        auto psdu = Create<WifiPsdu>(Create<Packet>(4), header);
+        NS_TEST_ASSERT_MSG_EQ(psdu->GetSize(), 32, "Actual PSDU is not the calibration length");
+        const auto tx = MakeHeTxVector(HePhy::GetHeMcs0(), 1);
+        Simulator::Schedule(MilliSeconds(1), [this, rho, txPhy, psdu, tx]() {
+            m_expectedEffective = rho;
+            txPhy->Send({{SU_STA_ID, psdu}}, tx);
+        });
+        Simulator::Schedule(MilliSeconds(1) + NanoSeconds(1), [this, rxPhy]() {
+            m_wrapper = DynamicCast<HeBerErrorRateModel>(GetErrorModel(rxPhy));
+            NS_TEST_ASSERT_MSG_EQ(bool(m_wrapper), m_general, "Wrong receiver wrapper installation");
+            if (m_wrapper)
+            {
+                m_wrapper->TraceConnectWithoutContext("MappingApplied",
+                    MakeCallback(&HeBerSpectrumReceptionTest::Applied, this));
+            }
+        });
+        Simulator::Schedule(MilliSeconds(2), [this, rho, adapter, selective, txPhy, psdu, tx]() {
+            adapter->SetFixedChannelMatrix(selective, 0);
+            m_expectedEffective = HeEffectiveSinrMapping::MeanUncodedBer({0, 2 * rho}, 0).effectiveSinrLinear;
+            txPhy->Send({{SU_STA_ID, psdu}}, tx);
+        });
+        Simulator::Schedule(MilliSeconds(3), [this, rho, adapter, flat, txPhy, header, tx]() {
+            m_expectedEffective = rho;
+            adapter->SetFixedChannelMatrix(flat, 0);
+            txPhy->Send({{SU_STA_ID, Create<WifiPsdu>(Create<Packet>(5), header)}}, tx);
+        });
+        Simulator::Schedule(MilliSeconds(4), [txPhy, psdu, tx]() {
+            auto other = tx;
+            other.SetGuardInterval(1600);
+            txPhy->Send({{SU_STA_ID, psdu}}, other);
+        });
+        Simulator::Stop(MilliSeconds(5));
+        Simulator::Run();
+        NS_TEST_ASSERT_MSG_EQ(m_payloads, 4, "Real PPDUs did not reach payload decoding");
+        NS_TEST_ASSERT_MSG_EQ(m_applied, m_general ? 4 : 0, "Wrong number of mapped HE payloads");
+        if (m_wrapper) { NS_TEST_ASSERT_MSG_EQ(m_wrapper->GetReceptionCount(), 0, "Automatic receiver snapshots leaked"); }
+        Simulator::Destroy();
+    }
+    bool m_general;
+    Ptr<HeBerErrorRateModel> m_wrapper;
+    double m_expectedEffective{0};
+    uint32_t m_payloads{0}, m_applied{0};
+};
+
 class HeEesmFrequencySelectiveTest : public TestCase
 {
   public:
@@ -2241,6 +2385,7 @@ class HeEesmFrequencySelectiveTest : public TestCase
         const auto linkBudget = MakeReferenceSnrBudget(1.0);
         const auto txVector = MakeHeTxVector(HePhy::GetHeMcs3(), 1);
         auto abstraction = CreateObject<HeSuMimoLinkAbstraction>();
+        abstraction->SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel::EESM);
         // Formula-only test value; it is not an HE MCS 3 calibration.
         constexpr double beta = 2.0;
         abstraction->SetEesmBeta(3, beta);
@@ -2294,6 +2439,7 @@ class HeSisoErrorModelParityTest : public TestCase
 
         auto referenceErrorModel = CreateObject<TableBasedErrorRateModel>();
         auto abstraction = CreateObject<HeSuMimoLinkAbstraction>();
+        abstraction->SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel::EESM);
         abstraction->SetErrorRateModel(referenceErrorModel);
         for (const auto mode : modes)
         {
@@ -2367,6 +2513,7 @@ class HePerMonotonicityTest : public TestCase
                                   HePhy::GetHeMcs11()};
         const uint32_t packetSizes[] = {32, 400, 1458};
         auto abstraction = CreateObject<HeSuMimoLinkAbstraction>();
+        abstraction->SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel::EESM);
         for (const auto mode : modes)
         {
             // Positive formula sentinel only; no calibrated EESM table is implied.
@@ -2434,6 +2581,7 @@ class HeLinkReproducibilityTest : public TestCase
             MakeReferenceSnrBudget(WifiLinkBudget::DbToLinear(18.0));
         const auto txVector = MakeHeTxVector(HePhy::GetHeMcs7(), 2);
         auto abstraction = CreateObject<HeSuMimoLinkAbstraction>();
+        abstraction->SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel::EESM);
         // Formula-only sentinel for this deterministic regression test.
         abstraction->SetEesmBeta(7, 2.0);
 
@@ -3012,6 +3160,7 @@ class HeDlMuMimoPerUserContractTest : public TestCase
         const auto tx9 = MakeHeTxVector(HePhy::GetHeMcs3(), 1);
 
         auto abstraction = CreateObject<HeDlMuMimoLinkAbstraction>();
+        abstraction->SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel::EESM);
         abstraction->SetEesmBeta(0, 2.0);
         abstraction->SetEesmBeta(3, 3.0);
         const auto result = abstraction->Calculate(
@@ -3020,6 +3169,7 @@ class HeDlMuMimoPerUserContractTest : public TestCase
             {{9, budget9, tx9, 1000}, {3, budget3, tx3, 400}});
 
         auto suEesm = CreateObject<HeSuMimoLinkAbstraction>();
+        suEesm->SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel::EESM);
         suEesm->SetEesmBeta(0, 2.0);
         suEesm->SetEesmBeta(3, 3.0);
         for (const auto& input : std::vector<HeDlMuMimoUserTransmission>{
@@ -3110,6 +3260,7 @@ class HeDlMuMimoSpectrumAdapterTest : public TestCase
         const auto precoding = MakeIdentityDlMuPrecoding(1);
         auto errorModel = CreateObject<TableBasedErrorRateModel>();
         auto adapter = CreateObject<SionnaSpectrumPropagationLossModel>();
+        adapter->SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel::EESM);
         adapter->SetEesmBeta(0, 2.0);
         adapter->SetEesmBeta(3, 3.0);
 
@@ -3287,6 +3438,7 @@ class HeDlMuMimoSpectrumAdapterRejectionTest : public TestCase
             {9, 11, receivedPowerW, 1, 1000}};
 
         auto adapter = CreateObject<SionnaSpectrumPropagationLossModel>();
+        adapter->SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel::EESM);
         adapter->SetEesmBeta(0, 2.0);
         adapter->SetEesmBeta(3, 3.0);
         adapter->SetDlMuMimoState(snapshot, precoding);
@@ -3601,6 +3753,7 @@ class HeDlMuMimoSpectrumPpduIntegrationTest : public TestCase
         }
         const auto precoding = MakeIdentityDlMuPrecoding(numSubcarriers);
         auto adapter = CreateObject<SionnaSpectrumPropagationLossModel>();
+        adapter->SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel::EESM);
         adapter->SetReceiverNoiseFigureDb(noiseFigureDb);
         adapter->SetEesmBeta(0, 2.0);
         adapter->SetEesmBeta(3, 3.0);
@@ -3717,6 +3870,7 @@ class HeDlMuMimoSpectrumChannelReceptionTest : public TestCase
 
         auto channel = CreateObject<MultiModelSpectrumChannel>();
         auto adapter = CreateObject<SionnaSpectrumPropagationLossModel>();
+        adapter->SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel::EESM);
         adapter->SetReceiverNoiseFigureDb(noiseFigureDb);
         adapter->SetEesmBeta(11, 2.0);
         channel->AddSpectrumPropagationLossModel(adapter);
@@ -4322,6 +4476,7 @@ class DlMuMimoRejectionTest : public TestCase
             "A non-finite per-user SNR was accepted");
 
         auto he = CreateObject<HeDlMuMimoLinkAbstraction>();
+        he->SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel::EESM);
         he->SetEesmBeta(0, 2.0);
         const auto budget = MakeReferenceSnrBudget(10.0);
         const auto tx = MakeHeTxVector(HePhy::GetHeMcs0(), 1);
@@ -4415,6 +4570,7 @@ class SpectrumWifiPhyMimoAdapterTest : public TestCase
         const double receivedPowerW = referenceSnr * noisePowerW;
         auto errorModel = CreateObject<TableBasedErrorRateModel>();
         auto adapter = CreateObject<SionnaSpectrumPropagationLossModel>();
+        adapter->SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel::EESM);
         // Formula sentinel for this flat-channel test, not an HE calibration.
         adapter->SetEesmBeta(0, 2.0);
 
@@ -5517,6 +5673,8 @@ class SionnaTestSuite : public TestSuite
         AddTestCase(new HeAwgnCalibrationContextTest, TestCase::QUICK);
         AddTestCase(new HeCalibrationProfileTest, TestCase::QUICK);
         AddTestCase(new HeCalibrationSpectrumReceptionTest, TestCase::QUICK);
+        AddTestCase(new HeBerSpectrumReceptionTest, TestCase::QUICK);
+        AddTestCase(new HeBerSpectrumReceptionTest(false), TestCase::QUICK);
         AddTestCase(new HeEesmFrequencySelectiveTest, TestCase::QUICK);
         AddTestCase(new HeSisoErrorModelParityTest, TestCase::QUICK);
         AddTestCase(new HePerMonotonicityTest, TestCase::QUICK);

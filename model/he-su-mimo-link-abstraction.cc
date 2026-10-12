@@ -40,7 +40,7 @@ HeSuMimoLinkAbstraction::GetTypeId()
             .SetGroupName("Sionna")
             .AddConstructor<HeSuMimoLinkAbstraction>()
             .AddAttribute("ErrorRateModel",
-                          "AWGN error model used after EESM compression",
+                          "AWGN error model used after effective SINR mapping",
                           PointerValue(CreateObject<TableBasedErrorRateModel>()),
                           MakePointerAccessor(&HeSuMimoLinkAbstraction::m_errorRateModel),
                           MakePointerChecker<ErrorRateModel>());
@@ -105,6 +105,18 @@ HeSuMimoLinkAbstraction::SetEesmBeta(uint8_t mcs, double betaLinear)
 }
 
 void
+HeSuMimoLinkAbstraction::SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel model)
+{
+    NS_ABORT_MSG_IF(model != SionnaMimoEffectiveSinrModel::EESM &&
+                    model != SionnaMimoEffectiveSinrModel::MEAN_UNCODED_BER &&
+                    model != SionnaMimoEffectiveSinrModel::LEGACY_SISO,
+                    "Unsupported HE effective SINR mapping");
+    m_effectiveSinrModel = model;
+}
+SionnaMimoEffectiveSinrModel
+HeSuMimoLinkAbstraction::GetEffectiveSinrModel() const { return m_effectiveSinrModel; }
+
+void
 HeSuMimoLinkAbstraction::SetEesmBetaDb(uint8_t mcs, double betaDb)
 {
     SetEesmBeta(mcs, WifiLinkBudget::DbToLinear(betaDb));
@@ -145,6 +157,10 @@ HeSuMimoLinkAbstraction::GetErrorModelSinrLinear(uint8_t mcs,
 {
     NS_ABORT_MSG_IF(!std::isfinite(effectiveSinrLinear) || effectiveSinrLinear < 0.0,
                     "Effective SINR must be finite and non-negative");
+    if (m_effectiveSinrModel != SionnaMimoEffectiveSinrModel::EESM)
+    {
+        return effectiveSinrLinear;
+    }
     const HeAwgnCalibrationKey key{mcs,
                                    txVector.IsLdpc(),
                                    packetSizeBytes,
@@ -166,7 +182,8 @@ HeSuMimoLinkAbstraction::GetErrorModelSinrLinear(uint8_t mcs,
 
 double
 HeSuMimoLinkAbstraction::CalculateEffectiveSinr(const SuMimoLinkResult& mimoResult,
-                                                uint8_t mcs) const
+                                                uint8_t mcs,
+                                                const std::vector<uint32_t>& dataIndices) const
 {
     NS_ABORT_MSG_IF(mimoResult.GetNumSubcarriers() == 0 || mimoResult.GetNumStreams() == 0,
                     "EESM requires at least one SINR sample");
@@ -174,8 +191,14 @@ HeSuMimoLinkAbstraction::CalculateEffectiveSinr(const SuMimoLinkResult& mimoResu
     std::vector<double> sinrLinear;
     sinrLinear.reserve(static_cast<std::size_t>(mimoResult.GetNumSubcarriers()) *
                        mimoResult.GetNumStreams());
-    for (uint32_t sc = 0; sc < mimoResult.GetNumSubcarriers(); ++sc)
+    std::vector<uint32_t> selected = dataIndices;
+    if (selected.empty())
     {
+        for (uint32_t sc = 0; sc < mimoResult.GetNumSubcarriers(); ++sc) { selected.push_back(sc); }
+    }
+    for (uint32_t sc : selected)
+    {
+        NS_ABORT_MSG_IF(sc >= mimoResult.GetNumSubcarriers(), "Data tone outside SINR grid");
         for (uint32_t stream = 0; stream < mimoResult.GetNumStreams(); ++stream)
         {
             sinrLinear.push_back(mimoResult.GetSinrLinear(sc, stream));
@@ -191,6 +214,12 @@ HeSuMimoLinkAbstraction::CalculateEffectiveSinr(const std::vector<double>& sinrL
 {
     NS_ABORT_MSG_IF(sinrLinear.empty(), "EESM requires at least one SINR sample");
 
+    NS_ABORT_MSG_IF(m_effectiveSinrModel == SionnaMimoEffectiveSinrModel::LEGACY_SISO,
+                    "LEGACY_SISO uses the physical 1x1 PHY path, not numerical compression");
+    if (m_effectiveSinrModel == SionnaMimoEffectiveSinrModel::MEAN_UNCODED_BER)
+    {
+        return HeEffectiveSinrMapping::MeanUncodedBer(sinrLinear, mcs).effectiveSinrLinear;
+    }
     const double beta = GetEesmBeta(mcs);
     double minimumSinr = std::numeric_limits<double>::infinity();
     for (const double sinr : sinrLinear)
@@ -218,7 +247,8 @@ HeSuMimoLinkResult
 HeSuMimoLinkAbstraction::Calculate(const MimoChannelMatrix& channel,
                                    const WifiLinkBudgetResult& linkBudget,
                                    const WifiTxVector& txVector,
-                                   uint32_t packetSizeBytes) const
+                                   uint32_t packetSizeBytes,
+                                   const std::vector<uint32_t>& dataIndices) const
 {
     NS_ABORT_MSG_IF(!m_errorRateModel, "ErrorRateModel must be configured");
     NS_ABORT_MSG_IF(!txVector.GetModeInitialized(), "WifiTxVector mode is not initialized");
@@ -236,7 +266,7 @@ HeSuMimoLinkAbstraction::Calculate(const MimoChannelMatrix& channel,
     result.m_mimoResult =
         SuMimoLinkModel::Calculate(channel, linkBudget.GetReferenceSnrLinear());
     result.m_effectiveSinrLinear =
-        CalculateEffectiveSinr(result.m_mimoResult, mode.GetMcsValue());
+        CalculateEffectiveSinr(result.m_mimoResult, mode.GetMcsValue(), dataIndices);
     result.m_packetSuccessRate =
         m_errorRateModel->GetChunkSuccessRate(mode,
                                               txVector,
@@ -260,7 +290,8 @@ HeSuMimoLinkAbstraction::Calculate(const MimoChannelMatrix& channel,
                                    const MimoPrecodingMatrix& precoding,
                                    const WifiLinkBudgetResult& linkBudget,
                                    const WifiTxVector& txVector,
-                                   uint32_t packetSizeBytes) const
+                                   uint32_t packetSizeBytes,
+                                   const std::vector<uint32_t>& dataIndices) const
 {
     NS_ABORT_MSG_IF(!m_errorRateModel, "ErrorRateModel must be configured");
     NS_ABORT_MSG_IF(!txVector.GetModeInitialized(), "WifiTxVector mode is not initialized");
@@ -281,7 +312,7 @@ HeSuMimoLinkAbstraction::Calculate(const MimoChannelMatrix& channel,
                                                      precoding,
                                                      linkBudget.GetReferenceSnrLinear());
     result.m_effectiveSinrLinear =
-        CalculateEffectiveSinr(result.m_mimoResult, mode.GetMcsValue());
+        CalculateEffectiveSinr(result.m_mimoResult, mode.GetMcsValue(), dataIndices);
     result.m_packetSuccessRate =
         m_errorRateModel->GetChunkSuccessRate(mode,
                                               txVector,

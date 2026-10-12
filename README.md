@@ -256,7 +256,7 @@ Using singularity [here](./singularity/singularity_howto.md)
 
 Current limitations
 ========
-* HE SU-MIMO and the documented DL-/UL-MU-MIMO abstractions require explicit CSI and EESM calibration.
+* HE SU/MU data reception defaults to parameter-free mean uncoded BER after the detector. Explicit EESM still requires caller-supplied betas; the existing calibrated 1x1 pilot selects EESM.
 * Automatic sounding, MAC feedback, trigger-scheduler installation, and synchronization impairments are not modeled.
   See [the MIMO model documentation](./ns3sionna_mimo_model.md) for the exact contracts.
 
@@ -484,3 +484,18 @@ bash r6-env-update/run_r6_gpu.sh --use-existing-environment \
 
 The original bundle/hash remain unchanged; applied runner/test hashes are logged
 after verification. See the R6 contract for provenance and validation details.
+
+HE bit-error averaging
+----------------------
+
+`MEAN_UNCODED_BER` is the default for supported HE SISO, SU and MU reception.
+The common mapper supports BPSK, QPSK and exact Gray square QAM through 1024-QAM
+using symbol SINR; coded PER comes from the existing ns-3 error model.
+`LEGACY_SISO` preserves the original 1x1 scalar payload path. Supplying a beta
+does not select EESM. See model section 5.20 for equations, limits and the pilot
+comparison. The historical EESM examples explicitly select EESM.
+
+```shell
+./ns3 run ns3_wifi_ber_mapping
+./ns3 run "ns3_wifi_ber_mapping --reference=contrib/sionna/data/he_mcs0_bcc_32_matlab_r2026a.json"
+```

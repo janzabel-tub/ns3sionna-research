@@ -60,7 +60,7 @@ def format_markdown(source: str) -> list[str]:
         wrapped = textwrap.wrap(
             content,
             width=width,
-            break_long_words=False,
+            break_long_words=True,
             break_on_hyphens=False,
             replace_whitespace=False,
         )
@@ -91,6 +91,7 @@ def render(source_path: Path, output_path: Path) -> None:
                 va="top",
                 ha="left",
                 family="DejaVu Sans Mono",
+                parse_math=False,
                 fontsize=7.6,
                 linespacing=1.27,
                 color="#111111",

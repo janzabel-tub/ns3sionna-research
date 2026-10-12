@@ -172,9 +172,11 @@ ValidateNormalization(SionnaMimoChannelNormalization normalization)
 void
 ValidateEffectiveSinrModel(SionnaMimoEffectiveSinrModel model)
 {
-    if (model != SionnaMimoEffectiveSinrModel::EESM)
+    if (model != SionnaMimoEffectiveSinrModel::EESM &&
+        model != SionnaMimoEffectiveSinrModel::MEAN_UNCODED_BER &&
+        model != SionnaMimoEffectiveSinrModel::LEGACY_SISO)
     {
-        Reject("only EESM is supported for the HE PER mapping");
+        Reject("unsupported HE effective SINR mapping");
     }
 }
 
@@ -409,7 +411,8 @@ class SionnaMimoDownlinkScheduler final : public MultiUserScheduler
             const WifiTxVector suTx =
                 GetWifiRemoteStationManager(m_linkId)->GetDataTxVector(mpdu->GetHeader(), m_allowedWidth);
             if (!suTx.GetModeInitialized() || suTx.GetMode().GetModulationClass() != WIFI_MOD_CLASS_HE ||
-                !m_spectrumModel->HasEesmBeta(suTx.GetMode().GetMcsValue()))
+                (m_spectrumModel->GetEffectiveSinrModel() == SionnaMimoEffectiveSinrModel::EESM &&
+                 !m_spectrumModel->HasEesmBeta(suTx.GetMode().GetMcsValue())))
             {
                 ++m_rejectedGroups;
                 return false;
@@ -847,6 +850,7 @@ SionnaMimoHelper::Apply(
     configurePhy(rxPhyHelper, config.numRxAntennas, config.maxNss);
 
     spectrumModel->SetReceiverNoiseFigureDb(config.receiverNoiseFigureDb);
+    spectrumModel->SetEffectiveSinrModel(config.effectiveSinrModel);
     spectrumModel->ConfigureEesmBetas(config.eesmBetaLinear);
     spectrumModel->ConfigureAwgnSnrOffsetsDb(config.awgnSnrOffsetsDb);
     if (m_selectedPrecoding)
@@ -1002,6 +1006,7 @@ SionnaMimoHelper::LoadHeCalibrationProfile(const std::string& path)
 {
     const auto profile = HeCalibrationProfile::Load(path);
     auto candidate = m_configuration;
+    candidate.effectiveSinrModel = SionnaMimoEffectiveSinrModel::EESM;
     candidate.heCalibrationProfile = profile;
     candidate.eesmBetaLinear[profile.key.mcs] = profile.betaLinear;
     candidate.awgnSnrOffsetsDb[profile.key] = profile.offsetDb;
@@ -1298,7 +1303,8 @@ SionnaMimoHelper::Validate(const SionnaMimoConfiguration& configuration)
         {
             Reject("MU-MIMO requires an explicit downlink MU runtime configuration");
         }
-        if (configuration.eesmBetaLinear.empty())
+        if (configuration.effectiveSinrModel == SionnaMimoEffectiveSinrModel::EESM &&
+            configuration.eesmBetaLinear.empty())
         {
             Reject("MU-MIMO requires at least one explicit EESM beta");
         }
@@ -1339,6 +1345,11 @@ SionnaMimoHelper::Validate(const SionnaMimoConfiguration& configuration)
     ValidateReceiverType(configuration.receiverType);
     ValidateNormalization(configuration.channelNormalization);
     ValidateEffectiveSinrModel(configuration.effectiveSinrModel);
+    if (configuration.effectiveSinrModel == SionnaMimoEffectiveSinrModel::LEGACY_SISO &&
+        (configuration.numTxAntennas != 1 || configuration.numRxAntennas != 1))
+    {
+        Reject("LEGACY_SISO requires 1x1 reception");
+    }
 
     if (!std::isfinite(configuration.receiverNoiseFigureDb) ||
         configuration.receiverNoiseFigureDb < 0.0)
@@ -1363,7 +1374,8 @@ SionnaMimoHelper::Validate(const SionnaMimoConfiguration& configuration)
         profile.Validate();
         const auto beta = configuration.eesmBetaLinear.find(profile.key.mcs);
         const auto offset = configuration.awgnSnrOffsetsDb.find(profile.key);
-        if (configuration.mode != SionnaMimoMode::SISO ||
+        if (configuration.effectiveSinrModel != SionnaMimoEffectiveSinrModel::EESM ||
+            configuration.mode != SionnaMimoMode::SISO ||
             configuration.numTxAntennas != 1 || configuration.numRxAntennas != 1 ||
             beta == configuration.eesmBetaLinear.end() || beta->second != profile.betaLinear ||
             offset == configuration.awgnSnrOffsetsDb.end() || offset->second != profile.offsetDb)
@@ -1386,20 +1398,13 @@ SionnaMimoHelper::ValidateForHeMcs(const SionnaMimoConfiguration& configuration,
     {
         Reject("HE MCS must be in [0, 11]");
     }
-    if ((configuration.mode == SionnaMimoMode::SU_MIMO_SPATIAL_MULTIPLEXING ||
-         configuration.mode == SionnaMimoMode::MU_MIMO) &&
+    if (configuration.effectiveSinrModel == SionnaMimoEffectiveSinrModel::EESM &&
         configuration.eesmBetaLinear.count(mcs) == 0)
     {
-        Reject((configuration.mode == SionnaMimoMode::MU_MIMO
-                    ? std::string("MU-MIMO requires an explicit EESM beta for HE MCS ")
-                    : std::string("open-loop SU-MIMO requires an explicit EESM beta for HE MCS ")) +
-               std::to_string(mcs));
-    }
-    else if (configuration.mode == SionnaMimoMode::SU_BEAMFORMING &&
-             configuration.eesmBetaLinear.count(mcs) == 0)
-    {
-        Reject("SU beamforming requires an explicit EESM beta for HE MCS " +
-               std::to_string(mcs));
+        const std::string context = configuration.mode == SionnaMimoMode::MU_MIMO ? "MU-MIMO" :
+            configuration.mode == SionnaMimoMode::SU_MIMO_SPATIAL_MULTIPLEXING ? "open-loop SU-MIMO" :
+            configuration.mode == SionnaMimoMode::SU_BEAMFORMING ? "SU beamforming" : "EESM";
+        Reject(context + " requires an explicit EESM beta for HE MCS " + std::to_string(mcs));
     }
 }
 

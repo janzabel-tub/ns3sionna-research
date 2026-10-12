@@ -303,6 +303,7 @@ class MimoCsiAgingTest : public TestCase
                                     20,
                                     false);
         auto heAbstraction = CreateObject<HeSuMimoLinkAbstraction>();
+        heAbstraction->SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel::EESM);
         heAbstraction->SetEesmBeta(0, 1.0);
         const auto transmissionPer = heAbstraction->Calculate(
             rotatedDirection,

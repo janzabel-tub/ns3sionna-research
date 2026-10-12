@@ -1,0 +1,16 @@
+{
+  "mapping": "MEAN_UNCODED_BER",
+  "calibration_applied": false,
+  "scope": "Frozen HE MCS0 BCC 32-byte 1x1 pilot only; no universal error bound",
+  "reference_sha256": "055f3fea7a0723c3f37b73edcd7ab5a4eeedefb4175c5dbe72cf8fd4119c5044",
+  "awgn": {
+    "points": 5,
+    "mae": 0.10410616000000002,
+    "max_abs_error": 0.21509799999999996
+  },
+  "selective": {
+    "points": 15,
+    "mae": 0.12267293333333333,
+    "max_abs_error": 0.438636
+  }
+}

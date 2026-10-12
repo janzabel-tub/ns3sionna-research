@@ -166,6 +166,7 @@ HeCalibratedErrorRateModel::Configure(const HeCalibrationProfile& profile,
     profile.Validate();
     ValidateBaseModel(baseModel);
     auto eesm = CreateObject<HeSuMimoLinkAbstraction>();
+    eesm->SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel::EESM);
     eesm->SetEesmBeta(profile.key.mcs, profile.betaLinear);
     m_profile = profile;
     m_base = baseModel;

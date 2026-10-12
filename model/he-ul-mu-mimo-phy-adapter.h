@@ -99,9 +99,12 @@ class HeUlMuMimoPhyAdapter : public Object
 
     void SetErrorRateModel(Ptr<ErrorRateModel> errorRateModel);
     Ptr<ErrorRateModel> GetErrorRateModel() const;
+    void SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel model);
+    SionnaMimoEffectiveSinrModel GetEffectiveSinrModel() const;
     void SetEesmBeta(uint8_t mcs, double betaLinear);
     void SetEesmBetaDb(uint8_t mcs, double betaDb);
 
+    /** apPrimary20Index identifies the AP primary 20 MHz channel in frequency order. */
     HeUlMuMimoPhyResult Calculate(
         const MultiUserChannelSnapshot& snapshot,
         const CtrlTriggerHeader& trigger,
@@ -114,7 +117,8 @@ class HeUlMuMimoPhyAdapter : public Object
         uint8_t apRxAntennas,
         double receiverNoiseFigureDb,
         UlMuMimoDetector detector,
-        double rankTolerance = UlMuMimoLinkModel::DEFAULT_RANK_TOLERANCE) const;
+        double rankTolerance = UlMuMimoLinkModel::DEFAULT_RANK_TOLERANCE,
+        uint8_t apPrimary20Index = 0) const;
 
   private:
     Ptr<HeUlMuMimoLinkAbstraction> m_abstraction{CreateObject<HeUlMuMimoLinkAbstraction>()};

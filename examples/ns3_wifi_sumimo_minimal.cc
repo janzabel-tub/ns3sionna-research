@@ -104,7 +104,9 @@ MakeMimoConfiguration(uint8_t antennas,
                       double receiverNoiseFigureDb)
 {
     SionnaMimoConfiguration configuration;
+    configuration.effectiveSinrModel = SionnaMimoEffectiveSinrModel::EESM;
 
+    if (antennas == 1) { configuration.eesmBetaLinear.emplace(mcs, eesmBetaLinear); }
     if (antennas == 2)
     {
         configuration.receiverNoiseFigureDb = receiverNoiseFigureDb;

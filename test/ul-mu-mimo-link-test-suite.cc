@@ -225,6 +225,7 @@ class UlMuMimoAnalyticalTest : public TestCase
         const auto budget2 = MakeReferenceSnrBudget(9.0);
         auto errorModel = CreateObject<TableBasedErrorRateModel>();
         auto he = CreateObject<HeUlMuMimoLinkAbstraction>();
+        he->SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel::EESM);
         he->SetErrorRateModel(errorModel);
         he->SetEesmBeta(0, 2.0);
         he->SetEesmBeta(3, 3.0);

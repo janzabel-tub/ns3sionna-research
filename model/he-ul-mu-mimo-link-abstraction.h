@@ -23,7 +23,7 @@ namespace ns3
 
 class ErrorRateModel;
 
-/** Per-user inputs for Phase-4.7 HE EESM/PER evaluation. */
+/** Per-user inputs for Phase-4.7 HE effective-SINR/PER evaluation. */
 struct HeUlMuMimoUserTransmission
 {
     uint32_t userId;
@@ -57,7 +57,7 @@ class HeUlMuMimoUserResult
     double m_packetSuccessRate{0.0};
 };
 
-/** Per-user uplink EESM/PER results, ordered by stable user ID. */
+/** Per-user uplink effective-SINR/PER results, ordered by stable user ID. */
 class HeUlMuMimoLinkResult
 {
   public:
@@ -72,7 +72,7 @@ class HeUlMuMimoLinkResult
 
 /**
  * \ingroup sionna
- * Applies the existing HE SU EESM and ErrorRateModel contract independently
+ * Applies the existing HE SU mapping and ErrorRateModel contract independently
  * to each result of the Phase-4.7 joint uplink detector.
  *
  * This class is numerical only. Coordinated HE-TB reception, trigger frames,
@@ -87,6 +87,8 @@ class HeUlMuMimoLinkAbstraction : public Object
 
     void SetErrorRateModel(Ptr<ErrorRateModel> errorRateModel);
     Ptr<ErrorRateModel> GetErrorRateModel() const;
+    void SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel model);
+    SionnaMimoEffectiveSinrModel GetEffectiveSinrModel() const;
     void SetEesmBeta(uint8_t mcs, double betaLinear);
     void SetEesmBetaDb(uint8_t mcs, double betaDb);
     void SetAwgnSnrOffsetDb(const HeAwgnCalibrationKey& key, double offsetDb);
