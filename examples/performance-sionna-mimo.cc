@@ -169,6 +169,7 @@ class Reporter
   public:
     std::vector<Link> links;
     std::ofstream csv;
+    bool printThroughput{false};
     Time start;
     Time stop;
     Time interval;
@@ -257,9 +258,14 @@ class Reporter
     {
         const double db = samples ? 10 * std::log10(snrSum / samples)
                                   : std::numeric_limits<double>::quiet_NaN();
+        const double throughputMbps = bytes * 8.0 / seconds / 1e6;
         csv << now.GetSeconds() << ',' << seconds << ',' << link << ',' << ap << ',' << sta
-            << ',' << bytes << ',' << bytes * 8.0 / seconds / 1e6
+            << ',' << bytes << ',' << throughputMbps
             << ',' << db << ',' << samples << '\n';
+        if (link == -1 && printThroughput)
+        {
+            std::cout << now.GetSeconds() << "s:\t" << throughputMbps << " Mbit/s" << std::endl;
+        }
     }
 };
 } // namespace
@@ -284,6 +290,7 @@ main(int argc, char* argv[])
     uint32_t channelWidthMhz{20}, channelNumber{0}, mcs{11}, seed{1}, run{1};
     int fixedCoherenceTimeMs{0}, mode{1}, subMode{1};
     bool caching{true}, snr{true};
+    bool prtTput{false};
     CommandLine cmd(__FILE__);
     auto addString = [&cmd](const std::string& name, const std::string& help, std::string& value) {
         // ns-3.40's templated string parser truncates at whitespace.
@@ -309,6 +316,7 @@ main(int argc, char* argv[])
     cmd.AddValue("simulationTimeSeconds", "Simulation end time", simulationTimeSeconds);
     cmd.AddValue("trafficStartSeconds", "TCP start after association warmup", trafficStartSeconds);
     cmd.AddValue("reportIntervalMs", "Throughput/SNR summary interval in ms", reportIntervalMs);
+    cmd.AddValue("prtTput", "Print aggregate throughput at each report interval", prtTput);
     cmd.AddValue("snr", "Aggregate downlink PHY SNR including decoded payload failures", snr);
     cmd.AddValue("mcs", "Fixed HE MCS (0--11)", mcs);
     cmd.AddValue("eesmBetaLinear", "Required explicit positive EESM beta for multi-antenna links", eesmBetaLinear);
@@ -321,7 +329,24 @@ main(int argc, char* argv[])
     cmd.AddValue("mode", "Sionna IPC mode: 1=P2P, 2=P2MP, 3=lookahead", mode);
     cmd.AddValue("subMode", "Sionna lookahead depth", subMode);
     cmd.AddValue("fixedPathLossDb", "Uniform path loss for fixed-channel smoke tests only", fixedPathLossDb);
-    cmd.Parse(argc, argv);
+    // Accept the flag by itself as a convenience, while retaining ns-3's
+    // standard --prtTput=true/false form.
+    char enablePrtTputArg[] = "--prtTput=true";
+    std::vector<char*> parsedArgs;
+    parsedArgs.reserve(argc);
+    parsedArgs.push_back(argv[0]);
+    for (int i = 1; i < argc; ++i)
+    {
+        if (std::string(argv[i]) == "--prtTput")
+        {
+            parsedArgs.push_back(enablePrtTputArg);
+        }
+        else
+        {
+            parsedArgs.push_back(argv[i]);
+        }
+    }
+    cmd.Parse(static_cast<int>(parsedArgs.size()), parsedArgs.data());
 
     try
     {
@@ -504,6 +529,7 @@ main(int argc, char* argv[])
         reporter.start = Seconds(trafficStartSeconds);
         reporter.stop = Seconds(simulationTimeSeconds);
         reporter.interval = interval;
+        reporter.printThroughput = prtTput;
         NetDeviceContainer allDevices;
         for (uint32_t i = 0; i < numPairs; ++i)
         {
@@ -567,6 +593,7 @@ main(int argc, char* argv[])
                << "\nsimulationTimeSeconds=" << simulationTimeSeconds
                << "\ntrafficStartSeconds=" << trafficStartSeconds << "\nreportIntervalMs=" << reportIntervalMs
                << "\nofferedRate=" << offeredRate << "\ntcpVariant=" << tcpVariant
+               << "\nprtTput=" << prtTput
                << "\nseed=" << seed << "\nrun=" << run << "\ncaching=" << caching
                << "\nfixedCoherenceTimeMs=" << fixedCoherenceTimeMs << "\nmode=" << mode
                << "\nsubMode=" << subMode << "\nsnr=" << snr << "\nfixedPathLossDb=" << fixedPathLossDb
@@ -596,9 +623,12 @@ main(int argc, char* argv[])
         }
         summary << -1 << ',' << totalBytes << ',' << duration << ',' << totalBytes * 8.0 / duration / 1e6 << '\n';
         std::cout << "pairs=" << numPairs << " antennas=" << antennaCount << " streams=" << streams
-                  << " precoding=" << precoding << " channel_width_mhz=" << channelWidthMhz
-                  << " total_mean_goodput_mbps=" << totalBytes * 8.0 / duration / 1e6
-                  << " output=" << out << std::endl;
+                  << " precoding=" << precoding << " channel_width_mhz=" << channelWidthMhz;
+        if (prtTput)
+        {
+            std::cout << " total_mean_goodput_mbps=" << totalBytes * 8.0 / duration / 1e6;
+        }
+        std::cout << " output=" << out << std::endl;
         reporter.csv.close();
         summary.close();
         Require(bool(reporter.csv) && bool(summary), "error writing result files");

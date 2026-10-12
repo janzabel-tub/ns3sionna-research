@@ -31,6 +31,7 @@ Other variables:
   SERVER_PYTHON=python3  RT_FAST=true  (only used with START_SERVER=true)
   RESTART_SERVER_ON_CRASH=true  MAX_RETRIES=3  (requires START_SERVER=true)
   Crashes/timeouts retry the current run; failed attempts and server logs are kept.
+  --prtTput               Print aggregate interval throughput (off by default).
 
 Extra --name=value options are forwarded to every run; see the C++ --PrintHelp
 for all options. Each configuration writes interval CSV, summary CSV, config,
@@ -43,6 +44,13 @@ if [[ ${1:-} == --dry-run ]]; then
     DRY_RUN=true
     shift
 fi
+PRINT_THROUGHPUT=false
+for option in "$@"; do
+    case "$option" in
+        --prtTput|--prtTput=true|--prtTput=1) PRINT_THROUGHPUT=true ;;
+        --prtTput=false|--prtTput=0) PRINT_THROUGHPUT=false ;;
+    esac
+done
 
 read -r -a antennas <<< "${ANTENNAS_LIST:-2}"
 read -r -a widths <<< "${WIDTHS_MHZ:-20}"
@@ -234,7 +242,7 @@ for power in "${powers[@]}"; do
             echo '[runner] managed server is unavailable' > "$run_dir/run.log"
         fi
         if [[ $status == 0 ]]; then
-            cat -- "$run_dir/summary.csv"
+            if [[ $PRINT_THROUGHPUT == true ]]; then cat -- "$run_dir/summary.csv"; fi
             break
         fi
         if [[ $managed_server == true ]] && ! kill -0 "$server_pid" 2>/dev/null; then crashed=true; fi

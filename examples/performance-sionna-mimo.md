@@ -21,6 +21,14 @@ in `.failed-attempt-N` directories, and server restarts get separate logs.
 Successful configurations are kept and the sweep continues. Other errors or
 exhausted retries stop the sweep. Existing outputs are rejected.
 
+Use `watchdog-mimo.sh` to start the local server and run with crash monitoring
+enabled. It delegates to the same runner and accepts its sweep variables and
+options:
+
+```bash
+bash contrib/sionna/examples/watchdog-mimo.sh
+```
+
 From the ns-3 directory, inspect options without starting simulations:
 
 ```bash
@@ -88,6 +96,13 @@ and override its environment defaults. Use `OUTPUT_BASE` for the shell runner's
 output location; `--outputDirectory` is reserved for direct C++ invocations. A `--dry-run` prints every command
 without building, starting a server, or creating outputs. A single-run override such as `--antennaCount=4` also updates the configuration
 directory tag and replaces that sweep dimension with the selected value.
+
+Throughput stays in the CSV files by default. Add `--prtTput` to print aggregate
+interval throughput and the final mean goodput to the console:
+
+```bash
+EESM_BETA_LINEAR=2 bash contrib/sionna/examples/performance-sionna-mimo.sh --prtTput
+```
 
 ## Output and measurement definitions
 
