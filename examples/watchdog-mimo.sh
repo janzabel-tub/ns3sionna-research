@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Start the MIMO runner with its managed Sionna server watchdog enabled.
+# The runner monitors server liveness, archives failed attempts, restarts the
+# server and retries crashed or timed-out simulations.
+set -euo pipefail
+
+EXAMPLES_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+# CPU-only, full ray tracing defaults for a static two-link 2x2 experiment.
+# The offered load is 150 Mbit/s per spatial stream (300 Mbit/s per AP).
+# EESM_BETA_LINEAR must still be supplied with a value calibrated for MCS 11.
+export RT_FAST="${RT_FAST:-false}"
+export NUM_PAIRS="${NUM_PAIRS:-2}"
+export ANTENNAS_LIST="${ANTENNAS_LIST:-2}"
+export STREAMS="${STREAMS:-2}"
+export WIDTHS_MHZ="${WIDTHS_MHZ:-20}"
+export PRECODING_LIST="${PRECODING_LIST:-open-loop}"
+export MCS_LIST="${MCS_LIST:-11}"
+export SPEEDS_MPS="${SPEEDS_MPS:-0}"
+export OFFERED_RATE="${OFFERED_RATE:-300Mbps}"
+export ENVIRONMENT="${ENVIRONMENT:-simple_room/simple_room.xml}"
+export AP_POSITIONS="${AP_POSITIONS:-2,1,1.5;4,3,1.5}"
+export STA_POSITIONS="${STA_POSITIONS:-3,2,1.5;5,2,1.5}"
+# Full CPU ray tracing may exceed the runner's normal 30-minute timeout.
+export RUN_TIMEOUT_SECONDS="${RUN_TIMEOUT_SECONDS:-0}"
+
+START_SERVER=${START_SERVER:-true} \
+RESTART_SERVER_ON_CRASH=${RESTART_SERVER_ON_CRASH:-true} \
+exec "$EXAMPLES_DIR/performance-sionna-mimo.sh" "$@"
