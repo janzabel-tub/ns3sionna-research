@@ -437,53 +437,44 @@ complete; actual CUDA hardware acceptance remains pending.
 
 ## R6 CPU/CUDA comparison and RTX 3060 remote script
 
-The fixed backend matrix, acceptance tolerances, local validation and complete
-remote commands are in [the R6 contract](doc/r6-backend-completion.md).
-The [remote script](tools/run_r6_gpu.sh) verifies a transferred source/result
-bundle, creates an isolated environment, rebuilds ns-3, runs CPU regressions,
-performs actual CPU/CUDA traces, audits every native result and packages the
-relocated reproduction payload. The shared exact Python lock is intentional;
-Sionna RT CUDA uses Mitsuba/Dr.Jit while PyTorch remains on CPU.
-
-From ns-3, in the existing CPU environment, use a new output directory:
+Use the active Conda environment and the existing ns-3 build. Copy the local
+`experiments/r6/r6-existing-ns3-update.tar.gz` to the GPU machine, then run:
 
 ```sh
-python contrib/sionna/tools/benchmark_backends.py run --cpu-only --output=/tmp/r6-cpu
-python contrib/sionna/tools/benchmark_backends.py validate --output=/tmp/r6-cpu --native
-python contrib/sionna/tools/benchmark_backends.py package --output=/tmp/r6-cpu --bundle=/tmp/r6-bundle
+tar -xzf r6-existing-ns3-update.tar.gz
+conda activate sionna2
+bash r6-env-update/run_r6_gpu.sh --use-existing-build \
+  --source "$HOME/ns-allinone-3.40/ns-3.40" \
+  --output "$PWD/r6-results-existing"
 ```
 
-Copy the prepared local `experiments/r6/r6-gpu-input.tar.gz` to the RTX machine,
-extract it, and use the trusted hash from [the catalog](experiments/r6/catalog.json):
+Keep the three files in `r6-env-update/` together. `--use-existing-build` also
+reuses the active Python environment (Python >=3.11). It does not configure or
+compile ns-3, regenerate bindings, extract another source tree, create a venv
+or install packages. Existing R6 benchmark/test binaries and bindings must be
+present; missing files cause an explicit failure without an automatic build.
+Only the three companion runner files are updated in the selected checkout.
+Use a new output directory for each run.
 
-```sh
-bash run_r6_gpu.sh --bundle "$PWD/bundle" --index-sha256 "<trusted index hash>" --output "$PWD/r6-results"
-```
+The runner records installed package versions, deviations from the reference
+lock, and existing binary/binding hashes. It checks that CPU/CUDA environments
+match, runs CPU regressions and actual paired RT traces, audits every native
+result, and packages the relocated reproduction payload. Return
+`r6-results-existing/r6-results.tar.gz` for independent audit.
 
-Linux x86_64, Python 3.12, an NVIDIA driver and documented native libraries are
-prerequisites; the contract lists the one-time installation commands. Return
-`r6-results/r6-results.tar.gz` for independent audit. The manually dispatched
-CUDA CI uses a self-hosted runner with labels `self-hosted,linux,x64,gpu`.
+The fixed matrix, scientific tolerances, supported Sionna RT stack, optional
+isolated CI setup and provenance details are in
+[the R6 contract](doc/r6-backend-completion.md). The
+[artifact catalog](experiments/r6/catalog.json) retains the trusted identities.
 Local CPU acceptance passed; actual GPU acceptance and CUDA CI execution remain
 pending. CPU-only runs and packages explicitly record `gpu_pending`.
 
-For an existing Conda environment, activate it and use
-`--use-existing-environment`; this mode creates no venv and installs no packages.
-It supports Python >=3.11, records resolved package versions and lock deviations,
-and requires matching CPU/CUDA environments with the supported Sionna RT stack.
-Copy `experiments/r6/r6-existing-environment-update.tar.gz` separately, extract it
-beside the existing `bundle/`, and run its three-file update together:
+From ns-3, CPU diagnostics can also reuse the active environment directly:
 
 ```sh
-conda activate sionna2
-bash r6-env-update/run_r6_gpu.sh --use-existing-environment \
-  --bundle "$PWD/bundle" \
-  --index-sha256 d983c092468268785e544d842c461907adcc069e43af6e7a905e1144c73a487b \
-  --output "$PWD/r6-results-3"
+python contrib/sionna/tools/benchmark_backends.py run --cpu-only --use-existing-environment --output=/tmp/r6-cpu
+python contrib/sionna/tools/benchmark_backends.py validate --output=/tmp/r6-cpu --native
 ```
-
-The original bundle/hash remain unchanged; applied runner/test hashes are logged
-after verification. See the R6 contract for provenance and validation details.
 
 HE bit-error averaging
 ----------------------
