@@ -448,6 +448,21 @@ bash r6-env-update/run_r6_gpu.sh --use-existing-build \
   --output "$PWD/r6-results-existing"
 ```
 
+If the preflight lists missing R6 benchmark executables, compile those targets
+once in the existing configured checkout:
+
+```sh
+cd "$HOME/ns-allinone-3.40/ns-3.40"
+./ns3 build -j 2 ns3_wifi_sumimo_benchmark ns3_sionna_cache_ipc_benchmark ns3_sionna_live_benchmark
+```
+
+This is an incremental target build using the existing build tree and its
+current dependencies. The general program can already work while these separate
+benchmark programs have never been built. The launcher does not build them
+automatically. Afterward, rerun with a fresh output directory; keep the failed
+run's logs. If a target is unknown, the selected checkout lacks that benchmark's
+source or CMake registration; report the error instead of starting a clean build.
+
 Keep the three files in `r6-env-update/` together. `--use-existing-build` also
 reuses the active Python environment (Python >=3.11). It does not configure or
 compile ns-3, regenerate bindings, extract another source tree, create a venv

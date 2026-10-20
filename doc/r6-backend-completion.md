@@ -79,6 +79,21 @@ transfer directory on `hpc3`, run:
       --source "$HOME/ns-allinone-3.40/ns-3.40" \
       --output "$PWD/r6-results-existing"
 
+If the preflight lists missing R6 benchmark executables, compile those targets
+once in the existing configured checkout:
+
+```sh
+cd "$HOME/ns-allinone-3.40/ns-3.40"
+./ns3 build -j 2 ns3_wifi_sumimo_benchmark ns3_sionna_cache_ipc_benchmark ns3_sionna_live_benchmark
+```
+
+This is an incremental target build using the existing build tree and its
+current dependencies. The general program can already work while these separate
+benchmark programs have never been built. The launcher does not build them
+automatically. Afterward, rerun with a fresh output directory; keep the failed
+run's logs. If a target is unknown, the selected checkout lacks that benchmark's
+source or CMake registration; report the error instead of starting a clean build.
+
 This mode requires `--source`, implies `--use-existing-environment`, and does
 not extract another ns-3 copy, configure, compile, regenerate bindings, create
 a venv or install packages. The three companion runner files are updated in
