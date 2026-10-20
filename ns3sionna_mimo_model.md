@@ -83,19 +83,9 @@ deterministischen CPU-Vergleich. Unterphase 4.7 ergänzt den gemeinsamen
 Uplink-ZF-/MMSE-Numerikkern und nutzerweise PER. Unterphase 4.8 bindet reale
 HE-Basic-Trigger- und HE-TB-PHY-Metadaten an diesen Kern und berücksichtigt
 nur exakt gleichzeitig am AP empfangene Nutzer innerhalb derselben RU.
-Unterphase 5.2.1 ergänzt einen festen 2x2-Kanalsensitivitätsbenchmark mit
-Abstands-/Orientierungssweep, wiederholbarem CPU-Raytracing und eingefrorenen
-Kanal-/SINR-Referenzen. Die Auswertung bleibt innerhalb des kalibrierungsfreien
-Kanal-/MMSE-/MI-Messvertrags.
-Unterphase 5.2.2 ergänzt gepaarte Seed-/Samplebudgetvergleiche für vier
-repräsentative Konfigurationen mit vorab definierten Toleranzen,
-byteidentischen Wiederholungen und unabhängiger Referenzvalidierung.
-Unterphase 5.2.3 misst den bestehenden Cache und tatsächliche lokale
-Prozess-IPC mit eingefrorenen Kanalantworten, getrennt von Raytracing.
-Unterphase 5.2.4 ergänzt getrennte TX-/RX-Abstände und ausgewählte Azimute
-im bestehenden Benchmark. Neue Messartefakte bleiben lokal und unversioniert.
-Unterphase 5.2.5 vergleicht aktuelles und verzögertes Gleichleistungs-SVD-CSI
-auf denselben explizit entwickelten Sendekanälen zweier repräsentativer Links.
+Phase 5 ergänzt eine begrenzte Link-Level-Kalibrierung sowie reproduzierbare
+Kanal-, CSI- und Cache-/IPC-Studien. Deren Aussagen bleiben auf die geprüften
+Profile, Szenen und Backends beschränkt.
 
 ## 2. Reproduzierbare Ausgangsbasis
 
@@ -726,303 +716,45 @@ Rangverlustverhalten.
 
 ### Phase 5: Kalibrierung, Skalierung und Reproduzierbarkeit
 
-#### Unterphase 5.1: HE-EESM-/PER-Kalibrierung gegen Link-Level-Referenzen
+Der ursprüngliche Umfang bleibt: PER gegen unabhängige Link-Level-Daten
+kalibrieren; Abstand, Orientierung, CSI-Alter und RT-Samplebudget untersuchen;
+Cache-/IPC-Speicherbedarf messen; Seeds, Ergebnisformate und CPU/GPU-CI absichern.
+Methoden stehen in 5.19, Ergebnisse und Grenzen in 7.13, Befehle in Abschnitt 9.
 
-- Die AWGN-Abbildung des tatsächlich eingesetzten ns-3-
-  `TableBasedErrorRateModel` für genau einen HE-MCS, Codeart, Paketlänge,
-  NSS, RX-Antennenzahl, Kanalbreite und Guard Interval als CSV exportieren.
-- Unabhängige Link-Level-Messungen für AWGN und frequenzselektive Kanäle mit
-  Paketfehlern, Paketanzahl und den zugehörigen linearen Post-Processing-SINRs
-  aller übertragenen Subcarrier/Streams einlesen. Datensatzquelle, Version
-  und PHY-Konfiguration müssen explizit vorhanden sein.
-- Zuerst einen expliziten AWGN-SNR-Korrekturwert auf AWGN-Trainingspunkten
-  anhand der Binomial-Likelihood bestimmen und an zurückgehaltenen
-  AWGN-Punkten prüfen. Danach das lineare EESM-Beta auf
-  frequenzselektiven Trainingskanälen fitten und auf einer anderen
-  Kanalrealisation prüfen. Ein Beta allein kann eine abweichende
-  AWGN-Basiskurve nicht korrigieren.
-- Die AWGN-Korrektur nur bei exakt passender PHY-Konfiguration auf die
-  `ErrorRateModel`-Eingabe anwenden; EESM und die physikalische SINR bleiben
-  unverändert. Synthetische Selbsttests und abgelehnte Fits geben nur
-  Diagnosekandidaten aus. Es gibt weiterhin keine Default-Koeffizienten.
+5.1 liefert einen validierten HE-MCS-0/BCC/32-Byte/1x1-Piloten.
+5.2.1–5.2.5 liefern CPU-Studien für 2x2-Kanäle, Samplekonvergenz, lokale
+Cache-/IPC-Skalierung, getrennte Arrayabstände und analytische CSI-Alterung.
+Phase 5 ist im vereinbarten Umfang abgeschlossen; die R6-Abnahme steht in Abschnitt 7.17.
 
-`tools/generate_he_link_level_reference.m` erzeugt nun eine unabhängige
-Bit-Level-Referenz mit MATLAB WLAN Toolbox R2026a, idealem Timing und
-perfekter RX-CSI, HE-SU-BCC-Decodierung sowie gemessenen Post-OFDM-SINRs.
-Die ersten 20 Messpunkte mit je 1000 Paketen sind in `data/` versioniert.
-Der Workflow hat für HE MCS 0, BCC, 32 Byte, 1x1, 20 MHz und 800 ns GI
-eine Konfiguration mit zurückgehaltenen AWGN- und Zweitap-Kanälen
-validiert. Die Koeffizienten sind nur für diese genaue PHY-Konfiguration
-und die dokumentierten Kanalannahmen belegt; weitere MCS, Paketlängen,
-Codearten, Antennenmaße und TGax-Kanalmodelle bleiben zu kalibrieren.
+Die bisherigen R1–R6 werden als jeweils **eine** Unterphase mit festen
+Abnahmekriterien behandelt. Ihr verbleibender Stand ist:
 
-#### Unterphase 5.2.1: 2x2-SU-MIMO, Abstand und Orientierung (implementiert)
+| Paket | Vorhanden | Noch unbelegt/offen |
+| --- | --- | --- |
+| R1: Reproduzierbarkeit | native Seed/Run/Streams, portable Bundles, Lock-/Systemchecks und Reproduktion abgenommen | Container/Docker außerhalb des Umfangs |
+| R2: Kalibrierung | Pilotprofil mit Laufzeitvertrag, tatsächlicher HE-SU-/PSDU-Anwendung und Negativtests | weitere Profile und Aggregation außerhalb dieser Abnahme |
+| R3: Speicherung | Cachebudgets, Kopiereigentum, Zeit-/Link-/Tiefensweeps, begrenzte Historien und Stagingpool abgenommen | RT-/CIR-/Protobuf-Pools und RSS außerhalb des Umfangs |
+| R4: Live-Skalierung | reale CPU-Server-/HE-SU-PHY-Messung, 42 Prozesspaare und Speicherbeobachtungen abgenommen | MU-/MAC-, GPU- und universelle Leistungsgrenzen außerhalb des Umfangs |
+| R5: Physikalische Alterung | getrennte Bewegungs-/Doppler-Sounding-/Sendekanäle und CPU-Abnahme abgeschlossen | automatische Abläufe, zusätzliche Szenen und breitere Statistik außerhalb des Umfangs |
+| R6: Backendabschluss | CPU-/RTX-3060-Vergleich bestanden; vom Anwender abgeschlossen | separate CUDA-CI-Ausführung nicht nachgewiesen |
 
-Der erste Teil von Phase 5.2 untersucht einen gerichteten, statischen
-2x2-Open-Loop-Link bei fester Szene, Knotenposition, Leistung, Rauschen und
-Seeds. Die vollständige kleine Vergleichsmatrix enthält die gemeinsamen
-horizontalen TX-/RX-Abstände 0,25, 0,5 und 1 Wellenlänge sowie unabhängig
-TX- und RX-Azimut 0 oder 90 Grad: insgesamt zwölf Konfigurationen mit je zwei
-frischen Raytracing-Läufen. Elevation und Roll bleiben im Sweep null.
-Ein separater Integrationstest prüft zusätzlich unterschiedliche, nichtnullige
-Azimut-/Elevations-/Rollwinkel an beiden tatsächlichen Sionna-Radioobjekten.
+R1 wird als eine vollständige Unterphase im vorhandenen nativen Conda-CPU-
+Environment umgesetzt; Container/Docker gehören nicht zum Umfang. Feste Abnahme:
+versionierte Seed-/Run-/Streamzuordnung mit Reproduzierbarkeits- und Isolationstests;
+verschobene Bundles mit Konfigurationen, benötigten Eingängen, Ergebnissen und
+prüfbaren Hashes; Reproduktion eines kleinen RT-/Native-Beispiels; Prüfung des
+bestehenden Python-Locks und dokumentierter Systemabhängigkeiten; etablierte
+CPU-Regressionen sequenziell. Historische Messhashes und R2 bleiben unverändert.
+Resume, neue wissenschaftliche Studien und GPU-Abnahme gehören nicht zu R1.
 
-`examples/ns3_wifi_sumimo_benchmark.cc` exportiert über die vorhandene
-`SionnaMimoHelper::Apply`-/`PopulateMimoConfiguration`-Kette die echten
-Array-/Orientierungsfelder. Seine zweite Aktion liest eine eingefrorene
-Serverantwort und berechnet ausschließlich in ns-3 Linkbudget, Open-Loop-MMSE,
-MI-Kompression und SVD-Diagnosen. `tools/benchmark_sumimo.py` ruft den
-unveränderten `SionnaEnv` direkt auf, orchestriert die zwölf Fälle und erstellt
-CSV-/Protobuf-/JSON-Exporte sowie Vergleichsplots. Ein laufender ZMQ-Server,
-MAC-Verkehr und eine EESM-/PER-Konfiguration sind für diesen Messvertrag nicht
-erforderlich. Die bestehenden Framework-/Serverpfade wurden nicht geändert.
-
-Die versionierte CPU-Referenz liegt unter `data/phase5_2_spacing_orientation/`.
-`manifest.json` enthält sämtliche festen Kontrollen, die zwölf vollständigen
-IPC-Konfigurationen, tatsächlich beobachtete Arraykoordinaten und Orientierungen,
-Softwareversionen, Backend sowie SHA-256-Hashes von Quellcode, Szenendateien,
-Konfigurationen, Kanälen und nativem Programm. Pro Fall sind
-`configuration.pb` als rohe `SimInitMessage` und zwei `channel_XX.pb` als rohe
-`ChannelStateResponse` gespeichert. `tones.csv` enthält alle 6144 Tonzeilen;
-`summary.csv` enthält 24 Läufe mit beiden Stream-SINRs, minimalem Rang,
-Singularwertdiagnosen, Linkbudget und getrennten Laufzeiten. Drei lokal erzeugte
-PNG-Plots vergleichen Kanal, SINR und Laufzeit über den Antennenabstand.
-Generierte Plots werden nicht versioniert; `.gitignore` schließt `plots/`
-sowie PNG-/SVG-/PDF-Dateien unter `data/` aus. Die Referenzvalidierung benötigt
-keine Plotdateien.
-
-Abnahmekriterium: wiederholte CPU-Kanalantworten sind byteidentisch; Geometrie
-und Grad-/Radiantumrechnung erreichen die tatsächlichen PlanarArrays und
-Radioobjekte; analytische sowie eingefrorene reale Kanäle liefern die
-Referenz-Singularwerte und -SINRs. Die elf automatisierten neuen Prüfungen
-und die relevanten Regressionen sind in Abschnitt 7.14 dokumentiert.
-Dieser Teil berichtet keine absolute PER oder Wi-Fi-Datenrate: die gemessene
-Kalibrierung aus Unterphase 5.1 gilt ausschließlich für die dokumentierte
-1x1-Konfiguration und darf nicht auf 2x2 übertragen werden.
-
-#### Unterphase 5.2.2: Raytracing-Samplekonvergenz (implementiert)
-
-`tools/benchmark_rt_convergence.py` erweitert den bestehenden 2x2-Messvertrag
-um 10000, 100000 und 1000000 Samples je Quelle. Die vorab anhand der
-5.2.1-Referenz ausgewählten Fälle 03, 05, 06 und 10 decken schwache,
-mittlere und gute Konditionierung sowie alle drei Arrayabstände ab.
-Jeder Fall nutzt dieselben Seeds 42, 43 und 44 bei allen Budgets und
-jeweils zwei frische CPU-Raytraces: 72 Läufe insgesamt. Szene, Positionen,
-Arraymuster, Polarisation, Orientierungen, Leistung, Rauschen und sämtliche
-anderen Solveroptionen bleiben je Fall unverändert.
-
-Der Runner schreibt `plan.json` mit festen Toleranzen vor dem ersten Trace.
-`convergence.csv` enthält alle gepaarten Budgetvergleiche; die Entscheidung
-in `convergence.json` verlangt die Einhaltung jedes Kriteriums für jeden
-Ton, Stream, Fall und Seed. Die vollständigen Konfigurationen, Kanalantworten,
-Ton-/Zusammenfassungsmetriken und Laufzeiten liegen in
-`data/phase5_2_sample_convergence/`. Vier Vergleichsplots bleiben lokal und
-unversioniert. Messvertrag und Formeln stehen in Abschnitt 5.21, Ergebnisse
-und automatisierte Validierung in Abschnitt 7.15. PER wird weiterhin nicht
-abgeleitet: die 5.1-Kalibrierung gilt ausschließlich für die dokumentierte
-HE-MCS-0/BCC/32-Byte/1x1-Konfiguration.
-
-#### Unterphase 5.2.3: Cache-/IPC-Skalierung (implementiert)
-
-`examples/ns3_sionna_cache_ipc_benchmark.cc` nutzt die bestehenden
-`SionnaPropagationCache`-Getter, deren Misspfad und den unveränderten
-`SionnaHelper`-REQ-Socket. `tools/benchmark_cache_ipc.py` startet einen
-separaten Python-REP-Prozess mit vorserialisierten eingefrorenen Antworten.
-Der Sweep umfasst 64/256/1024 Subcarrier, TX/RX-Dimensionen 1/1, 2/2,
-4/4, 2/4 und 8/8 sowie 1/16/64 gleichzeitig gecachte Links: 45 Fälle mit
-je drei frischen nativen Prozessen. Seed 42 und Run 1 bleiben fest.
-
-Pro Fall werden Serialisierung, Deserialisierung, einzelne CFR-Dekodierung,
-reale lokale ZMQ-Roundtrips, Cache-Hits und frische Cache-Misses gemessen.
-Logischer Koeffizienten-/Frequenzspeicher, glibc-Live-Heap und Linux-RSS
-werden getrennt ausgewiesen. Die vorab exportierten Abnahmekriterien
-verlangen exakte Daten-/Byteerhaltung, erwartete Request- und Hit-/Misszahlen
-sowie den inklusiven Gültigkeitsrand und die anschließende Cacheexpiration.
-Laufzeit- und Allokatordeltas werden als Verteilungen berichtet.
-
-Die CPU-Referenz liegt in `data/phase5_2_cache_ipc/`. Sie enthält
-15 kompakte Protobuf-Vorlagen, vollständige Messkonfigurationen und
-SHA-256-Nachweise, Zusammenfassungen, sämtliche Zeitstichproben und
-Requesttranskripte. Drei Vergleichsplots bleiben lokal und unversioniert.
-Abschnitt 5.22 definiert Messvertrag und Formeln; Abschnitt 7.16 berichtet
-Ergebnisse und automatisierte Validierung. Die Produktionsdateien von
-Cache, Helper, Protobuf und Server werden nicht verändert.
-
-#### Unterphase 5.2.4: Getrennte TX-/RX-Abstände und Azimute (implementiert)
-
-Der bestehende Runner `benchmark_rt_convergence.py --independent-spacing`
-misst fünf vorab festgelegte Konfigurationen mit Seeds 42/43/44 und zwei
-frischen CPU-Traces. Alle Fälle verwenden 100000 Samples; die beiden
-Fälle mit neuen Azimuten werden zusätzlich mit 1000000 Samples geprüft.
-Die bestehenden nativen Optionen erhalten unabhängige TX-/RX-Overrides,
-und die Geometrieprüfung liest den Abstand des jeweiligen Endpunkts.
-Produktionshelper, Server, Protobuf und Linkmodelle bleiben unverändert.
-Vorhandene Tests werden erweitert; zusätzliche Testsuites, Fixturedateien
-oder Messergebnisse werden nicht eingecheckt. Abschnitt 5.23 beschreibt
-den Messvertrag, Abschnitt 7.17 die Ergebnisse.
-
-#### Unterphase 5.2.5: CSI-Alterungssensitivität (implementiert)
-
-`benchmark_rt_convergence.py --csi-aging` verwendet die bestehenden Fälle
-03/06 mit Seeds 42/43/44, 100000 Samples und gepaarten 1000000-Samplechecks.
-Für vier vorab definierte Alter werden frisches und verzögertes,
-unquantisiertes Gleichleistungs-SVD verglichen. Die explizite analytische
-TX-Basisrotation entwickelt die initiale RT-CFR bei fester Geometrie;
-Zeitstempel allein verändern den Kanal nicht. Die vorhandenen
-MimoCsiAgingModel-/SVD-/MMSE-APIs übernehmen Auswahl und Linkrechnung,
-perfekte RX-CSI gilt für den aktuellen Sendekanal. Abschnitt 5.24 beschreibt
-Formeln und Messvertrag, Abschnitt 7.18 Ergebnisse und Grenzen. Vorhandene
-Tools/Tests werden erweitert; neue Datensätze und Fixtures bleiben lokal.
-
-#### Weitere Phase-5-Arbeitspakete
-
-Der folgende Restplan basiert auf dem Implementierungsstand `2425c7c` und
-dem Vergleich vom 1. Oktober 2026. R1 bis R6 bezeichnen offene Arbeitspakete,
-keine neuen abgeschlossenen Unterphasen. Der ausführliche Vergleich mit dem
-ursprünglichen Plan und seine Prüfnachweise stehen im
-[Phase-5-Implementierungsplan](doc/phase-5-implementation-plan.md).
-
-Die korrigierte HE-DL-MU-Rezeption, Laufzeit-/Helperintegration, Uplinkkern,
-HE-TB-/Triggeradapter und Kohärenzzeitumrechnung sind bereits implementiert
-und historisch auf CPU validiert; sie werden nicht erneut als offene
-Phase-4-Voraussetzungen eingeplant. Die bestehenden Grenzen bei perfekter
-RX-CSI, Synchronisation, Nutzerstreams und automatischer Ablaufsteuerung
-bleiben Bestandteil des jeweiligen Messvertrags.
-
-Die abgeschlossenen Phase-5-Studien werden innerhalb ihrer belegten Grenzen
-weiterverwendet. Die Kalibrierung gilt ausschließlich für HE MCS 0/BCC/32
-Byte/1x1. Der selektive Validierungsfehler 0,054886 erfüllt die implementierte
-Grenze 0,10, aber nicht die ursprünglich vorgeschlagene Grenze 0,05. Eine
-strengere oder breitere Freigabe benötigt neue, vorab festgelegte Kriterien
-und unabhängige Testdaten. Die 2x2-Studien liefern MMSE-/SVD-/MI-Diagnostik;
-die analytische CSI-Rotation ist keine physikalische Dopplerreferenz.
-Der Cache-/IPC-Benchmark liefert eine eingefrorene lokale Prozessreferenz,
-keine Live-RT- oder Langzeit-Speicherfreigabe.
-
-Die bestehenden Werkzeuge `calibrate_eesm.py`, `benchmark_sumimo.py`,
-`benchmark_rt_convergence.py` und `benchmark_cache_ipc.py` werden erweitert.
-Gemeinsame kleine Hilfsfunktionen sollen doppelte Manifest-/Prozesslogik
-reduzieren; ein zweites Benchmarkframework ist nicht erforderlich.
-
-##### R1: Native Reproduzierbarkeit (abgeschlossen)
-
-**R1: native Reproduzierbarkeit (abgeschlossen).** Der feste Umfang umfasst
-Seed/Run/Random-Streams, vollständige portable Studienbundles und leichte
-Lock-/Systemprüfungen im bestehenden Conda-CPU-Environment. Abnahme: ein
-verschobenes Bundle verifiziert und reproduziert einen kleinen RT-/Native-Fall;
-Seedwiederholung und die etablierten CPU-Regressionen bestehen. Container/Docker,
-Resume, neue Studien und GPU-Abnahme gehören nicht dazu; R2 bleibt geschlossen.
-
-`SionnaHelper::AssignStreams(s)` reserviert RT-ID $s$ und Mobilitäts-ID $s+1$
-(Default 0/1, Rückgabewert 2). Andere ns-3-Zufallsobjekte benötigen disjunkte IDs.
-`SimInitMessage.randomness` überträgt Mappingversion 1, tatsächlichen ns-3-Seed,
-Run und beide IDs. Für Domäne $q$ (`rt` oder `mobility`) gilt
-
-\[
- D_q=\operatorname{SHA256}(\operatorname{ASCII}(
- \texttt{ns3sionna-rng-v1:seed:run:stream:q})),\qquad
- s_q=\operatorname{uint32be}(D_q[0:4]).
-\]
-
-Alle Zahlen sind dezimal, ohne Leerzeichen/Endzeile. RT bei Run 1/Stream 0
-verwendet direkt den ns-3-Seed: 42/43/44 bleiben erhalten. Beide PathSolver-Pfade
-verwenden $s_{rt}$; jeder Mobilitätsknoten verwendet
-`SeedSequence([s_mobility,node_id,0x51A0])`. Ziehungen anderer Knoten/RT verändern
-diesen Generator nicht. Das emuliert keine ns-3-Zufallsfolge und beweist keine
-statistische Unabhängigkeit. Wiederholte gleiche Tupel sind gepaarte Wiederholungen.
-Ohne neue Felder bleibt der Legacyvertrag (Version 0) erhalten; unbekannte
-Versionen/ungültige Tupel scheitern. Sidecars erfassen Tupel und effektive Seeds.
-
-`experiment_bundle.py` kopiert Konfigurationen, notwendige Szenen-/Mesh-/Material-
-und Laufinputs sowie Ergebnisse/Logs unverändert. Der externe
-[Artefaktkatalog](experiments/r1/catalog.json) hält den vertrauenswürdigen Indexhash
-und relative lokale Zugriffspfade; ein gehosteter Download wird nicht behauptet.
-Verifikation prüft das vollständige Inventar, relative Pfade, Referenzabschluss
-und Rohbinär-/LF-Texthashes. Historische Messzeitpunkt-Quellhashes bleiben erhalten;
-fehlende Ausführungsprovenienz bleibt unbekannt. Reproduktion schreibt neue
-Ausführungs-/Validierungsnachweise außerhalb des unveränderten Bundles.
-Native Metriken werden mit rtol $10^{-4}$ und atol $10^{-7}$ verglichen;
-Rang, Tonindex und Frequenz sind exakt. Laufzeit und maschinenübergreifende
-Bytegleichheit gehören nicht zur numerischen Abnahme. `--mode rt` rechnet frisch,
-`--mode frozen` analysiert den gespeicherten Kanal. 10000 Samples sind ein
-Reproduktionsprüfsatz, kein Konvergenznachweis.
-
-`check_cpu_environment.py --strict` prüft Python 3.12.12, pip 26.0.1, alle
-55 bestehenden Paketpins, `pip check`, Compiler/CMake/Protobuf/ZMQ/LLVM, aktuelle
-Bindings und tatsächliche LLVM-Ausführung. Systemversionen sind dokumentiert,
-nicht hermetisch gesperrt. Befehle und Format stehen im
-[nativen Vertrag](doc/provenance-cpu-increment.md).
-
-##### R2: Vollständiger Kalibrierprofilvertrag und erweiterte PER-Validierung
-
-Abhängigkeit: R1-Identitäten und geeignete unabhängige Referenzdaten.
-
-- Die MCS-0/BCC-Pilotkalibrierung und ihre historischen Grenzen 0,05/0,10
-  erhalten. Den nächsten Profilumfang anhand verfügbarer Referenzen
-  auswählen. LDPC, 1458 Byte, weitere MCS, 2x2 und MU sind Erweiterungen,
-  keine bereits validierten Kombinationen.
-- Die Bedeutung von `packet_size_bytes` eindeutig festlegen. MATLAB verwendet
-  `APEPLength`/`getPSDULength`, der AWGN-Exporter `8*packetSizeBytes`, der
-  Empfang PSDU-/Chunkgrößen. Anwendungs-, MPDU-, PSDU- und Aggregatlängen
-  sowie Fehlerzählung vor einem Paketvergleich konsistent zuordnen.
-- Ein explizites typisiertes Profil für Beta, optionale AWGN-Korrektur,
-  PHY-Kontext, Fehlermodellklasse/-attribute, Detektor-/CSI-Annahme,
-  Ton-/RU-Vertrag und Profil-/Provenienzidentität ergänzen. Derzeit ist Beta
-  nur MCS-bezogen, während der Offset einen engeren Kontext besitzt.
-  Manuelle Setter bleiben als unvalidierte Experimente nutzbar.
-- Das bestehende JSON-Ergebnis oder ein kleines versioniertes Laufzeitformat
-  außerhalb der Mathematikklassen einlesen. Fehlerhafte, abgelehnte,
-  synthetische, unvollständige oder inkompatible Profile und widersprüchliche
-  manuelle Werte vor Zustandsänderungen zurückweisen.
-- Anwendbarkeit sowohl bei Helperkonfiguration als auch für jeden tatsächlichen
-  PPDU/Nutzer, `WifiTxVector`, Codeart, NSS, Bandbreite/RU und Paketlänge
-  prüfen. Fehlermodellattribute und Fallbackzweig gehören zum Profil.
-  Ein Lauf darf nach einem Teilfallback nicht weiterhin als vollständig
-  kalibriert erscheinen.
-- Den skalaren 1x1-Kompatibilitätspfad getrennt prüfen: Er umgeht die
-  MIMO-Abstraktion. Ein Offline-/Numerikfit belegt daher nicht automatisch
-  dessen Anwendung bei realem 1x1-Netzwerkempfang. Den vorgesehenen
-  kalibrierten Empfangspfad explizit festlegen und Ende-zu-Ende validieren.
-- Einen nativen Batchauswerter für gespeicherte CFRs, Precoder, Tonmasken,
-  Linkbudget und PHY-Kontext ergänzen, der die Produktionsrechnung
-  MMSE/EESM/Fehlermodell benutzt. Der vorhandene Benchmark prüft MMSE/MI;
-  der AWGN-Exporter prüft nur das Fehlermodell.
-- Unberührte finale Testdaten von Training/Modellauswahl trennen; sämtliche
-  Punkte einer Kanalrealisation gehören in dieselbe Partition.
-  Binomialintervalle pro festem Kanal und Unsicherheit über unabhängige
-  Realisationen berichten. Paketanzahlen anhand eines Piloten vorab
-  festlegen; 1000 Pakete garantieren keine 95-Prozent-Intervallhalbbreite
-  von höchstens 0,02. Unzureichende Präzision ausdrücklich kennzeichnen.
-
-Abnahmekriterium: Vollständige Profile werden explizit gewählt und beim
-tatsächlichen Einsatz geprüft; Fit, native Rechnung und PHY-Empfang stimmen
-für ihren belegten Bereich überein. Für neue Daten gelten als vorgeschlagene
-Ziele selektive PER-MAE höchstens 0,05 und SNR-Verschiebung höchstens 1 dB
-bei PER 0,1/0,5, sofern die Kurven diese Übergänge einschließen. Abweichende
-Kriterien müssen vor Einsicht in neue finale Testdaten begründet werden.
-Das vorhandene Ergebnis 0,054886 wird nicht nachträglich als Bestehen von
-0,05 ausgegeben; Nullfehlerpunkte werden als obere Schranke behandelt.
-
-##### R3: Cachekorrektheit und begrenzte Speicherung (abgeschlossen)
-
-Die bestehenden Abnahmen umfassen neue ungecachte Antworten, inklusive
-Gültigkeitsränder, atomare Batchvalidierung, inaktive Linkbereinigung,
-Belegungs-/Kapazitätszähler, Dimensions-/Koeffizienten-/Antwort-/Snapshotbudgets
-und unabhängige Getterwerte (7.19–7.22). Die lokalen Zeit-/Link-/Tiefensweeps
-bleiben als getrennte historische Messungen erhalten.
-
-Die verbleibende Arbeit wird als eine vollständige Unterphase abgeschlossen:
-begrenzte knotenbezogene Mobilitätshistorien mit Arraywiederverwendung,
-historiesparende Look-ahead-Checkpoints mit Wiederherstellung bei Vorhersagefehlern
-und ein begrenzter nativer Pool für leere Batch-Staging-Slots. Feste Abnahme:
-unveränderte deterministische Trajektorien und Look-ahead-Werte, endliche
-Retention bei Langläufen, tatsächliche Allokationswiederverwendung, unabhängige
-Getterwerte, atomare Datenvalidierung bei Fehlern und sequenzielle CPU-Regressionen.
-R1/R2 bleiben geschlossen. Live-RT/PHY-Skalierung, allgemeine CFR-/Protobuf-
-Allokatorersetzung und GPU-Nachweise gehören nicht dazu. Methoden stehen in 5.26,
-die Abschlussabnahme in 7.24. Logische Bytes sind keine harte RSS-Schranke.
-
-##### R4: Live-CPU-Server-/PHY-Skalierung (abgeschlossen)
+Die verbleibende R3-Arbeit wurde als eine vollständige Unterphase abgeschlossen: begrenzte knotenbezogene
+Mobilitätshistorien mit Wiederverwendung ihrer Arrays, historiesparende Look-ahead-
+Checkpoints mit Wiederherstellung bei Fehlern und ein begrenzter nativer Pool für
+leere Batch-Staging-Slots. Feste Abnahme: unveränderte deterministische Trajektorien
+und Look-ahead-Werte; endliche Retention bei Langläufen; nachgewiesene Allokations-
+wiederverwendung, unabhängige Getterwerte und atomare Datenvalidierung bei Fehlern;
+sequenzielle CPU-Regressionen. R1/R2 bleiben geschlossen. Live-RT/PHY-Skalierung,
+allgemeine CFR-/Protobuf-Allokatorersetzung und GPU-Nachweise gehören nicht dazu.
 
 R4 wurde als eine vollständige Unterphase für den echten lokalen CPU-Server-/
 HE-SU-PHY-Pfad umgesetzt. Vorab festgelegter Umfang: getrennte frische Server-/
@@ -1040,85 +772,9 @@ mit festem Samplebudget, keine Leistungsgrenze oder Konvergenzfreigabe.
 MU-/MAC-Scheduling bleibt spätere Arbeit; R5 schließt die begrenzte
 physikalische CPU-Alterung ab, GPU-Abnahme bleibt R6. Weitere Optimierungen gehören nicht zu diesem R4-Abschluss.
 
-Die vollständige Methodik steht in 5.27, die Abnahme in 7.25 und im
-[R4-Vertrag](doc/r4-live-scaling.md).
-
-##### R5: Physikalische CSI-Alterung (abgeschlossen)
-
-R5 wurde als eine vollständige, vorab begrenzte CPU-Unterphase abgeschlossen:
-physikalische Bewegung und lokale Pfad-Dopplerentwicklung mit getrennten
-Sounding-/Sendekanälen, unabhängigen Kontrollen und reproduzierbaren Zeitstempeln.
-Feste Abnahme: zwei bestehende Arrayorientierungen in `simple_room`, stationär/1 m/s,
-fünf Alter, drei Seeds und zwei Wiederholungen bei 100000 Samples; alle nativen
-SVD/MMSE-/MI-, Pfadsummen-, Export- und CPU-Regressionen bestanden.
-Umfang, Formeln, Zahlen und Grenzen stehen in Abschnitt 7.26 sowie im
-[R5-Vertrag](doc/r5-physical-aging.md). Weitere Abstand-/Winkel-/NLOS-Matrizen,
-größere statistische Studien und PER-/Goodput-Erweiterungen sind spätere Arbeit.
-Die vorhandene 1x1-Kalibrierung wird nicht auf 2x2 oder MU übertragen.
-
-##### R6: CUDA-CI, Backendvergleich und Phase-5-Abschluss
-
-GPU-Zugang früh konfigurieren; finale Evidenz folgt den benötigten R1-R5-Paketen.
-
-- Einen unterstützten GPU-Runner mit exakten Abhängigkeiten, GPU-/
-  Treiberdaten und tatsächlicher CUDA-Mitsuba-Variante einrichten.
-  Torch-Gerätewahl und RT-Backend unabhängig prüfen.
-- Backendinterne Wiederholung und CPU-/GPU-Vergleich für analytische
-  Kontrollen sowie repräsentative RT-/Serverfälle automatisieren.
-  Physikalische Invarianten und vorab definierte numerische/statistische
-  Äquivalenzgrenzen verwenden. Fehlender GPU-Zugang ist ein offener Nachweis,
-  kein erfolgreicher CPU-Fallback eines GPU-Jobs.
-- PR-Prüfungen auf native, Vertrags-, Profil-, Policy- und eingefrorene
-  Daten beschränken; vollständige RT-/Referenz-/Live-Skalierungs-/Langläufe
-  bei relevanten Änderungen oder Freigabekandidaten ausführen.
-- Unabhängige Referenzdeckung zuerst für das gewählte SU-Profil, danach
-  für festes/ZF/RZF-DL-MU und ideales synchronisiertes UL-MU erweitern.
-  Automatisches Sounding, Triggersteuerung und Synchronisationsfehler sind
-  getrennte Erweiterungen der bestehenden Phase-4-Annahmen.
-- Ein Reproduktionspaket für eine saubere Maschine mit Manifesten, Befehlen,
-  gesperrten Versionen, Artefaktindex, Profilen, Rohdaten und Genauigkeits-/
-  Ressourcenberichten veröffentlichen. README, Modell und PDF nach
-  tatsächlichen Abnahmen konsistent aktualisieren.
-
-Abnahmekriterium: Für beide gewählten Backends liegen Nachweise derselben
-Freigaberevision vor. Alle kalibrierten Aussagen gehören zu bestandenen
-Profilen; offene Hardware-, Daten- oder Featuregrenzen bleiben benannt.
-
-##### Reihenfolge, Aufwand und nächstes Inkrement
-
-| Paket | Hauptabhängigkeit | Geschätzte Entwicklertage |
-| --- | --- | --- |
-| R1: Provenienz und CPU-CI | vorhandene Exporte | 3-5 |
-| R2: Profile und eine Erweiterung | R1-Identitäten, unabhängige Referenz | 5-9 |
-| R3: Cachekorrektheit und Speicherung | bestehender Cachebenchmark | 3-5 |
-| R4: Live-Skalierung und Optimierung | R3 für Cachevergleiche | 3-6 |
-| R5: Physikalische Alterung/Sensitivität | R1, für kalibrierte PER zusätzlich R2 | 4-7 |
-| R6: CUDA und Reproduktionsabschluss | GPU-Zugang, benötigte R1-R5-Pakete | 3-5 |
-
-Der geschätzte Restaufwand beträgt 21-37 Entwicklertage. Referenzbeschaffung/
-Lizenzen, unbeaufsichtigte Experiment-/Runnerwartezeit und vollständige
-Kalibrierung sämtlicher MCS-/FEC-/Längen-/SU-/MU-Kombinationen sind nicht
-enthalten. Die Schätzung ersetzt den früheren Gesamtphasenansatz 27-47 Tage;
-bereits geleistete Arbeit wird damit nicht rückwirkend bewertet.
-
-**Erstes R1/R3-Inkrement (implementiert):** portable Provenienz mit additivem
-versioniertem Laufmanifest, erste CPU-CI sowie Regression und Korrektur des
-deaktivierten Caches. Vertrag, Schemamigration und verbleibende Grenzen stehen
-in [der Inkrementdokumentation](doc/provenance-cpu-increment.md), Prüfergebnisse
-in Abschnitt 7.19. R1 ist nun durch die native Abnahme in 7.23 abgeschlossen. Der oben
-referenzierte ausführliche Phase-5-Plan war im aktuellen Checkout und im
-durchsuchten Arbeitsbereich nicht vorhanden; maßgeblich war der hier enthaltene
-Restplan. Weitere R3-/R4-/R5-/R6-Arbeit bleibt außerhalb der R1-Abnahme.
-R2 wird durch R1 nicht erweitert. Korrektheit, Provenienz, Kalibrierung und
-Optimierung bleiben getrennt prüfbare Änderungen.
-
-Die Prüfung vom 1. Oktober bestätigte acht Kalibrier-Unit-Tests sowie alle
-135 referenzierten binären Konfigurations-/Kanal-/Templatehashes der drei
-versionierten Studien. Native, RT-, GPU- und MATLAB-Läufe wurden dabei nicht
-erneut ausgeführt. Die alten Abnahmen in Abschnitt 7 bleiben historische
-Nachweise; die lokal gehaltenen Rohdaten von 5.2.4/5.2.5 waren in diesem
-Checkout nicht vorhanden. Der Restplan ist daher kein neuer wissenschaftlicher
-Abschlussnachweis.
+Weitere Profile, Szenen und Optimierungen sind Erweiterungen; sie dürfen
+bestehende Abnahmen nicht nachträglich verschärfen oder neue Inkrementketten
+begründen. Automatisches Sounding und Synchronisationsfehler bleiben spätere Arbeit.
 
 ## 4. Datenmodell und IPC-Vertrag der Unterphasen 1.1/1.2
 
@@ -2777,717 +2433,93 @@ nur den zusätzlichen AWGN-Diversityfaktor des ns-3-ErrorRateModel. Die
 matrixwertige gewünschte Leistung, Inter-User-Interferenz, Rauschverstärkung,
 SINR und PER bleiben zusätzlich vollständig im Gruppenergebnis erhalten.
 
-### 5.19 Kalibrierworkflow der Unterphase 5.1
-
-Das neue CPU-Beispiel `ns3_wifi_mimo_awgn_curve` ruft für jede SNR-Stützstelle
-dieselbe `TableBasedErrorRateModel::GetChunkSuccessRate`-Schnittstelle wie
-`HeSuMimoLinkAbstraction` auf und exportiert `PER=1-P_succ` als CSV. Jede Zeile
-trägt HE-MCS, BCC/LDPC, Paketlänge, NSS, RX-Antennenzahl, Bandbreite und
-Guard Interval. Ein Fit gilt immer nur für genau diese Konfiguration. Die
-Messreferenz enthält zusätzlich AWGN-Paketfehler und für jeden
-frequenzselektiven Punkt die tatsächlich gemessenen Paketfehler sowie die
-zugehörige flache Liste linearer Post-Processing-SINRs in derselben
-Subcarrier-/Stream-Reihenfolge wie `CalculateEffectiveSinr`.
-
-Die unabhängig gemessene AWGN-Kurve ist beim ersten 32-Byte-BCC-Lauf
-gegenüber dem vorhandenen ns-3-`TableBasedErrorRateModel` verschoben.
-Deshalb besitzt eine validierte PHY-Konfiguration \(c\) neben dem
-MCS-spezifischen EESM-Beta \(\beta_m\) einen expliziten AWGN-SNR-Offset
-\(\delta_c\) in dB. Für einen frequenzselektiven Referenzpunkt \(i\)
-mit \(n_i\) Paketversuchen und \(e_i\) Paketfehlern lautet die Vorhersage
-
-\[
-  \widehat p_i(\beta_m,\delta_c)
-  = F_{\mathrm{AWGN}}
-    \left(10\log_{10}\gamma_{\mathrm{EESM},i}(\beta_m)+\delta_c\right).
-\]
-
-wobei \(F_{\mathrm{AWGN}}\) die linear in dB-SNR interpolierte, unveränderte
-ns-3-AWGN-PER-Kurve ist. Zuerst wird \(\delta_c\) ausschließlich auf den
-AWGN-Trainingspunkten bestimmt. Danach wird \(\beta_m\) mit festem
-\(\delta_c\) auf den selektiven Trainingskanälen bestimmt. Für beide Schritte
-wird die binomiale negative Log-Likelihood minimiert:
-
-\[
-  L(\theta)=-\sum_{i\in\mathrm{Train}}
-  \left[e_i\ln\widehat p_i(\theta)
-  +(n_i-e_i)\ln(1-\widehat p_i(\theta))\right],
-  \quad \theta\in\{\delta_c,\beta_m\},\quad \beta_m>0.
-\]
-
-Die Implementierung sucht zunächst 601 äquidistante Offsets im Bereich
--3 bis +3 dB und danach 201 logarithmisch verteilte Betas im expliziten
-positiven Intervall. Jedes beste innere Intervall wird per
-Goldener-Schnitt-Suche verfeinert. EESM verwendet wie der C++-Kern den kleinsten SINR
-als Exponentialreferenz. SNR-Werte außerhalb der exportierten AWGN-Kurve
-werden nicht extrapoliert; ein Randoptimum wird zurückgewiesen. AWGN- und
-Frequenzselektiv-Referenzen müssen für dieselben PHY-Parameter vorliegen.
-Mindestens zwei AWGN-Trainingspunkte und ein AWGN-Validierungspunkt sowie
-zwei selektive Trainingskanäle und ein separater Validierungskanal sind
-erforderlich. Dieselbe `case_id` darf nicht in beiden Kanalgruppen liegen.
-
-Das JSON der Link-Level-Referenz besitzt `source`, `source_version`,
-`source_kind` (`link_level` oder `synthetic`), `phy`, `awgn` und `selective`.
-`phy` enthält die sieben CSV-Konfigurationsfelder. Jeder AWGN-Punkt enthält
-`snr_db`, `split`, `errors` und `trials`. Jeder selektive Punkt enthält `case_id`,
-`split` (`train`/`validation`), `sinr_linear`, `errors` und `trials`.
-`sinr_linear` enthält mindestens zwei nicht gleiche, endliche, nichtnegative
-Werte; alle selektiven Punkte besitzen dieselbe Länge. Die Fehlerzahlen
-stammen aus tatsächlichen Paketversuchen und sind keine gerundeten
-Modell-PER-Werte. Je Punkt werden mindestens 1000 Paketversuche verlangt;
-AWGN-Trainings-, AWGN-Validierungs-, selektive Trainings- und
-selektive Validierungsmenge benötigen jeweils wenigstens einen
-Punkt mit \(0<e_i<n_i\). Der Hash beider Eingabedateien wird im Ergebnis
-gesichert.
-
-Der erste reproduzierbare MCS-0-BCC-Lauf mit 32 Byte wird vom ns-3-Verzeichnis
-aus erzeugt und gefittet:
-
-    matlab -batch "addpath('contrib/sionna/tools'); generate_he_link_level_reference('contrib/sionna/data/he_mcs0_bcc_32_matlab_r2026a.json',1000)"
-    ./ns3 run 'ns3_wifi_mimo_awgn_curve --mcs=0 --packetSizeBytes=32 --ldpc=0 --snrStartDb=-10 --snrStopDb=15 --snrStepDb=0.25' > contrib/sionna/data/he_mcs0_bcc_32_ns3_awgn.csv
-    python contrib/sionna/tools/calibrate_eesm.py \
-      --model-awgn contrib/sionna/data/he_mcs0_bcc_32_ns3_awgn.csv \
-      --reference contrib/sionna/data/he_mcs0_bcc_32_matlab_r2026a.json \
-      --output contrib/sionna/data/he_mcs0_bcc_32_calibration.json
-
-`status=validated` erfordert standardmäßig einen mittleren absoluten
-AWGN-PER-Fehler von höchstens 0,05 auf den zurückgehaltenen AWGN-Punkten
-und einen mittleren absoluten PER-Fehler von höchstens 0,10 auf den
-zurückgehaltenen selektiven Punkten. Nur dann trägt das Ergebnis
-`beta_linear`, `beta_db` und `awgn_snr_offset_db`. Die Laufzeit wendet
-\(\gamma_{\mathrm{ErrorRateModel}}=
-\gamma_{\mathrm{EESM}}10^{\delta_c/10}\) an und erhält die ausgegebene
-physikalische EESM-SINR unverändert. `HeAwgnCalibrationKey` bindet den
-Offset an MCS, BCC/LDPC, Paketlänge, NSS, RX-Antennenzahl, Kanalbreite und
-Guard Interval; unpassende HE-Konfigurationen und alle Legacyrahmen
-behalten den unveränderten ErrorRateModel-Pfad. `SionnaMimoHelper` gibt
-Betas und exakte Offsetzuordnungen an den Spectrumadapter weiter; die
-direkten SU-/DL-MU-/UL-MU-Abstraktionen unterstützen denselben Vertrag.
-Für den versionierten 32-Byte-BCC-Fall lautet die explizite Helperkonfiguration:
-
-    SionnaMimoConfiguration config;
-    config.eesmBetaLinear.emplace(0, 1.0383687667246768);
-    config.awgnSnrOffsetsDb.emplace(
-        HeAwgnCalibrationKey{0, false, 32, 1, 1, 20, 800},
-        -0.49589212058827303);
-    SionnaMimoHelper mimo(config);
-
-Bei synthetischer Quelle oder überschrittenem Grenzwert lautet der Status
-`rejected`; nur `candidate_beta_linear` und
-`candidate_awgn_snr_offset_db` bleiben zur Diagnose sichtbar. Für andere
-PHY-Konfigurationen sind neue Link-Level-Referenzen erforderlich.
-
-### 5.20 Messvertrag und Formeln des Benchmarks aus Unterphase 5.2.1
-
-Feste Szene ist `simple_room/simple_room.xml` einschließlich ihrer
-OBJ-/Materialdateien. TX-Knoten 0 befindet sich bei (3,2,2) m und RX-Knoten 1
-bei (4,3,1) m. Beide verwenden ein vertikal polarisiertes 1x2-PlanarArray;
-TX verwendet `tr38901`, RX `dipole`, der ungenutzte vertikale Abstand ist
-0,5 Wellenlängen. Der native Seed ist 42, Run 1; der Server und sein
-`PathSolver` verwenden ebenfalls Seed 42. Mittenfrequenz ist 5180 MHz,
-Bandbreite 20 MHz, FFT-Länge 256, Tonabstand 78125 Hz. Jeder Request gilt
-bei Zeit null im P2P-/Positionsmodus mit fester Kohärenzdauer 5 ms.
-
-Der feste CPU-Vertrag nutzt `llvm_ad_mono_polarized` mit einem Dr.Jit-Worker,
-100000 Samples je Quelle, Tiefe 3, LOS, spekulare Reflexion und Refraktion.
-Diffuse Reflexion, Diffraktion, Kantendiffraktion und synthetische Arrays
-sind ausgeschaltet; tatsächliche Antennenelemente werden raygetraced.
-Alle Fälle verwenden dieselben Solveroptionen. Die normalen Serverdefaults
-werden durch diesen eigenständigen Workflow nicht verändert. Ein früher
-Vier-Worker-Probelauf zeigte trotz gleicher Seeds bis zu etwa 4,4 ppm Drift
-des schwachen Singularwerts. Die feste Ein-Worker-Ausführung beseitigte diese
-Drift und lieferte für alle zwölf Paare byteidentische Antworten.
-
-Die Arraykoordinaten vor der Knotendrehung lauten in Wellenlängen
-
-\[
-  \mathbf p_0=(0,-d/2,0),\qquad \mathbf p_1=(0,d/2,0),
-  \qquad d\in\{0{,}25,0{,}5,1\}.
-\]
-
-Orientierungen werden explizit in Grad konfiguriert und gemäß Abschnitt 6.5
-mit \(\pi/180\) in Sionna-Radiant umgerechnet. Die Validierung liest
-`scene.tx_array.normalized_positions`, `scene.rx_array.normalized_positions`
-sowie Position und Orientierung der tatsächlich platzierten Objekte `tx`
-und `rx1`; sie prüft daher mehr als die exportierten Konfigurationswerte.
-
-Die bestehende gemeinsame CFR-Normalisierung aus Abschnitt 4.3 bleibt
-unverändert. Der vom Raytracer erzeugte Wideband-Verlust darf sich durch
-Geometrie und Elementmuster ändern; nur die Eingabekontrollen bleiben fest.
-Bei 20 dBm Gesamtleistung, 290 K und 7 dB Rauschzahl gilt
-
-\[
-  N=1{,}3803\cdot10^{-23}\,290\,(20\cdot10^6)\,10^{7/10}
-    =4{,}0123746837392\cdot10^{-13}\ \mathrm W,
-  \qquad
-  \rho=\frac{10^{(20-L_\mathrm{wb}-30)/10}}{N}.
-\]
-
-`WifiLinkBudget` berechnet diese Größen. Ohne Precoding trägt jede
-TX-Antenne einen Stream, sodass \(N_s=2\). Der native Kern berechnet
-
-\[
-  E[k]=\left(I+\frac{\rho}{2}H[k]^H H[k]\right)^{-1},
-  \qquad \gamma_s[k]=\frac{1}{E_{s,s}[k]}-1,
-\]
-
-\[
-  \gamma_{\mathrm{MI},s}
-    =\exp\left(\frac1{256}\sum_k\ln(1+\gamma_s[k])\right)-1,
-  \qquad
-  \eta=\frac1{256}\sum_{k,s}\log_2(1+\gamma_s[k]).
-\]
-
-Die CSV-SINRs sind linear; nur die Zusammenfassung und Plots verwenden
-zusätzlich \(10\log_{10}\gamma_{\mathrm{MI},s}\). MI ist hier eine
-kalibrierungsfreie Diagnose. Die SVD von \(H[k]\) liefert
-\(\sigma_0[k]\geq\sigma_1[k]\geq0\), den Rang
-\(r[k]=\#\{i:\sigma_i[k]>10^{-12}\sigma_0[k]\}\) und den
-zusätzlichen Konditionsindikator
-\(\operatorname{median}_k(\sigma_1[k]/\sigma_0[k])\).
-Es wird kein SVD-Precoder auf den Kanal angewendet. Singularwerte gehören
-zur normalisierten CFR; rohe Singularwerte lassen sich durch Multiplikation
-mit \(10^{-L_\mathrm{wb}/20}\) rekonstruieren. Der numerische Rang allein
-beschreibt nicht die Nutzbarkeit einer schwachen Mode.
-
-Alle 256 FFT-Bins werden mit gleichem Gewicht ausgewertet, einschließlich
-DC und Guard-/Nulltönen. Das ist ein vollständig nachvollziehbarer
-Kanalsensitivitätsvergleich und keine auf belegte HE-Nutzdatentöne beschränkte
-PER-/Durchsatzprognose. \(\eta\) ist die ideale gaußsche spektrale Effizienz,
-keine gemessene 802.11-Nutzdatenrate. Auch der feste kleine Sampleumfang ist
-noch keine Konvergenzstudie.
-
-`init_seconds` misst das Laden und Initialisieren der Szene;
-`cfr_seconds` misst den Serveraufruf einschließlich Platzierung, Raytracing,
-CFR-Konvertierung und Antwortaufbau. `analysis_seconds` misst im nativen
-Programm Deserialisierung, Prüfung, Linkbudget, MMSE/MI und SVD, vor dem
-CSV-Schreiben. `native_process_seconds` enthält zusätzlich Prozessstart
-und CSV-Ausgabe; `case_seconds` umfasst einen einzelnen Lauf einschließlich
-Geometrieprüfung, Ergebnislesung und Wiederholungsvergleich, nach dem
-Konfigurationsexport. `sweep_seconds` enthält alle Fälle und
-Konfigurationsexporte, nach Python-/Sionna-Import und vor Plot-/Manifestausgabe.
-Diese Wanduhrzeiten enthalten gegebenenfalls JIT-Aufwand und sind weder
-bitidentisch noch unabhängige Performance-Stichproben. IPC-/Cache-Latenz und
-MAC-/PHY-Laufzeit werden in dieser Unterphase nicht gemessen.
-
-`data/sumimo_frozen_reference.json` definiert zusätzlich fünf analytische
-2x2-Töne: \(\sqrt2 I\), die Einsmatrix, eine phasengedrehte Diagonalmatrix
-mit Betrag 2, eine Nullmatrix und eine komplexe asymmetrische Matrix. Ihr
-gemeinsames mittleres Antennenpaarleistungsniveau ist eins. Die ersten vier
-Fälle liefern pro Stream die SINRs \(\rho\), \(\rho/(1+\rho)\),
-\(2\rho\) und null. Für den fünften Fall sind die Gram-Diagonalen 1,6 und
-2,4 und das Betragsquadrat des Kreuzterms 1,28. Mit \(a=\rho/2\) folgt
-
-\[
-  \gamma_0=1{,}6a-\frac{1{,}28a^2}{1+2{,}4a},\qquad
-  \gamma_1=2{,}4a-\frac{1{,}28a^2}{1+1{,}6a}.
-\]
-
-Damit entstehen unabhängige Referenzwerte für Rangverlust, Nulltöne,
-Frequenzselektivität, komplexe Koeffizienten und flache CFR-Reihenfolge.
-Die Tests vergleichen zusätzlich alle realen eingefrorenen Kanäle mit
-NumPy-SVD und unabhängig invertierter MMSE-Fehlerkovarianz. Diese NumPy-
-Rechnung ist ausschließlich Validierung; die exportierte Linkabstraktion
-stammt aus dem vorhandenen C++-Kern.
-
-### 5.21 Messvertrag und Konvergenzformeln der Unterphase 5.2.2
-
-Die Kontrollen, Normalisierung, MMSE-/MI-/SVD-Formeln und Laufzeitgrenzen
-aus Abschnitt 5.20 bleiben gültig. Nur Samples je Quelle werden variiert;
-die Seedmenge wird über alle Budgets gepaart. Pro Seed setzt der native
-Konfigurationsexport `RngSeedManager::SetSeed(seed)` bei Run 1 und schreibt
-denselben Seed in `SimInitMessage`. Der Server verwendet ihn für NumPy und
-`PathSolver`. Eine Konfigurationsdatei je Fall/Seed wird unverändert für
-alle drei Budgets verwendet. Die neue optionale native `--seed`-Angabe
-hat weiterhin den Default 42; der alte 5.2.1-Export bleibt bytekompatibel.
-`benchmark_sumimo.trace` akzeptiert ein explizites Samplebudget, ohne globale
-Kontrollen oder Serverdefaults zu verändern. Die Linkabstraktion verbleibt
-vollständig im bestehenden nativen ns-3-Programm.
-
-Die Fallauswahl beruht ausschließlich auf dem früheren 100000-Sample-Lauf
-mit Seed 42; die neuen Ergebnisse beeinflussen Auswahl und Toleranzen nicht:
-
-| Fall | Abstand / Lambda | TX/RX-Azimut / Grad | Auswahlgrund aus 5.2.1 |
-| --- | --- | --- | --- |
-| 03 | 0,25 | 90/90 | kleinstes medianes sigma1/sigma0: 0,030958 |
-| 05 | 0,5 | 0/90 | gemischte Orientierung, Verhältnis 0,256484 |
-| 06 | 0,5 | 90/0 | größtes medianes sigma1/sigma0: 0,515959 |
-| 10 | 1 | 90/0 | höchste MI-Effizienz: 39,902643 bit/s/Hz |
-
-Vor dem ersten Raytrace wurden folgende technische Toleranzen festgelegt
-und zusammen mit Zeitstempel in `plan.json` exportiert. Sie sind praktische
-Stabilitätskriterien, keine aus PER abgeleiteten Unsicherheitsgrenzen:
-
-| Metrik | Kriterium für gleiches Fall-/Seed-Paar |
-| --- | --- |
-| Wideband-Verlust | absolute Differenz höchstens 0,5 dB |
-| Numerischer Rang | identischer Rang an allen 256 Tönen |
-| Beide Singularwerte | höchstens 5 Prozent relativ plus 1e-7 absolut, an jedem Ton |
-| Post-MMSE-Stream-SINR | größte dB-Differenz über Töne/Streams höchstens 1 dB |
-| MI-Effective-SINR | größte dB-Differenz über beide Streams höchstens 0,5 dB |
-| MI-Effizienz | absolute Differenz höchstens 0,2 bit/s/Hz |
-
-Für Budget b und größeres Referenzbudget q bei gleichem Seed gilt mit
-den normalisierten Singularwerten aus Abschnitt 5.20
-
-\[
-  D_\sigma(b,q)=\max_{k,i}
-    \frac{|\sigma_i^{(b)}[k]-\sigma_i^{(q)}[k]|}
-    {10^{-7}+0{,}05|\sigma_i^{(q)}[k]|}\leq1.
-\]
-
-Die relative Toleranz bezieht sich auf q; der absolute Term hält Nullmoden
-definiert. Für SINR-Differenzen verwendet die Auswertung
-
-\[
-  g(x)=10\log_{10}(\max(x,10^{-12})),\qquad
-  D_\gamma(b,q)=\max_{k,s}|g(\gamma_s^{(b)}[k])-g(\gamma_s^{(q)}[k])|,
-\]
-
-\[
-  D_\mathrm{MI}(b,q)=\max_s|g(\gamma_{\mathrm{MI},s}^{(b)})
-    -g(\gamma_{\mathrm{MI},s}^{(q)})|,\quad
-  D_\eta(b,q)=|\eta^{(b)}-\eta^{(q)}|.
-\]
-
-Der Floor entspricht -120 dB und dient ausschließlich dem Vergleich
-verschwindender SINRs; die exportierten nativen SINRs bleiben unverändert.
-Es werden 10000/100000, 100000/1000000 und 10000/1000000 verglichen:
-36 Zeilen für vier Fälle und drei Seeds. Ein Paar besteht nur, wenn alle
-sechs Kriterien erfüllt sind. Der globale Konvergenzbefund verlangt alle
-zwölf 100000/1000000-Paare. 10000 Samples werden nur dann als ausreichend
-ausgewiesen, wenn zusätzlich beide Vergleiche mit 10000 für alle Paare
-bestehen. Andernfalls sind bei bestandenem oberen Schritt 100000 Samples
-das kleinste unterstützte Budget. Wenn dieser Schritt scheitert, wird kein
-ausreichendes Budget angegeben; 1000000 wird nicht tautologisch als
-konvergiert bezeichnet.
-
-Verglichen werden gepaarte Seeds und sämtliche Tonwerte, keine nur über
-Seeds gemittelten Singularwerte oder SINRs. Die Plots zeigen zusätzlich
-Median und Min-/Max-Spanne über Seeds und Wiederholungen. Laufzeiten sind
-separat exportierte Wanduhrdiagnosen und kein Konvergenzkriterium.
-`plan.json` und `manifest.json` dokumentieren Solveroptionen, feste Kontrollen,
-Seed-/Budgetmatrix und Toleranzen. Das Manifest enthält beobachtete reale
-Array-/Radio-Geometrie und SHA-256-Hashes der Konfigurationen, Kanalantworten,
-Szenendateien, relevanten Quellen und nativen Binärdatei.
-
-1000000 Samples sind eine endliche numerische Referenz. Der Befund ist auf
-die vier statischen Links dieser Szene, drei Seeds, Tiefe 3 und die
-dokumentierten aktivierten Mechanismen begrenzt. Ein Plateau belegt weder
-asymptotische Konvergenz noch Vollständigkeit aller physikalischen Pfade.
-Diffuse Reflexion, Diffraktion und andere Szenen werden nicht erfasst.
-Die 256 FFT-Bins einschließlich DC/Guards und gaußsche MI-Effizienz bleiben
-derselbe Kanalvergleich wie in 5.2.1; daraus entsteht keine 2x2-PER- oder
-Wi-Fi-Durchsatzkalibrierung.
-
-### 5.22 Messvertrag und Formeln der Unterphase 5.2.3
-
-Dieser Benchmark isoliert Datenhaltung und Transport. Sein eingefrorener
-Anker ist der 100000-Sample-/Seed-42-Kanal von Fall 05 aus Unterphase 5.2.2.
-Die 256x2x2-CFR wird für jede gewünschte Transportdimension deterministisch
-mit sc/rx/tx-Indizes modulo 256/2/2 wiederholt. Für Linknummer l gilt
-
-\[
-  H_l[k,r,t]=\mathrm i^{(42+l-1)\bmod4}
-    H_\mathrm{Anker}[k\bmod256,r\bmod2,t\bmod2],
-  \quad L_l=L_\mathrm{Anker}+(l-1)/8.
-\]
-
-Die vier Phasen werden mit exakten Vorzeichen-/Real-/Imaginärtauschoperationen
-erzeugt. Der Delay in ns erhöht sich um l-1; IDs sind TX 0 und RX 1 bis L.
-Alle Radios behalten die Ankerpositionen; der Frequenzvektor enthält
-(k-Nsc/2)*78125 Hz in der dokumentierten Reihenfolge. Die größere CFR ist
-eine Transportfixture, keine neue physikalische Array-/Bandbreitensimulation.
-Rang, SINR, PER und Wi-Fi-Durchsatz werden hier nicht ausgewertet.
-
-Alle L Links kommen in einem gemeinsamen `ChannelStateResponse`-Snapshot
-innerhalb eines `Wrapper`. Die größeren Antworten werden bei Bedarf aus
-einer der 15 gespeicherten Einzel-Link-Vorlagen rekonstruiert. Manifest und
-Tests prüfen sowohl Vorlagenhashes als auch SHA-256 der vollständigen
-rekonstruierten Batchantwort. Der native Prüfer vergleicht jedes gecachte
-komplexe Element bitgenau und alle Metadaten exakt mit dieser Antwort.
-Zusätzlich berechnet NumPy unabhängig eine geordnete, nichtkryptografische
-IEEE-754-Bitprüfsumme über sämtliche Koeffizienten. Dabei wird mit
-globalem flachem Index j das XOR der beiden Produkte
-bits(real_j)*(2j+1) und bits(imag_j)*(2j+3), jeweils modulo 2^64, gebildet.
-
-Mit K=Nsc*Nrx*Ntx pro Link und double-Präzision gilt für den logisch
-gespeicherten Nutzdatenspeicher des Caches auf der Referenzplattform
-
-\[
-  B_\mathrm{CFR}=16LK,\qquad B_f=4LN_\mathrm{sc},\qquad
-  B_\mathrm{logisch}=L N_\mathrm{sc}(16N_\mathrm{rx}N_\mathrm{tx}+4).
-\]
-
-Dieser Wert enthält komplexe Koeffizienten und int32-Frequenzen, aber
-keine CacheEntry-/Map-/Vektorköpfe, Allokatorausrichtung oder Socketpuffer.
-Die tatsächliche serialisierte Größe B_wire ist die Länge des
-kanonischen `Wrapper.SerializeToString`-Ergebnisses; der native C++-Encoder
-muss exakt dieselben Bytes erzeugen. Die doppelt gepackten CSI-double-
-Arrays tragen ebenfalls 16LK Bytes bei. Protobuf-Tags, Längenpräfixe,
-Positionen, IDs, Delay, Verlust und die gepackten Frequenz-Varints kommen
-hinzu. Negative int32-Frequenzen verwenden längere Wire-Varints; deshalb
-ist Wiregröße nicht identisch mit logischem Cache-Nutzdatenspeicher.
-
-Die native glibc-Messung verwendet
-
-\[
-  A=\mathtt{mallinfo2().uordblks}+\mathtt{mallinfo2().hblkhd},\qquad
-  \Delta A_\mathrm{fill}=A_\mathrm{live}-A_\mathrm{before},\quad
-  \Delta A_\mathrm{release}=A_\mathrm{live}-A_\mathrm{released}.
-\]
-
-Der Socket wird vorher mit vollständigen Antworten aufgewärmt. Ein eigener
-Cache wird anschließend einmal mit dem Batch befüllt, an allen Links
-validiert und wieder zerstört. Zwischen den beiden Live-/Release-
-Heapschnappschüssen erfolgen keine weiteren Benchmarkallokationen.
-Delta A_release misst die beim Löschen dieses Caches sichtbare Änderung
-der glibc-Buchhaltung einschließlich Verwaltungsdaten und Allokatorrundung.
-Kleine freigegebene Blöcke im Threadcache können weiter in uordblks enthalten
-bleiben; das Release-Delta kann deshalb kleiner als die logische
-Payloadgröße sein. Es ist keine vollständige Zählung lebender Cacheobjekte.
-ZMQ-Hintergrundaktivität kann weitere kleine Störungen verursachen.
-Beide Deltas werden vorzeichenbehaftet exportiert und müssen nicht
-bitidentisch wiederholbar sein.
-
-RSS und Peak-RSS stammen aus `VmRSS` beziehungsweise `VmHWM` in
-`/proc/self/status` des aktuellen Programmadressraums. Der zusätzliche
-`getrusage`-Lebenszeitpeak wird separat als Diagnose exportiert; er kann
-Speicherzustände vor exec beziehungsweise aus dem Elternprozess enthalten.
-Baseline-, Live- und
-Release-RSS werden getrennt exportiert. RSS enthält Fixture, Protobuf,
-Sockets, Bibliotheken und behaltene freie Allokatorseiten. Ein nach
-Cachefreigabe hoher RSS-Wert ist daher keine Messung des verbleibenden
-Cacheinhalts. Weder Payloadgröße noch RSS werden als alleinige genaue
-Cacheallokationsgröße ausgegeben.
-Die Prozesspeaks umfassen sämtliche Messphasen einschließlich Fixture,
-temporärer Dekodierungen und Expirationsprobe; der logische Cachebedarf
-bezieht sich auf genau einen Snapshot je Link im separaten Speicherprüfcache.
-
-Es gelten 16 Zeitstichproben pro Serialisierungs-/Parse-/CFR-Dekodierungs-
-und Roundtripoperation, drei Warmups, 128 gemessene Getter-Hits und fünf
-frische Cache-Misses je Prozess. Die drei Prozesse je Fall erzeugen
-insgesamt 135 Läufe und 30915 Zeitstichproben. C++ misst mit steady_clock,
-Python mit perf_counter_ns. Zusammenfassungen enthalten Median, 95.
-Perzentil, Minimum und Maximum pro Operation/Prozess; die Plots zeigen
-Median und Min-/Max-Spanne der drei Prozessmediane.
-
-Die Timergrenzen sind bewusst explizit:
-
-- C++-Serialisierung und Parse: vollständiger Response-Wrapper,
-  einschließlich lokaler Ergebnisfreigabe; einzelne Matrixdekodierung:
-  `DeserializeChannelMatrix` nur für einen RX-Kanal einschließlich Freigabe.
-- Python-Serialisierung und Parse: vollständiger Wrapper; Freigabe des
-  lokalen Ergebnisses erfolgt nach dem Timer. Diese Werte sind daher kein
-  identischer Mikrobenchmarkvertrag zu den C++-Werten.
-- Roundtrip: tatsächliches Send/Recv über lokalen ipc://-Transport zu
-  einem zweiten Prozess. Requestserialisierung, vollständiger Bytevergleich,
-  Socketaufbau und Warmups liegen außerhalb der gemessenen Stichproben.
-  Der REP-Prozess prüft Requests und sendet vorbereitete Antwortbytes.
-- Hit: öffentlicher `GetPropagationChannelMatrix`-Aufruf einschließlich
-  CFR-Kopien und sofortiger Rückgabewertfreigabe. Der innere Cachepfad
-  kopiert CacheEntry-Werte; gemessen wird daher mehr als reine Map-Suche.
-- Miss: derselbe Getter auf einem neu angelegten Cache, einschließlich
-  Requestserialisierung, Send/Recv, Protobuf-/CFR-Dekodierung und Einfügen
-  sämtlicher L Links. Cachekonstruktion und Cachezerstörung erfolgen
-  außerhalb des Miss-Timers. Dadurch werden keine doppelten alten Snapshots
-  in einem wiederholt deaktivierten Cache akkumuliert.
-
-Alle Getter bleiben echte Produktionsaufrufe. Die Optimierung für weit
-entfernte Radios wird ausgeschaltet, damit auch Delay-/Loss-Prüfungen
-den Cache verwenden. Die anfängliche Gültigkeit ist [0,5000000] ns.
-Am Zeitpunkt 5000000 muss ein Hit ohne IPC erfolgen; bei 5000001 muss
-ein Miss einen neuen Snapshot [5000001,10000001] anfordern. Nur Zeitfelder
-ändern sich bei dieser vorbereiteten Antwort. Das prüft den inklusiven
-Gültigkeitsrand und die produktive Expiration ohne Raytracing.
-
-Die erwartete Requestzahl je Prozess ist
-
-\[
-  R=(3+16)_\mathrm{Roundtrip}+1_\mathrm{memory}+1_\mathrm{warmcache}
-     +5_\mathrm{coldmiss}+1_\mathrm{expiry}=27.
-\]
-
-26 Requests gelten bei Zeit null, genau einer bei 5000001. Danach muss
-der bestehende Helper-Closepfad genau ein ACK erhalten. Alle 3645
-Channel-Requests werden exportiert. Der Zeitcache hat 132 Hits
-(3 Warmups, 128 Stichproben, ein Randhit) und zwei Misses; seine Hitquote
-ist 132/134. Der separate Speicherprüfcache hat 4L Validierungshits
-(CFR/Frequenz/Loss/Delay) nach einem einzigen Batchmiss: Quote 4L/(4L+1).
-
-Vor der ersten Sweepmessung wird `plan.json` mit folgenden Abnahmekriterien
-und Zeitstempel geschrieben: vollständige 45x3-Matrix, exakte Fixture-/
-Kanal-/Metadaten-/Byteerhaltung, exakte logische Speicherformeln, erwartete
-Requestfolgen und Hit-/Misszahlen mit 1e-12 Quotentoleranz, korrekte
-Expiration und identische deterministische Ergebnisse aller drei Prozesse.
-Jede Operation muss vollständig mit endlichen positiven Zeitstichproben
-vorliegen; RSS und Live-Heap-Schnappschüsse müssen positiv sein.
-Allokatordeltas und Zeitmediane sind Beobachtungen ohne starre
-Performance-Abnahmegrenze. Messungen erfolgen sequenziell; es gibt keine
-gleichzeitig ausgeführten Raytraces, Regressionen oder Benchmarkfälle.
-
-### 5.23 Messvertrag der Unterphase 5.2.4
-
-Die beiden 1x2-Arrays haben unabhängige horizontale Abstände d_tx und
-d_rx in Wellenlängen. Ihre normierten lokalen Elementkoordinaten sind
-
-\[
-  q_{e,0}=(0,-d_e/2,0),\quad q_{e,1}=(0,d_e/2,0),\qquad
-  x_{e,i}=p_e+\lambda R_z(\phi_e)q_{e,i},\quad e\in\{tx,rx\}.
-\]
-
-Die Zentren p_e bleiben bei (3,2,2)/(4,3,1) m. Elevation und Roll sind
-null, Azimute werden in Grad übergeben und am tatsächlichen Radioobjekt
-in Radiant geprüft. Beide tatsächlichen PlanarArrays müssen die jeweiligen
-lokalen Koordinaten liefern; der RX-Abstand wird unabhängig vom TX geprüft.
-Die Produktion unterstützt diese Geometrie bereits. Der Benchmark nutzt
-`spacingLambda` als bisherigen gemeinsamen Default; `txSpacingLambda`
-und `rxSpacingLambda` überschreiben ihn einzeln.
-
-Die vorab fixierte kleine Matrix lautet:
-
-| Fall | d_tx / lambda | d_rx / lambda | TX-Azimut / Grad | RX-Azimut / Grad |
-| --- | --- | --- | --- | --- |
-| 00 | 0,5 | 0,5 | 90 | 0 |
-| 01 | 1 | 0,25 | 90 | 0 |
-| 02 | 0,25 | 1 | 90 | 0 |
-| 03 | 1 | 0,25 | 45 | -45 |
-| 04 | 0,25 | 1 | 45 | -45 |
-
-Fall 00 entspricht Fall 06 aus 5.2.2. Die Fälle 01/02 isolieren die
-vertauschten Abstände bei festen Orientierungen; 03/04 ergänzen ausgewählte
-neue Winkel. TX verwendet weiterhin tr38901, RX dipole, beide V-Polarisation.
-Szene, Frequenz, Positionen, 256 FFT-Bins, 20 dBm Gesamtleistung, 290 K,
-7 dB Rauschzahl und sämtliche Solveroptionen aus Abschnitt 5.20 bleiben fest.
-Die drei Seeds sind 42/43/44, Run ist eins. Zwei Wiederholungen pro Seed
-ergeben 30 Traces bei 100000 Samples und zwölf weitere für 03/04 bei
-1000000, insgesamt 42. Der Runner schreibt `plan.json` vor dem ersten Trace.
-
-Vergleiche und Formeln für Rang, Singularwerte, Open-Loop-MMSE, MI-SINR
-und Linkbudget werden unverändert aus 5.20/5.21 übernommen. Jeder Trace
-wird zusätzlich mit der bereits vorhandenen unabhängigen NumPy-SVD-/
-MMSE-/MI-Referenz geprüft; diese Prüfung wird mit den bestehenden Tests
-geteilt. Die CFR und alle deterministischen nativen Felder müssen innerhalb
-jedes Falls/Seeds/Budgets wiederholbar sein, die CFR zusätzlich byteidentisch.
-Die sechs gepaarten 100000/1000000-Spotchecks verwenden vorab dieselben
-Toleranzen wie 5.2.2: 0,5 dB Verlust, unveränderter Rang auf jedem Ton,
-5 Prozent plus 1e-7 Singularwertfehler, 1 dB Ton-SINR, 0,5 dB MI-SINR
-und 0,2 bit/s/Hz MI-Effizienz. Ein bestandener Spotcheck belegt nur die
-ausgewählten Fälle und Seeds, nicht die Konvergenz der gesamten Matrix.
-PER und Wi-Fi-Durchsatz bleiben wegen der ausschließlich dokumentierten
-1x1-Kalibrierung außerhalb dieses Messvertrags.
-
-### 5.24 Messvertrag und Formeln der Unterphase 5.2.5
-
-Die Auswahl verwendet ausschließlich die früheren 5.2.1-Ergebnisse:
-Fall 03 hat das schwächste mediane zweite Eigenmodeverhältnis (0,030958),
-Fall 06 das stärkste (0,515959). Die kleine Matrix wurde vor dem ersten
-Trace zusammen mit Toleranzen und UTC-Zeitstempel in `plan.json` fixiert:
-
-| Fall | Gemeinsamer Abstand / lambda | TX/RX-Azimut / Grad | CSI-Alter / ms |
-| --- | --- | --- | --- |
-| 03 | 0,25 | 90/90 | 0; 1; 2,5; 5 |
-| 06 | 0,5 | 90/0 | 0; 1; 2,5; 5 |
-
-Szene, initiale Zentren (3,2,2)/(4,3,1) m, TX-tr38901-/RX-dipole-1x2-Arrays,
-V-Polarisation, 5180 MHz, 256 FFT-Bins, 20 dBm Gesamtleistung, 290 K,
-20 MHz, 7 dB Rauschzahl und Solveroptionen entsprechen Abschnitt 5.20.
-Elevation/Roll sind null. Beide Budgets 100000/1000000 werden für beide
-Fälle und alle Seeds 42/43/44 bei Run 1 mit zwei frischen RT-Wiederholungen
-gerechnet: 24 initiale RT-CFRs. Dieselbe CFR wird anschließend für alle
-Alter und beide CSI-Varianten genutzt; es entstehen 192 Auswertungszeilen
-und 49152 Tonzeilen. Die größeren Budgets prüfen diese repräsentative
-Matrix, keine anderen Geometrien oder Evolutionsmodelle.
-
-Ein RT-Request bei t=0 liefert die normalisierte initiale Matrix H_0[k]
-und den Wideband-Verlust. Explizite Entwicklung für t in Millisekunden:
-
-\[
-  R(\theta)=\begin{pmatrix}\cos\theta&-\sin\theta\\
-                                  \sin\theta&\cos\theta\end{pmatrix},
-  \qquad H[k,t]=H_0[k]R(\omega t),
-  \quad \omega=9\pi/180\ \mathrm{rad/ms}.
-\]
-
-Dies ist eine kontrollierte analytische TX-Basismischung auf realen
-frequenzselektiven RT-Kanälen. Es ist kein aus Bewegung, Pfad-Doppler oder
-gemessener Kohärenzzeit abgeleitetes Modell. Die Geometrie bleibt konstant;
-die serverseitigen 5-ms-Gültigkeitsmetadaten steuern diese analytische
-Entwicklung nicht. Der Sendekanal wird für alle Alter bei t_tx=5 ms
-ausgewertet. Verzögertes CSI stammt exakt aus H[k,5-a], frisches aus
-H[k,5]. Relative Rotationen sind 0/9/22,5/45 Grad. Der CSI-Zeitpunkt
-beträgt 5/4/2,5/0 ms; frisches CSI hat stets Zeitpunkt 5 ms und Alter null.
-`age_ms` bezeichnet die angefragte Vergleichsachse, `csi_age_ns` das
-tatsächliche Alter der jeweiligen frischen/verzögerten Variante.
-
-MimoCsiAgingModel::Select verwendet kontinuierliche Abtastung T_u=0 und
-Feedbackverzögerung d_fb=a (frisch: null), prüft t_csi=t_tx-d_fb und erzeugt
-unquantisiertes Gleichleistungs-SVD-W[k]=V[k,t_csi]. Der Empfänger kennt
-H[k,t_tx] und den gewählten Precoder perfekt. CalculateLink erhält den
-Sendekanal getrennt und berechnet mit dem festen Linkbudget aus 5.20
-
-\[
-  G[k]=H[k,t_{\mathrm{tx}}]W[k],\qquad
-  E[k]=(I+\rho G[k]^H G[k]/2)^{-1},\qquad
-  \gamma_s[k]=1/E_{s,s}[k]-1.
-\]
-
-MI-SINR und Effizienz verwenden dieselben Mittelungen wie Abschnitt 5.20.
-Die Kanalrotation ist unitär. Deshalb bleiben Wideband-Verlust,
-Singularwerte, Rang und mittlere Antennenpaarleistung unverändert.
-Für zwei Streams gilt W^H W=I und ||W||_F^2=2, damit bleibt die gesamte
-TX-Kovarianz P I/2 für frisches und verzögertes CSI gleich. Die gemeinsame
-gaußsche MI
-
-\[
-  C=\frac1{256}\sum_{k,i}\log_2(1+\rho\sigma_i[k]^2/2)
-\]
-
-ist ebenfalls invariant. Frisches SVD liefert eta=C, verzögertes CSI kann
-die Summe der getrennten MMSE-Stream-MI eta verringern. Dies misst den
-Verlust bei separater Streamdetektion, keinen Verlust der gemeinsamen
-MIMO-Kapazität. Stream null folgt der stärksten CSI-Zeitpunkt-Mode;
-Rotation kann Stream eins verbessern. Deshalb werden Differenzen mit
-Vorzeichen exportiert, nicht auf positive Werte begrenzt:
-
-\[
-  D_{\gamma,s}=g(\gamma^{\mathrm{fresh}}_{\mathrm{MI},s})
-                -g(\gamma^{\mathrm{delayed}}_{\mathrm{MI},s}),\qquad
-  D_\eta=\eta^{\mathrm{fresh}}-\eta^{\mathrm{delayed}},
-  \quad g(x)=10\log_{10}(\max(x,10^{-12})).
-\]
-
-Ton-SINR-Differenzen verwenden dieselbe Formel ohne MI-Kompression.
-Zusätzliche Kanaldiagnosen je Ton sind
-
-\[
-  c[k]=\frac{|\operatorname{tr}(H_{\mathrm{csi}}[k]^H H_{\mathrm{tx}}[k])|}
-                 {\|H_{\mathrm{csi}}[k]\|_F\|H_{\mathrm{tx}}[k]\|_F},\qquad
-  e[k]=\frac{\|H_{\mathrm{tx}}[k]-H_{\mathrm{csi}}[k]\|_F}
-                  {\|H_{\mathrm{tx}}[k]\|_F}.
-\]
-
-Bei dieser Rotation sind beide Normen identisch. Der native CSV-Export
-enthält initiale/CSI-/Sendezeiten, tatsächliches Alter, T_u/d_fb,
-Rotationsrate, c/e, Rang, Singularwerte, W-Leistung, Ton-/MI-Stream-SINR,
-Effizienz, Verlust, Referenz-SNR, RX-/Rauschleistung und Analysezeit.
-Der Runner ergänzt Konfiguration, Seed, Samplebudget, Wiederholung,
-MI-/SINR-Verlust, Init-/CFR-/native Prozesszeiten sowie Tonmediane.
-Die initialen CFRs und die dokumentierte Formel ermöglichen natives Replay;
-entwickelte CFRs werden nicht nochmals als Fixtures gespeichert.
-
-Alle 48 gepaarten Fall-/Seed-/Alter-/CSI-Varianten vergleichen 100000 mit
-1000000 Samples anhand sämtlicher sechs Kriterien aus 5.21:
-0,5 dB Verlust, identischer Tonrang, 5 Prozent plus 1e-7 Singularwertfehler,
-1 dB Ton-SINR, 0,5 dB MI-SINR und 0,2 bit/s/Hz Effizienz. Diese Grenzen
-gelten für Budgetstabilität, nicht als Obergrenzen für Alterungsverluste.
-Jeder native Export wird unabhängig mit NumPy-SVD, MMSE-Inversion,
-MI und Linkbudget geprüft: SINR 1e-8 relativ/absolut, Singularwerte 1e-10,
-MI 1e-9 relativ plus 1e-8 absolut. Wiederholungen verlangen byteidentische
-initiale CFRs und die bisherigen deterministischen Feldtoleranzen
-1e-6 relativ/1e-7 absolut. Ein analytischer Diagonalanker prüft frisches
-SVD und 45-Grad-MMSE-Mischung; Rate null bei Alter 5 ms muss die
-statischen frischen Linkmetriken exakt reproduzieren.
-
-Frisches CSI und verzögertes Nullalter teilen dieselbe native Auswertung;
-deren Zeitwerte werden auf der Vergleichsachse wiederverwendet.
-`analysis_seconds` umfasst Lesen, Prüfungen, Entwicklung, SVD-Auswahl,
-MMSE/MI und Singularwertdiagnostik vor CSV-Ausgabe. `native_process_seconds`
-misst auch CSV-Lesen im Runner; Init-/CFR-Zeiten gehören zum geteilten
-initialen Trace und dürfen nicht über die acht Vergleichszeilen aufsummiert
-werden. `trace_and_evaluation_seconds` zählt jeden vollständigen Trace mit
-Auswertungen einmal; `sweep_seconds` umfasst auch Konfigurationsexporte,
-aber keine Imports/Plots/Manifestausgabe. 120 native Analysen einschließlich
-24 statischer Kontrollen erzeugen bei zwei Wiederholungen 192 Exportzeilen.
-Die beiden lokalen Plots zeigen SINR-/MI-Verlust sowie Korrelation und
-native Laufzeit gegen Alter, als Median und Min-/Max-Spanne über Seeds und
-Wiederholungen bei 100000 Samples. Das sind keine Konfidenzintervalle.
-
-### 5.25 Eigentums- und Messvertrag des vierten R3-Inkrements
-
-Das Inkrement reduziert ausschließlich CFR-/Frequenzkopien in der nativen
-Datenhaltung. Sionna, Protobuf, Kanalnormalisierung, MMSE/EESM/PER,
-inklusive Zeitgültigkeit und die Reihenfolge überlappender Einträge bleiben
-semantisch identisch. Für einen Link gelten weiterhin
-\[
- C=N_{\mathrm{sc}}N_{\mathrm{rx}}N_{\mathrm{tx}},\qquad
- B_H=16C,\quad B_F=4N_{\mathrm{sc}},\quad B_{\mathrm{payload}}=B_H+B_F.
-\]
-Die Bytefaktoren beziehen sich auf die verwendete Plattform mit
-`complex<double>` und `int`; der Produktionscode verwendet `sizeof`.
-
-Zuvor kopierten die beiden Cache-Suchschleifen jeden besuchten `CacheEntry`,
-auch bei skalaren Delay-/Loss-Zugriffen und noch nicht passenden Zukunftseinträgen.
-Die Schleifen verwenden nun konstante Referenzen. Die private Suche liefert
-entweder eine Referenz auf den gespeicherten Eintrag oder verschiebt bei
-abgeschaltetem Cache das vollständig validierte Ergebnis in einen lokalen
-Scratch-Eintrag des aufrufenden Getters. Nach einem Miss wird die Referenz erst
-nach allen Cacheeinfügungen erneut ermittelt, weil Linkvektoren beim Einfügen
-reallokieren können. Keine solche Referenz verlässt den öffentlichen Getter.
-Der positionsaktualisierende Loss-Aufruf übernimmt seine skalaren Positions-/
-Loss-Werte vor den Settern; ein Cachewechsel in einer abgeleiteten
-Mobility-Implementierung kann damit keinen späteren Eintragszugriff invalidieren.
-
-Öffentliche Ergebnisse behalten ihre bisherige Wertsemantik. Ein gecachter
-Loss-/Delay-Aufruf benötigt keine CFR-/Frequenzkopie; Frequency kopiert nur
-\(B_F\), CSI und Matrix nur \(B_H\). Die zurückgegebenen Werte bleiben nach
-Mutation, Ablaufbereinigung, Cacheabschaltung und einer späteren Antwort gültig.
-Dies ist eine logische Kopierbeschreibung, keine harte Allokator-/Latenzgrenze.
-Der ungecachte öffentliche Vektor-/Matrixpfad erstellt weiterhin ein unabhängiges
-Ergebnis aus dem getterlokalen Scratch; Protobuf-/Transportkopien bleiben bestehen.
-
-Der Koeffizientenkonstruktor von `MimoChannelMatrix` nimmt seinen Vektor als
-Wert entgegen und verschiebt dessen Speicher direkt in die Matrix. Rvalues
-übertragen die Allokation; Lvalues erzeugen weiterhin eine unabhängige Kopie.
-Die bisherige zusätzliche Nullmatrixallokation entfällt. Der Deserialisierer
-füllt einen einmalig auf die vorgeprüfte Länge angelegten Koeffizientenvektor
-über indizierte Schreibzugriffe und verschiebt ihn; der Cachekonstruktor
-verschiebt die Matrix weiter. Der geplante Batch reserviert seine Eintragszahl
-innerhalb der bestehenden Überlauf-/Budgetprüfung. Ein Neuaufbau der nativen
-Bibliothek und ihrer Verbraucher ist wegen der Konstruktor-Signatur erforderlich.
-
-Ein MU-Snapshot wird weiterhin vollständig einschließlich Richtung, RX-Geometrie,
-Normalisierung und gemeinsamer Frequenz-/TX-Dimension geprüft. Seine einmalig
-dekodierten, stabil nach Nutzer-ID sortierten Matrizen und Frequenzen werden
-anschließend anhand der expliziten Nutzer-ID in die ursprüngliche
-Antwortreihenfolge überführt und verschoben. Eine abweichende Wire-Reihenfolge
-darf keine Kanäle vertauschen. Ein ungültiger späterer Nutzer oder Snapshot
-veröffentlicht weiterhin kein gültiges Präfix. `bad_alloc` während der eigentlichen
-Cacheübernahme besitzt unverändert keine vollständige Rollbackgarantie.
-
-`benchmark_cache_ipc.py --copy-profile` erweitert denselben Frozen-REP-/
-Produktionscachepfad. Die zwei vorab festgelegten Fälle sind 64 Töne/TX 2/RX 2/
-ein Link und 1024 Töne/TX 8/RX 8/16 Links, jeweils drei unabhängige native und
-Python-Prozesse. Synthetische Tensorgrößen bleiben Transportfixtures, keine
-physikalischen HE-Ressourcengitter. `cache_hit` misst weiterhin den Matrixgetter;
-`cache_hit_loss`, `cache_hit_delay`, `cache_hit_frequency` und `cache_hit_csi`
-messen separat. Alle Getter verwenden dieselbe Round-Robin-Linkreihenfolge,
-drei Warmups und 128 Messungen, einschließlich Ergebnisdestruktion.
-Bitprüfung und komplette Linkvalidierung liegen außerhalb der Timer.
-
-Jeder Prozess verlangt exakt
-\[
- N_{\mathrm{hit}}=5(3+128)+1=656,\qquad N_{\mathrm{miss}}=2,
- \qquad r_{\mathrm{hit}}=656/658.
-\]
-Die Speicherprüfung benötigt fünf Getter je Link plus einen initialen Miss;
-ihr Trefferverhältnis ist \(5L/(5L+1)\). Alle 27 tatsächlichen Kanal-RPCs
-(26 bei t=0, einer nach dem inklusiven 5-ms-Endrand) sowie ein bestätigter
-Close werden geprüft. Der vollständige Export enthält 4446 positive
-Zeitstichproben und 162 Kanalrequests. `plan.json` steht vor der ersten Messung;
-`run.json` trägt Quellen, Eingänge, Backend und den getrennten Ausführungs-/
-Validierungsstatus. Ohne die Option bleiben bestehende CSV-/JSON-Schemata,
-Messmatrix und historische Referenzen erhalten. Neue Messungen liegen lokal.
-
-Vergleichszeiten verwenden die monotone Prozessuhr. Drei Prozessmediane pro
-Operation werden nochmals durch ihren Median zusammengefasst; p95 und
-Prozessstreuung stehen separat im Export. Die vorher festgelegten lokalen
-Vergleichsziele sind mindestens 20 Prozent Medianverbesserung für den großen
-Matrix- und skalaren Fall sowie höchstens zehn Prozent Regression beim kleinen
-Default-Matrixfall. Nichterfüllung wird als solche berichtet. Diese Ziele
-belegen weder universelle Latenzgrenzen noch Live-RT-/PHY-/GPU-Skalierung.
-
-### 5.26 R3-Vertrag für Mobilitätshistorien und nativen Stagingpool
+### 5.19 Phase-5-Messvertrag
+
+**Kalibrierung.** `tools/calibrate_eesm.py` verwendet die vom nativen
+`ns3_wifi_mimo_awgn_curve` exportierte `TableBasedErrorRateModel`-Kurve und
+unabhängige Paketfehlerzählungen mit linearen Post-Processing-SINRs.
+`tools/generate_he_link_level_reference.m` erzeugt die MATLAB-R2026a-Referenz
+mit idealem Timing und perfekter RX-CSI. Zuerst wird der AWGN-Offset
+\(\delta_c\), danach bei festem Offset das EESM-Beta \(\beta_m>0\) durch
+binomiale Maximum-Likelihood auf getrennten Trainingsdaten gefittet.
+Validierung verwendet zurückgehaltene AWGN-Punkte und andere Kanalrealisationen;
+synthetische Quellen, Randoptima und inkompatible PHY-Metadaten werden abgelehnt.
+EESM und PER folgen unverändert den Abschnitten 5.6/5.7.
+
+Der Offset gilt ausschließlich bei passendem `HeAwgnCalibrationKey`
+(MCS, BCC/LDPC, Bytezahl, NSS, RX-Antennen, Kanalbreite, GI). Sonst bleibt der
+ErrorRateModel-Pfad unverändert. Es gibt keine allgemeinen Default-Betas.
+R2 installiert den bestehenden Piloten explizit:
+
+    helper.LoadHeCalibrationProfile("contrib/sionna/data/he_mcs0_bcc_32_calibration.json");
+    helper.Apply(sionna, txPhyHelper, rxPhyHelper, spectrumModel);
+    helper.InstallHeCalibration(rxDevice); // nach Geräteanlage, vor Simulator::Run()
+
+Der Loader prüft Status, Quellenart, PHY-Kontext und den Pilotkurvenhash;
+Quellversion und Referenzhash werden unverändert übernommen. Die Installation
+prüft den tatsächlichen `TableBasedErrorRateModel` einschließlich Defaultattributen.
+32 Byte bedeuten hier eine nicht aggregierte PSDU einschließlich MAC-Header/FCS,
+keine Anwendungsnutzlast, S-/A-MPDU- oder zeitbasierte Chunklänge. Inkompatible
+Präambel, MCS, Codeart, NSS, RX-Antennen, Breite, GI oder Länge bleiben unverändert.
+Der skalare 1x1-Empfang behält seine physikalische PSD; nur HE-SU-Daten werden
+aus den 234 Datentönen durch EESM und Offset abgebildet. Empfängereigene
+PPDU-Snapshots verfallen nach Empfangsende. Bei skalarer Interferenz gilt
+\(\gamma_k^{(j)}=\gamma_k^{(0)}\gamma_{\rm scalar}^{(j)}/\gamma_{\rm scalar}^{(0)}\).
+Für Chunkdauer \(\Delta t_j\) und gesamte MPDU-Dauer \(T\) gilt
+\(P_{s,j}=P_s(8L,\gamma_{\rm EESM}^{(j)}10^{\delta/10})^{\Delta t_j/T}\).
+Damit verändern Symbolpadding und eine Aufteilung bei konstantem SINR die
+kalibrierte PSDU-Wahrscheinlichkeit nicht. Header/CCA bleiben unverändert;
+`CalibrationApplied` meldet die tatsächlich verwendete Abbildung.
+
+**Kanalstudien.** `tools/benchmark_sumimo.py` und
+`tools/benchmark_rt_convergence.py` verwenden feste 2x2-Links in
+`simple_room`, 256 FFT-Bins einschließlich DC/Guards, gleiche Gesamtleistung,
+MMSE/SVD und MI-Diagnostik. Seeds 42/43/44 bei ns-3 Run 1 werden für
+10000/100000/1000000 RT-Samples gepaart; deterministische Wiederholungen
+sind keine unabhängigen statistischen Stichproben. Die vorab festgelegten
+Vergleichsgrenzen sind: 0,5 dB Verlust, identischer Tonrang, Singularwerte
+höchstens 5 % relativ plus 1e-7 absolut, 1 dB Ton-SINR, 0,5 dB MI-SINR
+und 0,2 bit/s/Hz MI-Effizienz. Ein Konvergenzbefund verlangt alle ausgewählten
+Fall-/Seedpaare. Die genauen Geometrien und Solveroptionen stehen im jeweiligen
+`plan.json`; unabhängige NumPy-Referenzen prüfen die native Rechnung.
+
+Der Alterungstest vergleicht frisches/verzögertes gleichleistungs-SVD gegen
+denselben Sendekanal, der durch eine unitäre TX-Basisrotation entwickelt wird.
+Nullalter und ein statischer Kanal sind Kontrollen. Die Rotation erhält Energie
+und Singularwerte; sie ist keine Doppler-/Mobilitätsreferenz. MI-Ergebnisse
+belegen keine 2x2-PER- oder Wi-Fi-Durchsatzkalibrierung.
+
+**Cache und IPC.** `tools/benchmark_cache_ipc.py` misst den Produktionscache
+und getrennte lokale REQ/REP-Prozesse mit eingefrorenen Protobufs. Synthetisch
+vergrößerte Tensoren sind Transportfixtures. Für einen Snapshot gelten
+\(B_H=16N_{\mathrm{sc}}N_{\mathrm{rx}}N_{\mathrm{tx}}\) und
+\(B_F=4N_{\mathrm{sc}}\) auf der verwendeten Plattform; logische Nutzbytes,
+Kapazitäten, glibc-Heapproxy und RSS werden getrennt ausgewiesen.
+`SionnaPropagationCache::ResourceLimits` konfiguriert die Grenzen;
+`GetStorageStatistics()` liefert aktuelle Belegung und Spitzen.
+Gültigkeit ist inklusiv. Abgelaufene inaktive Links werden bereinigt;
+bei deaktiviertem Cache wird jede neue vollständig validierte Antwort verwendet,
+Wiederaktivierung beginnt kalt. Dimensions-, Batch-, Antwort-, Snapshot- und
+Nutzbytegrenzen werden vor CFR-/Cacheallokation geprüft; zukünftige Einträge
+werden nicht zur Budgetanpassung verdrängt. Look-ahead-Tiefe ist
+`floor(sub_mode/receiver_count)`; Nulltiefe wird vor RT abgelehnt.
+
+Öffentliche CFR-/Frequenzergebnisse bleiben unabhängige Werte. Interne Getter
+leihen Einträge nur während des Aufrufs aus; MU-CFRs werden einmal validiert,
+nach expliziter Nutzer-ID übernommen und verschoben. Atomare Datenvalidierung
+besteht weiterhin; Allokationsfehler bei der Übernahme besitzen keine volle
+Rollbackgarantie. Antwortbudgets begrenzen weder Transportpuffer noch RT-/CIR-
+Zwischenspeicher oder RSS. Heap-/RSS-Beobachtungen sind keine harte Speicherfreigabe.
+
+`--copy-profile` misst fünf Getter separat. `--workload-sweep` kombiniert
+Cache an/aus, 1/16/64-Link-Arbeitsmengen und Tiefen 1/4/16, je drei Prozesspaare.
+Bei 64 Tönen und 2x2 sind \(B=4352\) Byte je Snapshot. Ein zyklisches Fenster
+\(A=\max(1,L/8)\) ist für D Epochen aktiv; ein Batch trägt D Zukunftssnapshots.
+Bei T Epochen werden \(4AT\) Getter aufgerufen, gecacht \(T/D\) RPCs und
+ungecacht \(4AT\). Retention muss pro Epoche exakt \(A(D-e\bmod D)\) Snapshots
+betragen, ungecacht null; nach finalem Ablauf auch Kapazität null.
+Ganze Epochen einschließlich Koeffizientenprüfung werden separat von Getter-/RTT-
+Timern gemessen. Transcripte prüfen jeden Request nach Link und Zeit.
 
 **R3: begrenzte Mobilitäts- und Pool-Speicherung (abgeschlossen).**
 `--mobility_history_limit H` begrenzt die gemeinsam gespeicherten Positions-/
@@ -3520,8 +2552,6 @@ geben übergroße freie Kapazität sofort frei. `GetPoolStatistics()` trennt Hit
 Misses, echte Reserve-Vergrößerungen, Bypässe und freie Kapazität vom CSI-Cache.
 Es werden keine CFR-, Frequenz-, Protobuf- oder Transportpuffer gepoolt;
 ungecachte CSI-Belegung bleibt null. Dies ist kein RSS- oder Latenzversprechen.
-
-### 5.27 R4: instrumentierter Live-CPU-Messvertrag
 
 **R4: instrumentierter Live-Server-/HE-SU-PHY-Pfad (abgeschlossen).**
 `tools/benchmark_live_scaling.py` startet je Wiederholung einen frischen
@@ -3581,6 +2611,64 @@ Poolkapazität höchstens 1 MiB. Das experimentlokale REP-Frontend verändert de
 Produktionsserver nicht; automatische MAC-/MU-Steuerung, Doppler und GPU
 bleiben außerhalb dieser Abnahme. Details stehen im
 [R4-Vertrag](doc/r4-live-scaling.md).
+
+**Provenienz.** Neue Läufe schreiben `run.json` (`ns3sionna.run`, Version 1)
+mit Konfiguration, Quellen-/Eingangs-/Artefakthashes, tatsächlichem Backend,
+Hardware/Build/Paketen, Befehlen und atomarem Status `incomplete`, `failed`
+oder `success`; wissenschaftliche Abnahme steht separat unter `validation`.
+Nichtleere Ausgabeordner bleiben geschützt; Resume wird nicht angeboten.
+UTF-8-Text besitzt zusätzlich einen versionierten CRLF→LF-Digest, Binärdaten
+bleiben rohbytegeprüft. Historische Exporte und Messzeitpunkt-Quellhashes werden
+nicht umgeschrieben; ohne Sidecar ist ihr Ausführungsstatus unbekannt.
+Fehlerlogs und verfügbare Prozessausgaben bleiben erhalten. Details des Formats
+stehen in [doc/provenance-cpu-increment.md](doc/provenance-cpu-increment.md).
+
+**R1: native Reproduzierbarkeit (abgeschlossen).** Der feste Umfang umfasst
+Seed/Run/Random-Streams, vollständige portable Studienbundles und leichte
+Lock-/Systemprüfungen im bestehenden Conda-CPU-Environment. Abnahme: ein
+verschobenes Bundle verifiziert und reproduziert einen kleinen RT-/Native-Fall;
+Seedwiederholung und die etablierten CPU-Regressionen bestehen. Container/Docker,
+Resume, neue Studien und GPU-Abnahme gehören nicht dazu; R2 bleibt geschlossen.
+
+`SionnaHelper::AssignStreams(s)` reserviert RT-ID $s$ und Mobilitäts-ID $s+1$
+(Default 0/1, Rückgabewert 2). Andere ns-3-Zufallsobjekte benötigen disjunkte IDs.
+`SimInitMessage.randomness` überträgt Mappingversion 1, tatsächlichen ns-3-Seed,
+Run und beide IDs. Für Domäne $q$ (`rt` oder `mobility`) gilt
+
+\[
+ D_q=\operatorname{SHA256}(\operatorname{ASCII}(
+ \texttt{ns3sionna-rng-v1:seed:run:stream:q})),\qquad
+ s_q=\operatorname{uint32be}(D_q[0:4]).
+\]
+
+Alle Zahlen sind dezimal, ohne Leerzeichen/Endzeile. RT bei Run 1/Stream 0
+verwendet direkt den ns-3-Seed: 42/43/44 bleiben erhalten. Beide PathSolver-Pfade
+verwenden $s_{rt}$; jeder Mobilitätsknoten verwendet
+`SeedSequence([s_mobility,node_id,0x51A0])`. Ziehungen anderer Knoten/RT verändern
+diesen Generator nicht. Das emuliert keine ns-3-Zufallsfolge und beweist keine
+statistische Unabhängigkeit. Wiederholte gleiche Tupel sind gepaarte Wiederholungen.
+Ohne neue Felder bleibt der Legacyvertrag (Version 0) erhalten; unbekannte
+Versionen/ungültige Tupel scheitern. Sidecars erfassen Tupel und effektive Seeds.
+
+`experiment_bundle.py` kopiert Konfigurationen, notwendige Szenen-/Mesh-/Material-
+und Laufinputs sowie Ergebnisse/Logs unverändert. Der externe
+[Artefaktkatalog](experiments/r1/catalog.json) hält den vertrauenswürdigen Indexhash
+und relative lokale Zugriffspfade; ein gehosteter Download wird nicht behauptet.
+Verifikation prüft das vollständige Inventar, relative Pfade, Referenzabschluss
+und Rohbinär-/LF-Texthashes. Historische Messzeitpunkt-Quellhashes bleiben erhalten;
+fehlende Ausführungsprovenienz bleibt unbekannt. Reproduktion schreibt neue
+Ausführungs-/Validierungsnachweise außerhalb des unveränderten Bundles.
+Native Metriken werden mit rtol $10^{-4}$ und atol $10^{-7}$ verglichen;
+Rang, Tonindex und Frequenz sind exakt. Laufzeit und maschinenübergreifende
+Bytegleichheit gehören nicht zur numerischen Abnahme. `--mode rt` rechnet frisch,
+`--mode frozen` analysiert den gespeicherten Kanal. 10000 Samples sind ein
+Reproduktionsprüfsatz, kein Konvergenznachweis.
+
+`check_cpu_environment.py --strict` prüft Python 3.12.12, pip 26.0.1, alle
+55 bestehenden Paketpins, `pip check`, Compiler/CMake/Protobuf/ZMQ/LLVM, aktuelle
+Bindings und tatsächliche LLVM-Ausführung. Systemversionen sind dokumentiert,
+nicht hermetisch gesperrt. Befehle und Format stehen im
+[nativen Vertrag](doc/provenance-cpu-increment.md).
 
 
 ### 5.20 Allgemeine HE-Abstraktion durch gemittelte uncodierte BER
@@ -4155,7 +3243,9 @@ Simulator-Timer, keine implizite CSI-Abfrage und keinen MAC-Feedbacktransport;
 diese Grenzen verhindern, dass das explizite Forschungsmodell eine
 vollständige 802.11-Soundingprozedur vortäuscht.
 
-## 7. Validierung bis zum R4-Abschluss
+## 7. Validierung
+
+
 
 Die native Suite sionna enthält die schnellen API-, Numerik- und Adapterfälle:
 
@@ -4752,1042 +3842,36 @@ die reale Trigger-/HE-TB-Metadatenebene an den unveränderten Uplinkkern; die
 weiterhin idealisierte Synchronisation bleibt in API, Beispielausgabe und
 Modellgrenzen ausdrücklich sichtbar.
 
-### 7.13 Validierung des Kalibrierworkflows der Unterphase 5.1
+### 7.13 Phase-5-Ergebnisse und verbleibende Grenzen
 
-Am 25. September 2026 wurden die folgenden lokalen CPU-Prüfungen ausgeführt:
+Die folgenden Werte stammen aus den dokumentierten CPU-Läufen vom
+25. September bis 7. Oktober 2026; historische Messdaten bleiben unverändert.
 
-- `./ns3 configure --enable-examples --enable-tests` und
-  `./ns3 build ns3_wifi_mimo_awgn_curve` waren erfolgreich.
-- Ein direkter Lauf des neuen Beispiels exportierte für MCS 3, BCC,
-  1458 Byte, NSS 1, eine RX-Antenne, 20 MHz und 800 ns GI genau 281
-  AWGN-Punkte von -20 bis 50 dB im 0,25-dB-Raster. Der Kalibrierparser
-  las die Metadaten und die monotone PER-Kurve erfolgreich ein.
-- `tools/generate_he_link_level_reference.m` führte mit MATLAB WLAN Toolbox
-  R2026a für HE MCS 0, BCC, 32 Byte, 1x1, 20 MHz und 800 ns GI 20 unabhängige
-  Punkte mit jeweils 1000 vollständigen codierten HE-Paketen aus. Fünf
-  AWGN-Punkte, zehn Trainingspunkte auf zwei festen Zweitap-Kanälen und
-  fünf Validierungspunkte auf einem dritten Kanal liegen mit ihren
-  234 linearen Post-OFDM-SINRs je Punkt in `data/`.
-- Der unkalibrierte ns-3-AWGN-Pfad verfehlte die MATLAB-AWGN-Referenz mit
-  einem mittleren absoluten PER-Fehler von 0,103956. Ein gemeinsam aus
-  diesen Daten geschätztes Beta ohne AWGN-Korrektur verfehlte den
-  Validierungskanal mit 0,102218 und wurde abgelehnt.
-- Getrennt gefittete AWGN- und Selektivparameter ergeben für die genaue
-  genannte PHY-Konfiguration \(\delta_c=-0{,}4958921206\,\mathrm{dB}\)
-  und \(\beta_0=1{,}0383687667\) in linearen SINR-Einheiten. Der
-  zurückgehaltene AWGN-PER-Fehler beträgt 0,013024 und der Fehler auf dem
-  zurückgehaltenen Kanal 0,054886. Beide liegen unter den vordefinierten
-  Grenzen 0,05 und 0,10; der Status lautet `validated`.
-- `python -m unittest -v test_calibrate_eesm` bestand mit acht Fällen,
-  darunter Recovery von Offset und Beta, getrennte AWGN-/Kanalauswahl,
-  Kontext- und Zählervalidierung sowie Ablehnung synthetischer Freigaben.
-- `./ns3 build sionna-test` und der direkte native Test-Runner bestanden:
-  `sionna`, `ul-mu-mimo`, `he-ul-mu-mimo-phy-adapter`,
-  `dl-mu-mimo-runtime`, `dl-mu-mimo-ru` und
-  `he-dl-mu-spectrum-ru`. Der neue C++-Test prüft die exakte
-  PHY-Kontextbindung und eine veränderte SU-/DL-MU-PER; bestehende
-  SISO-Paritäts- und MU-Regressionen bleiben erfolgreich.
-
-Die validierten Werte sind keine allgemeinen HE-Defaults. Ihre Quelle nutzt
-ideales Timing, perfekte RX-CSI und drei kontrollierte Zweitap-Kanäle;
-Übertragung auf andere MCS, Paketlängen, Codearten, MIMO-Dimensionen oder
-TGax-Kanalmodelle wurde nicht belegt. Deshalb bleiben Beta und Offset ohne
-explizite, passende Benutzerkonfiguration ausgeschaltet.
-
-### 7.14 CPU-Ergebnisse und Validierung der Unterphase 5.2.1
-
-Am 28. September 2026 wurde die feste Vergleichsmatrix mit Sionna/Sionna RT
-2.0.1, Mitsuba 3.8.0, Dr.Jit 1.3.1, NumPy 2.5.2 und PyTorch 2.9.1+cpu
-ausgeführt. Der Sweep benötigte 21,641 s nach den Imports. Alle zwölf Paare
-frisch initialisierter Serverumgebungen lieferten byteidentische vollständige
-Kanalantworten. Laufzeit bleibt von dieser Gleichheitsprüfung ausgenommen;
-die nativen Diagnosefelder werden zusätzlich mit relativer Toleranz
-\(10^{-6}\) und absoluter Toleranz \(10^{-7}\) geprüft. Diese Toleranzen sind
-Numerikgrenzen und keine Messunsicherheits- oder Kalibrierangaben.
-
-Alle 256 Töne aller Fälle besitzen numerischen Rang zwei. Die folgenden
-Werte stehen für beide identischen Wiederholungen; Winkel sind Grad,
-Abstände sind Wellenlängen, SINRs sind MI-komprimierte Streamwerte in dB.
-Die vollständigen Singularwerte und Ton-SINRs bleiben in `tones.csv` erhalten.
-
-| Fall | Abstand | TX-Azimut | RX-Azimut | Median sigma1/sigma0 | Stream 0 dB | Stream 1 dB | eta bit/s/Hz |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 00 | 0,25 | 0 | 0 | 0,084037 | 45,679 | 41,029 | 28,804 |
-| 01 | 0,25 | 0 | 90 | 0,270370 | 56,947 | 55,114 | 37,226 |
-| 02 | 0,25 | 90 | 0 | 0,091984 | 47,577 | 46,894 | 31,383 |
-| 03 | 0,25 | 90 | 90 | 0,030958 | 39,189 | 38,617 | 25,847 |
-| 04 | 0,5 | 0 | 0 | 0,218708 | 53,154 | 50,099 | 34,300 |
-| 05 | 0,5 | 0 | 90 | 0,256484 | 57,090 | 57,460 | 38,052 |
-| 06 | 0,5 | 90 | 0 | 0,515959 | 55,202 | 56,403 | 37,074 |
-| 07 | 0,5 | 90 | 90 | 0,074755 | 46,810 | 46,407 | 30,966 |
-| 08 | 1 | 0 | 0 | 0,327041 | 56,491 | 57,387 | 37,830 |
-| 09 | 1 | 0 | 90 | 0,143210 | 51,537 | 48,973 | 33,389 |
-| 10 | 1 | 90 | 0 | 0,488056 | 60,024 | 60,095 | 39,903 |
-| 11 | 1 | 90 | 90 | 0,165965 | 53,823 | 53,034 | 35,497 |
-
-Der Konditionsindikator variiert von 0,030958 bis 0,515959, obwohl der Rang
-überall zwei bleibt. Beim TX-/RX-Azimutpaar 0/90 sinken die Stream-SINRs
-zwischen Abstand 0,5 und 1 von 57,090/57,460 auf 51,537/48,973 dB. Der
-Abstandseffekt ist in dieser konkreten Szene somit nicht durchgehend monoton.
-Die gekoppelte Änderung von Wideband-Verlust und räumlicher CFR ist in den
-Exporten getrennt nachvollziehbar. Aus diesem einzelnen statischen Link
-folgt keine allgemeine optimale Arraygeometrie.
-
-Über die 24 Läufe beträgt der Median der Szeneninitialisierung 3,104 ms,
-der CFR-/Raytracing-Zeit 0,716 s und der nativen Analyse 0,687 ms. Die
-CFR-Zeiten liegen zwischen 0,677 und 1,375 s; der Median inklusive nativem
-Prozessstart und CSV-Ausgabe ist 32,211 ms. Import, IPC und MAC-Verkehr sind
-gemäß Abschnitt 5.20 abgegrenzt. Der Benchmark erzeugt im lokalen
-Ausgabeverzeichnis die drei geprüften Vergleichsplots `channel_comparison.png`,
-`sinr_comparison.png` und `runtime_comparison.png`. Diese Dateien bleiben
-unversionierte Zusatzinformationen.
-
-Die abschließende automatisierte Validierung war erfolgreich:
-
-- `./ns3 configure --enable-examples --enable-tests` und gezielte Builds von
-  `ns3_wifi_sumimo_benchmark`, `sionna-test`, SU-Minimal, SU-Precoding,
-  MU-Beispiel und AWGN-Export waren erfolgreich.
-- `python -m unittest -v test_benchmark_sumimo`: elf Fälle bestanden in
-  5,606 s. Sie prüfen sämtliche Sweepkontrollen und Exportlängen, Hashes,
-  byteidentische Wiederholungen, die explizite Konfiguration aller drei
-  Eulerkomponenten, tatsächliche Sionna-Array-/Radio-Geometrie, analytische
-  Rang-/Singularwert-/MMSE-/MI-Referenzen sowie negative Geometrie- und
-  Datenvertragsfälle. Alle zwölf eingefrorenen realen Kanäle wurden im
-  nativen Programm erneut ausgewertet und gegen unabhängige NumPy-SVD und
-  MMSE-Inversion geprüft. Drei repräsentative Fälle (00, 05, 10) wurden
-  zusätzlich in einem frischen Python-Prozess erneut raygetraced und
-  stimmen bytegenau mit der früher erzeugten Referenz überein.
-- Die sieben nativen Suites `sionna` (38 Fälle),
-  `sionna-mimo-csi-feedback`, `dl-mu-mimo-runtime`, `dl-mu-mimo-ru`,
-  `he-dl-mu-spectrum-ru`, `ul-mu-mimo` und
-  `he-ul-mu-mimo-phy-adapter` bestanden im vorhandenen Test-Runner.
-- Die sechs ExampleAsTest-Suites für SU-Minimal, Helper-Konfiguration,
-  Helper-Laufzeit, SU-Precoding, Precoding-Negativfälle und MU-MIMO bestanden.
-  Der umfassende MU-Referenzloglauf benötigte 243,979 s.
-- Der Server-Importcheck und die vollständige Python-/CPU-Serversuite
-  aus Datenvertrag, deterministischer Mobilität, Kohärenzzeit und
-  Server-Unit-Tests bestanden mit 19 Fällen in 192,187 s, einschließlich
-  realer 1x1-/2x2-CFR und beider Platzierungspfade.
-- `python -m unittest -v test_calibrate_eesm`: acht Fälle bestanden.
-- `git diff --check` war ohne Befund. Nach der letzten Dokumentationsänderung
-  wurde das Modell-PDF genau einmal erzeugt und mit Seitenzahlprüfung sowie
-  vollständiger Textextraktion auf die neuen Abschnitte validiert.
-
-Alle Regressionen wurden sequenziell ausgeführt. Die Befehle, Exitcodes,
-Wanduhrzeiten und Log-Hashes stehen in
-`data/phase5_2_spacing_orientation/validation.json`. Die elf neuen Tests
-verwenden standardmäßig die versionierten Referenzen und lassen sich ohne
-externen Server reproduzieren; die vier tatsächlichen Raytracing-Aufrufe
-der Geometrie-/Referenztests benötigen das dokumentierte CPU-Environment.
-Der erste Teil von Phase 5.2 ist damit abgeschlossen. Zusätzliche Winkel,
-getrennte TX-/RX-Abstände, CSI-Alter und Cache-/IPC-Skalierung bleiben weitere
-Arbeitspakete. Die Samplekonvergenz ergänzt Unterphase 5.2.2 in Abschnitt 7.15.
-Eine 2x2-PER-Kalibrierung wurde nicht abgeleitet.
-
-### 7.15 CPU-Samplekonvergenz und Validierung der Unterphase 5.2.2
-
-Der vorab festgelegte Sweep wurde am 29. September 2026 auf derselben
-CPU-/LLVM-Plattform wie 5.2.1 ausgeführt. Die 72 frischen Traces lieferten
-innerhalb jedes Fall-/Seed-/Budgetpaares byteidentische Kanalantworten.
-Zwischen verschiedenen Seeds wird diese Identität nicht verlangt.
-Die Referenz enthält zwölf vollständige Helperkonfigurationen, 72 rohe
-Kanalantworten, 72 Zusammenfassungszeilen, 18432 Tonzeilen und 36
-gepaarte Konvergenzvergleiche. Alle Töne behalten numerischen Rang zwei.
-
-**Konvergenz ist für die geprüfte Matrix bei 100000 Samples je Quelle
-innerhalb der vorab definierten Toleranzen erreicht.** Alle zwölf
-100000/1000000-Fall-/Seedpaare bestehen sämtliche Kriterien. 10000 Samples
-sind für die gesamte Matrix nicht ausreichend: Fall 03 mit Seed 43
-scheitert gegen beide höheren Budgets an Singularwert- und Ton-SINR-Toleranz.
-Insgesamt bestehen 34 von 36 Vergleichen. Die übrigen 10000-Paare bestehen;
-das globale Urteil wird durch den schwachen Kanal bestimmt.
-
-Die folgenden Werte sind die größten Fehler über alle vier Fälle und drei
-gepaarten Seeds. Der Singularwertfehler ist gemäß Abschnitt 5.21 bereits
-durch seine relative/absolute Toleranz geteilt; sein Grenzwert ist eins.
-Bei Rang bedeutet null, dass kein Ton seinen Rang ändert.
-
-| Vergleich b/q | Verlust / dB | Rangänderungen | D_sigma | Ton-SINR / dB | MI-SINR / dB | MI / bit/s/Hz | Bestanden |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 10000/100000 | 0,067268 | 0 | 4,554496 | 1,849055 | 0,276911 | 0,169142 | 11/12 |
-| 100000/1000000 | 0,000574 | 0 | 0,084528 | 0,038117 | 0,007545 | 0,004979 | 12/12 |
-| 10000/1000000 | 0,067264 | 0 | 4,562569 | 1,852972 | 0,276811 | 0,169080 | 11/12 |
-
-Beim fehlschlagenden Fall 03/Seed 43 hat der schwache Singularwert am
-Tonindex 0 (-10 MHz) bei 10000 Samples den Wert 0,02895517 und bei
-1000000 den Wert 0,02357629: 22,8148 Prozent relative Differenz. Der
-numerische Rang bleibt trotzdem zwei. Auch effektive SINR und MI-Effizienz
-liegen innerhalb ihrer Grenzen. Ein Vergleich nur von Wideband-Verlust,
-Rang oder effektiver SINR hätte daher die Ton-/Modeninstabilität übersehen.
-
-Die nächste Tabelle zeigt Mediane der exportierten Laufzusammenfassungen
-über Seeds und Wiederholungen. sigma0/sigma1 sind je Lauf zunächst die
-Mediane über alle Töne; MI-SINR ist in dB angegeben. Die vollständigen
-einzelnen Ton-/Stream-/Seedwerte stehen in `tones.csv` und `summary.csv`.
-
-| Fall | Samples | Verlust / dB | sigma0/sigma1 | MI-SINR 0/1 / dB | MI / bit/s/Hz |
-| --- | --- | --- | --- | --- | --- |
-| 03 | 10000 | 49,948140 | 1,996718/0,060352 | 39,044913/38,469264 | 25,750037 |
-| 03 | 100000 | 49,965776 | 1,995746/0,061211 | 39,188952/38,617453 | 25,847100 |
-| 03 | 1000000 | 49,965775 | 1,995747/0,061213 | 39,189057/38,617575 | 25,847176 |
-| 05 | 10000 | 50,516401 | 1,980547/0,503382 | 56,979714/57,376811 | 37,988421 |
-| 05 | 100000 | 50,490308 | 1,980246/0,510831 | 57,089710/57,459474 | 38,052421 |
-| 05 | 1000000 | 50,490313 | 1,980243/0,510846 | 57,089832/57,459695 | 38,052535 |
-| 06 | 10000 | 55,828542 | 1,712816/0,890614 | 55,245325/56,493283 | 37,118770 |
-| 06 | 100000 | 55,848764 | 1,713904/0,884302 | 55,201884/56,402762 | 37,074269 |
-| 06 | 1000000 | 55,848763 | 1,713903/0,884302 | 55,201889/56,402764 | 37,074271 |
-| 10 | 10000 | 51,711566 | 1,788855/0,872923 | 60,018006/60,095267 | 39,900769 |
-| 10 | 100000 | 51,709226 | 1,789760/0,872812 | 60,024357/60,094553 | 39,902638 |
-| 10 | 1000000 | 51,709224 | 1,789760/0,872813 | 60,024363/60,094549 | 39,902642 |
-
-Zusätzlich beträgt die größte innerhalb eines Falls beobachtete Seedspanne
-der effektiven Stream-SINR 0,464537 dB bei 10000, 0,007693 dB bei 100000
-und 0,000288 dB bei 1000000 Samples. Diese deskriptiven Spannen sind
-keine Konfidenzintervalle aus drei Seeds und kein Ersatz für die gepaarte
-Worst-Tone-Entscheidung.
-
-Die Wanduhrzeiten je Budget über alle 24 zugehörigen Läufe lauten:
-
-| Samples | Init-Median / ms | CFR-Median / s | CFR-Min/Max / s | Native Analyse / ms |
-| --- | --- | --- | --- | --- |
-| 10000 | 3,543 | 0,151796 | 0,122829/2,069792 | 0,725 |
-| 100000 | 2,774 | 0,736202 | 0,698936/1,486344 | 0,661 |
-| 1000000 | 2,670 | 6,530119 | 6,301047/11,274462 | 0,687 |
-
-Der Median des nativen Prozessaufrufs einschließlich CSV-Ausgabe liegt je
-Budget bei etwa 32 ms. Das dokumentierte `sweep_seconds` beträgt 202,463 s,
-ohne Import und Plot-/Manifestausgabe; der gesamte Runnerprozess benötigt
-211,500 s. CFR-Zeiten enthalten Raytracing, CFR-Aufbau und gegebenenfalls
-JIT-Aufwand gemäß Abschnitt 5.20. Reihenfolge, JIT und Systemlast machen
-diese Messung zu einer Laufzeitdiagnose und nicht zu unabhängigen
-Performance-Stichproben. Der etwa 8,9-fache CFR-Median für 1000000 gegenüber
-100000 Samples steht hier einer bereits bestandenen Stabilitätsprüfung
-bei 100000 gegenüber; daraus folgt keine allgemeine Budgetempfehlung für
-andere Szenen oder Solveroptionen.
-
-Der Runner erzeugte die vier lokal geprüften Vergleichsplots
-`channel_comparison.png`, `sinr_comparison.png`, `runtime_comparison.png`
-und `convergence_comparison.png`. Der letzte Plot zeigt pro Fall die
-schlechteste gepaarte Seedabweichung gegen 1000000, geteilt durch die
-jeweilige Toleranz. Die horizontale Linie eins macht die beiden
-verletzten 10000-Kriterien sichtbar. Plotdateien bleiben gemäß den
-bestehenden Ignore-Regeln unversioniert.
-
-Die automatisierten Ergebnisse und Regressionen werden zusammen mit
-Befehlen, Exitcodes, Wanduhrzeiten und Log-Hashes in
-`data/phase5_2_sample_convergence/validation.json` festgehalten.
-`test_benchmark_rt_convergence` enthält zehn Prüfungen: einzelne
-Grenzwertverletzungen einschließlich eines einzelnen schlechten Tons,
-Nullmoden-/SINR-Floor, ungültige Vergleichsmatrizen, vollständige fixe
-Kontrollen, reale Array-/Radio-Geometrie, Exporthashes, byteidentische
-Wiederholungen, unabhängige NumPy-SVD-/MMSE-/MI-/Linkbudgetreferenzen für
-sämtliche 72 Antworten, Neuberechnung des gesamten Urteils und nativen
-Replay der 36 eindeutigen Kanäle. Drei frische Traces in einem separaten
-Testprozess prüfen alle drei Budgets und Seeds. Die vier früheren
-100000/Seed-42-Kanäle stimmen bytegenau mit der 5.2.1-Referenz überein.
-
-Die abschließende sequenzielle Validierung war vollständig erfolgreich:
-
-- Der gezielte Build von `ns3_wifi_sumimo_benchmark` und `sionna-test`
-  bestand. Vier Policyprüfungen wurden bereits vor dem Sweep ausgeführt.
-- `python -m unittest -v test_benchmark_rt_convergence`: zehn Fälle
-  bestanden in 15,952 s (16,601 s einschließlich Prozessstart).
-- Die elf bestehenden `test_benchmark_sumimo`-Fälle bestanden in 8,088 s;
-  damit sind Defaultseed, Defaultbudget und alle früheren Referenzen erhalten.
-- Die sieben nativen Suites `sionna` (38 Fälle),
-  `sionna-mimo-csi-feedback`, `dl-mu-mimo-runtime`, `dl-mu-mimo-ru`,
-  `he-dl-mu-spectrum-ru`, `ul-mu-mimo` und
-  `he-ul-mu-mimo-phy-adapter` bestanden.
-- Alle sechs ExampleAsTest-Suites für SU-Minimal, Helper-Konfiguration,
-  Helper-Laufzeit, SU-Precoding, Precoding-Negativfälle und MU-MIMO bestanden;
-  der MU-Prozess benötigte 240,972 s.
-- Server-Importcheck und alle 19 Python-/CPU-Serverregressionen für
-  Datenvertrag, deterministische Mobilität, Kohärenzzeit und reale
-  1x1-/2x2-CFR bestanden. Die Serversuite benötigte 192,917 s Testzeit
-  (196,161 s einschließlich Prozessstart).
-- Die acht `test_calibrate_eesm`-Regressionen bestanden.
-- Alle 21 gespeicherten Quell-/Szenenhashes stimmen mit der finalen
-  Implementierung überein; alle vier Plotdateien wurden visuell geprüft.
-- `git diff --check` war ohne Befund. Nach der finalen Dokumentationsänderung
-  wurde das Modell-PDF genau einmal erzeugt und durch Seitenzahl,
-  vollständige Textextraktion, neue Ergebnis-/Formelmarker und Sichtprüfung
-  validiert. Die Hashes und Seitennachweise stehen in
-  `data/phase5_2_sample_convergence/pdf_validation.json`.
-
-Der obere Budgetschritt hat damit für diese vorab fixierte Testmatrix ein
-Stabilitätsplateau erreicht. Das größte Budget bleibt eine endliche
-Referenz. Eine 2x2-PER-Kalibrierung oder asymptotische Konvergenzaussage
-wird aus diesen Daten nicht abgeleitet.
-
-### 7.16 CPU-Cache-/IPC-Skalierung und Validierung der Unterphase 5.2.3
-
-Die finale Referenz vom 29.09.2026 umfasst alle 45 Konfigurationen mit
-je drei frischen nativen Prozessen und separaten Python-REP-Prozessen.
-Alle vorab definierten Abnahmekriterien aus Abschnitt 5.22 sind erfüllt:
-bitgenaue CFR-Erhaltung, exakte Metadaten und Wirebytes, vollständige
-logische Speicherformeln, reproduzierbare deterministische Ergebnisse,
-korrekte Hit-/Misszahlen und echte Expiration über den produktiven Cache.
-Die Daten liegen in `data/phase5_2_cache_ipc/`: 15 Protobuf-Vorlagen,
-`plan.json`, `manifest.json`, 135 Zusammenfassungen in `summary.csv`,
-30915 Zeitstichproben in `timings.csv` und 3645 Channel-Requests in
-`requests.csv`. Große Batchantworten bleiben aus den Vorlagen und den
-festen Ableitungsregeln vollständig rekonstruierbar und hashgeprüft.
-
-Die Plattform ist Linux x86_64 mit glibc 2.39, Python 3.12.12, NumPy
-2.5.2, Python-Protobuf 7.35.1, C++-Protobuf 3.21.12 und libzmq 4.3.5
-(PyZMQ 27.1.0). Szenen-/Solverlaufzeit ist ausgeschlossen. Seed 42,
-Run 1, Fixture, Radio-Geometrie, Gültigkeit und Transport bleiben fest.
-Der Sweep benötigte 125,273 s ohne Import, CSV-/Plot-/Manifestausgabe;
-der vollständige Runnerprozess benötigte 131,951 s. Es gab keine
-parallelen Benchmark- oder Regressionstestprozesse.
-
-Die folgenden Latenzen sind Mediane der drei Prozessmediane. Die
-256-Subcarrier-/2x2-Matrix entspricht den Transportdimensionen des
-bisherigen SU-Benchmarks. Nutzbytes enthalten CFR und Frequenzvektoren;
-Heapdelta bezeichnet Delta A_release aus Abschnitt 5.22.
-
-| Links | Wire / Byte | Nutzbytes | Heapdelta / Byte | Hit / us | Miss / ms | RTT / ms |
-| --- | --- | --- | --- | --- | --- | --- |
-| 1 | 18255 | 17408 | 16592 | 1,964 | 0,142230 | 0,127272 |
-| 16 | 291420 | 278528 | 278672 | 2,044 | 0,603779 | 0,261919 |
-| 64 | 1165548 | 1114112 | 1134992 | 2,235 | 2,310256 | 0,804902 |
-
-Bei festem Tensor bleiben Getter-Hits damit nahe 2 us, während ein
-Batchmiss alle Links transportiert, dekodiert und einfügt. Der Hit
-ist ein öffentlicher Getter mit CFR-Kopien und Ergebnisfreigabe. Die
-Beobachtung beschreibt diesen Cachepfad; sie ist keine Messung einer
-isolierten Map-Suche. Seine Hitquote ist in allen 135 Läufen 132/134
-(98,507463 Prozent). Der separate Speicherprüfcache liefert für
-1/16/64 Links genau 4L/(4L+1): 80/98,461538/99,610895 Prozent.
-Kein Warmhit erzeugt einen Channel-Request. Der Randhit bei 5000000 ns
-und der neue Request bei 5000001 ns sind im Transkript nachgewiesen.
-Je Prozess wurden 27 Channel-Requests und ein Close-ACK bestätigt.
-
-Bei 1024 Subcarriern und 64 Links wächst der logische Bedarf exakt
-linear mit dem Antennenprodukt. Die nächste Tabelle verwendet MiB
-(2^20 Byte) und die Reihenfolge TX/RX, auch für den asymmetrischen Fall.
-
-| TX/RX | Wire / MiB | Nutz / MiB | Heapdelta / MiB | Hit / us | Miss / ms | RTT / ms |
-| --- | --- | --- | --- | --- | --- | --- |
-| 2/2 | 4,439802 | 4,25 | 4,274933 | 12,073 | 10,483940 | 3,181524 |
-| 2/4 | 8,439802 | 8,25 | 8,274857 | 17,113 | 17,000560 | 5,558643 |
-| 4/4 | 16,439802 | 16,25 | 16,274933 | 32,497 | 28,949737 | 9,720021 |
-| 8/8 | 64,439802 | 64,25 | 64,274689 | 110,871 | 212,156401 | 127,523298 |
-
-Die größte Antwort hat 67570030 Wirebytes. Ihr Cache enthält 64 MiB
-komplexe Koeffizienten plus 0,25 MiB Frequenzen. Delta A_fill beträgt
-67399616 Byte, Delta A_release 67396896 Byte; letzteres liegt rund
-25888 Byte über dem logischen Nutzbedarf. Bei kleinen Blöcken zeigt
-die glibc-Buchhaltung dagegen die dokumentierte Threadcache-Grenze:
-für 64 Subcarrier, 1/1 und einen Link sind Nutzbedarf 1280 Byte,
-Delta A_fill 1376 Byte und Delta A_release nur 192 Byte. Die übrigen
-freigegebenen Blöcke müssen nicht aus uordblks verschwinden. Diese
-Abweichung verletzt keine Daten-/Speicherformel und wird nicht als
-negative Cachegröße oder als exakte Objektzählung interpretiert.
-
-Für die größte Konfiguration sind die medianen nativen RSS-Werte
-vor Befüllung/live/nach Freigabe 219,500/285,500/205,121 MiB. Der
-aktuelle native VmHWM beträgt 414,680 MiB, der des REP-Prozesses
-485,602 MiB. Beide Peaks umfassen alle Messphasen und temporäre
-Objekte, nicht nur den isoliert gemessenen Cache. Der zusätzliche
-native Lebenszeitpeak aus getrusage liegt bei 663,758 MiB und kann
-den vor exec vorhandenen Elternspeicher einschließen; er wird separat
-exportiert und nicht als aktueller Programmpeak berichtet. Ein erster
-Sweep wurde nach dieser Peak-Abgrenzung durch den finalen vollständigen
-Sweep ersetzt. Die finale Referenz verwendet durchgehend VmHWM.
-
-Die getrennten Protobuf-Operationen zeigen für den größten Wrapper
-folgende Mediane und Min-/Max-Spannen der drei Prozessmediane:
-
-| Operation | Median / ms | Min / ms | Max / ms |
-| --- | --- | --- | --- |
-| C++-Serialisierung | 58,579679 | 55,996002 | 96,448522 |
-| C++-Parse | 11,561986 | 9,398454 | 12,133919 |
-| Python-Serialisierung | 247,430939 | 236,522898 | 250,878334 |
-| Python-Parse | 10,742933 | 10,566953 | 10,793618 |
-| Einzel-CFR-Dekodierung | 0,211423 | 0,204865 | 0,440899 |
-| IPC-Roundtrip | 127,523298 | 105,808909 | 171,125000 |
-| Cache-Hit | 0,110871 | 0,089786 | 0,159248 |
-| Cache-Miss | 212,156401 | 207,712946 | 281,981298 |
-
-Die Timergrenzen unterscheiden sich wie in Abschnitt 5.22 angegeben.
-Der REP-Prozess sendet vorbereitete Bytes; die separate Python-
-Serialisierung gehört deshalb nicht zur gemessenen RTT oder zum
-gemessenen Cachemiss. Ein normaler Server würde zusätzlich seine
-Kanalberechnung und Antwortserialisierung ausführen. Systemlast und
-Allokationszustand erklären mögliche Streuung, ohne hier kausal
-isoliert zu sein. Drei Prozesse liefern deskriptive Spannen, keine
-Konfidenzintervalle und keine allgemeine Serverdimensionierung.
-Es wurden vorab keine pauschalen Latenz- oder RSS-Grenzen festgelegt.
-
-Die drei erzeugten und visuell geprüften Plots heißen
-`memory_comparison.png`, `cache_comparison.png` und `ipc_comparison.png`.
-Sie zeigen alle Tensorformen, Linkzahlen und Subcarrierbudgets mit
-Median und Min-/Max-Spanne. PNGs bleiben gemäß den bestehenden
-Ignore-Regeln lokal; der Runner rekonstruiert sie aus einem neuen Sweep.
-
-Die sequenziellen automatisierten Prüfungen waren vollständig erfolgreich:
-
-- Konfiguration mit Examples/Tests und Build von
-  `ns3_sionna_cache_ipc_benchmark` und `sionna-test` bestanden.
-- Die neun `test_benchmark_cache_ipc`-Fälle bestanden abschließend
-  in 20,762 s (21,035 s mit Prozessstart). Sie prüfen unabhängige
-  flache Ankerindizes aller 15 Formen, Phasen-/Linkmetadaten und
-  IEEE-Bitprüfsumme, Bytewiederholbarkeit, sichere Ausgabeverzeichnisse,
-  reale native Wiederholungen, Manipulationen/ungültige Fixtures,
-  vollständige 45x3-Matrix, alle Referenzbytes/Quoten/Requestfolgen,
-  sämtliche Rohzeitstatistiken und frische Replays dreier Randfälle
-  einschließlich 1024/8x8/64. Asymmetrische 2/4-Layouts sind abgedeckt.
-- Alle 21 bisherigen SU-/Samplekonvergenz-Benchmarktests bestanden
-  in 20,096 s. Die gespeicherten 5.2.1-/5.2.2-Referenzen bleiben erhalten.
-- Die sieben nativen Suites `sionna` (38 Fälle),
-  `sionna-mimo-csi-feedback`, `dl-mu-mimo-runtime`, `dl-mu-mimo-ru`,
-  `he-dl-mu-spectrum-ru`, `ul-mu-mimo` und
-  `he-ul-mu-mimo-phy-adapter` bestanden.
-- Alle sechs ExampleAsTest-Suites für SU-Minimal, Helper-Konfiguration,
-  Helper-Laufzeit, SU-Precoding, Precoding-Negativfälle und MU-MIMO
-  bestanden; der MU-Prozess benötigte 226,706 s.
-- Server-Importcheck und alle 19 Datenvertrag-/Mobilitäts-/Kohärenz-/
-  CPU-Kanalregressionen bestanden in 199,305 s Testzeit; die acht
-  `test_calibrate_eesm`-Fälle bestanden ebenfalls.
-- Alle 13 aufgezeichneten Quellhashes, der Ankerhash und der native
-  Binärhash stimmen mit der finalen Implementierung überein.
-- `git diff --check` bestand. Nach den finalen Dokumentationsänderungen
-  wurde das PDF genau einmal erzeugt und durch Seitenzahl, Textmarker,
-  vollständige Seitenfußzeilen und Sichtprüfung validiert.
-
-Befehle, Exitcodes, Laufzeiten und Log-Hashes stehen in `validation.json`;
-PDF-/Quellhash und Seitennachweise in `pdf_validation.json` im selben
-Referenzverzeichnis. Die Unterphase ist als Mess-/Validierungsarbeit
-abgeschlossen. Cache-, Helper-, Server- und Protobuf-Produktion bleiben
-unverändert; konkrete Speicher-/Kopier-/Transportoptimierungen können
-anschließend gegen diese Referenz geprüft werden. Die Transportfixtures
-begründen keine PHY-, PER- oder Durchsatzprognose für größere Arrays.
-
-### 7.17 Ergebnisse und Validierung der Unterphase 5.2.4
-
-Der CPU-Lauf vom 29.09.2026 erzeugte alle 42 vorab geplanten Traces und
-10752 Tonzeilen. Sämtliche Wiederholungen waren byteidentisch; die
-tatsächlichen Array-/Radio-Geometrien und unabhängigen SVD-/MMSE-/MI-/
-Linkbudgetprüfungen bestanden für alle Traces. Die drei 100000-Sample-
-Kontrollkanäle von Fall 00 stimmen für jeden Seed bytegenau mit dem
-früheren Fall 06 aus 5.2.2 überein. Alle Töne aller Traces haben Rang zwei.
-
-Die Tabelle zeigt Mediane über drei Seeds mit je zwei Wiederholungen bei
-100000 Samples. sigma0/sigma1 sind zunächst Tonmediane je Lauf. MI-SINR
-ist in dB, die Effizienz in bit/s/Hz angegeben.
-
-| Fall | Verlust / dB | sigma0/sigma1 | MI-SINR 0/1 / dB | MI / bit/s/Hz |
-| --- | --- | --- | --- | --- |
-| 00 | 55,848764 | 1,713904/0,884302 | 55,201884/56,402762 | 37,074269 |
-| 01 | 51,467147 | 1,904154/0,589488 | 58,649012/56,795143 | 38,349723 |
-| 02 | 52,087101 | 1,972575/0,190528 | 46,584869/47,079595 | 31,114722 |
-| 03 | 46,739740 | 1,866247/0,678221 | 64,526283/62,399438 | 42,163812 |
-| 04 | 48,373161 | 1,995263/0,322120 | 55,386478/55,815199 | 36,940405 |
-
-Bei gleichen Winkeln unterscheiden sich 01 und 02 im medianen
-Wideband-Verlust nur um 0,620 dB, aber in der MI-Effizienz um
-7,235 bit/s/Hz. Der mediane Tonquotient sigma1/sigma0 beträgt
-0,309964 beziehungsweise 0,098778. Der Rang allein beschreibt diese
-schwächere zweite Mode nicht. Vertauschte TX-/RX-Abstände sind für diesen
-Link mit unterschiedlichen Arraymustern und Orientierungen nicht äquivalent.
-Bei 45/-45 Grad beträgt der Effizienzunterschied 5,223 bit/s/Hz.
-Diese Beobachtung ist auf die feste Szene und den Open-Loop-Messvertrag
-begrenzt; die hohen gaußschen MI-Werte sind keine Wi-Fi-Payloadraten.
-
-Alle sechs gepaarten Seed-/Fall-Spotchecks bestanden. Die schlechtesten
-Abweichungen über diese Checks sind:
-
-| Kriterium | Maximum | Grenze |
+| Prüfung | Ergebnis | Gültigkeitsgrenze |
 | --- | --- | --- |
-| Wideband-Verlust / dB | 0,000063766 | 0,5 |
-| Töne mit Rangänderung | 0 | 0 |
-| Skalierter Singularwertfehler D_sigma | 0,004976263 | 1 |
-| Ton-/Stream-SINR / dB | 0,002644970 | 1 |
-| Effektive Stream-SINR / dB | 0,000149771 | 0,5 |
-| MI-Effizienz / bit/s/Hz | 0,000090278 | 0,2 |
-
-100000 Samples sind damit für die beiden ausgewählten neuen Winkel-/
-Abstandskonfigurationen innerhalb der bestehenden Toleranzen stabil.
-Für die neuen Fälle 01/02 wurde kein zusätzlicher höherer Budgetlauf
-ausgeführt; aus dem Spotcheck wird kein globales Konvergenzurteil abgeleitet.
-Min-/Max-Spannen über drei Seeds sind deskriptiv, keine Konfidenzintervalle.
-
-Die CFR-Mediane betragen 0,698006 s bei 100000 (30 Traces) und
-6,451845 s bei 1000000 (zwölf Traces). Native Analysemediane liegen
-bei 0,678 beziehungsweise 0,651 ms; native Prozessaufrufe bei rund
-32 ms. `sweep_seconds` ist 107,656 s, der vollständige Runnerprozess
-benötigte 112,533 s. Laufzeiten bleiben host-/JIT-/lastabhängige Diagnosen.
-Software und Backend entsprechen 5.2.2: Sionna/RT 2.0.1, Mitsuba 3.8.0,
-Dr.Jit 1.3.1, NumPy 2.5.2 und LLVM-CPU mit einem Dr.Jit-Thread.
-
-Die vorhandenen 21 Benchmarktests bestanden in 19,969 s. Ihre bestehenden
-Geometrie-, Wiederholungs- und Negativtests wurden um getrennte Abstände
-erweitert; die reale Geometrieprüfung verwendet nun unterschiedliche
-TX-/RX-Abstände. Es wurden keine neuen Testdateien oder Suites hinzugefügt.
-Der gezielte Build von `ns3_wifi_sumimo_benchmark`/`sionna-test` und die
-native `sionna`-Suite mit 38 Fällen bestanden. Die lokale Exportprüfung
-validierte alle Traces, Rohmetriken, Hashes und Spotcheckentscheidungen,
-bestätigte die alten Kontrollkanäle und replayte zwei neue Kanäle nativ.
-Alle 21 aufgezeichneten Quell-/Szenenhashes und der Binärhash stimmen.
-Die drei Vergleichsplots wurden visuell geprüft. Unveränderte teure
-MU-Example-/Serverregressionen wurden nicht erneut ausgeführt.
-
-Messwerte, Konfigurationen, Kanalfixtures, Vergleichsplots und Prüfprotokolle
-liegen lokal unter `data/phase5_2_independent_spacing/`; das gesamte
-Verzeichnis ist ignoriert. Der Commit enthält ausschließlich die kleine
-Erweiterung vorhandener Beispiele/Tools/Tests und die Dokumentation.
-Nach den finalen Dokumentationsänderungen wurde das PDF einmal erzeugt,
-durch Seitenzahl, Textextraktion und Sichtprüfung validiert. Die Hashes
-und Prüfprotokolle bleiben ebenfalls lokale Artefakte. Produktionsmodelle,
-Helper, Server und Protobuf wurden für diese Unterphase nicht geändert.
-
-### 7.18 Ergebnisse und Validierung der Unterphase 5.2.5
-
-Der LLVM-CPU-Lauf vom 29.09.2026 erzeugte alle 24 geplanten initialen
-RT-Traces, 192 Auswertungszeilen und 49152 Tonzeilen. Sämtliche initialen
-CFR-Wiederholungen waren byteidentisch; alle 24 CFRs stimmen außerdem
-bytegenau mit den entsprechenden Fällen/Seeds/Budgets/Wiederholungen aus
-5.2.2 überein. Die tatsächlichen Array-/Radiogeometrien wurden geprüft.
-Alle unabhängigen SVD-/MMSE-/MI-/Linkbudgetprüfungen und alle zwölf
-statischen Kontrollpaare bestanden. Rang zwei bleibt auf jedem Ton
-erhalten, die Precoderleistung beträgt zwei. Nullalter reproduziert
-frisches SVD; positives Alter bei Evolutionsrate null ändert keine
-Linkmetriken. Verlust und Singularwerte bleiben bei der unitären
-Entwicklung innerhalb der numerischen Referenztoleranzen unverändert.
-
-Frische Baselines bei 100000 Samples; Mediane über drei Seeds mit je zwei
-Wiederholungen. Singularwerte sind zunächst Tonmediane je Lauf:
-
-| Fall | Verlust / dB | sigma0/sigma1 | MI-SINR 0/1 / dB | MI / bit/s/Hz |
-| --- | --- | --- | --- | --- |
-| 03 | 49,965776 | 1,995746/0,061211 | 67,005236/35,885346 | 34,179882 |
-| 06 | 55,848764 | 1,713904/0,884302 | 60,053426/53,721877 | 37,795345 |
-
-Verzögerte Auswertung desselben 5-ms-Sendekanals. D_0/D_1/D_eta sind
-Mediane der gepaarten Verluste gegen frisches CSI des jeweiligen Seeds;
-negative SINR-Verluste bedeuten einen Gewinn des betreffenden Streams:
-
-| Fall | Alter / ms | D_0 / dB | D_1 / dB | D_eta / bit/s/Hz | Verzögerte MI / bit/s/Hz |
-| --- | --- | --- | --- | --- | --- |
-| 03 | 0 | 0 | 0 | 0 | 34,179882 |
-| 03 | 1 | 12,701134 | -0,058929 | 4,199649 | 29,980233 |
-| 03 | 2,5 | 20,233071 | -0,365202 | 6,599963 | 27,579919 |
-| 03 | 5 | 25,531033 | -1,398795 | 8,016558 | 26,163324 |
-| 06 | 0 | 0 | 0 | 0 | 37,795345 |
-| 06 | 1 | 0,046198 | -0,011511 | 0,011523 | 37,783823 |
-| 06 | 2,5 | 0,269186 | -0,069421 | 0,066361 | 37,728985 |
-| 06 | 5 | 0,856004 | -0,242579 | 0,203776 | 37,591570 |
-
-In dieser Matrix reagiert die stärkste Mode des schlecht konditionierten
-Falls 03 deutlich empfindlicher auf veraltete Ausrichtung. Stream eins
-gewinnt gleichzeitig SINR; der Gewinn gleicht den Verlust von Stream null
-in der getrennten MMSE-MI nicht aus. Bei 5 ms betragen die medianen
-Korrelationen c 0,850353 für 03 und 0,803003 für 06, obwohl 03 den größeren
-Effizienzverlust hat. Ein skalarer Korrelationswert beschreibt daher diese
-MMSE-Empfindlichkeit nicht allein; Modeverhältnis und Basisorientierung
-sind ebenfalls beteiligt. Die relative CFR-Änderung ist in beiden Fällen
-bei 1/2,5/5 ms 0,156918/0,390181/0,765367. Gemeinsame gaußsche Kapazität,
-Kanalenergie, Rang und Singularwerte bleiben in diesem Experiment konstant.
-
-Alle 48 gepaarten Budgetchecks bestanden. Die Maxima über alle
-Fall-/Seed-/Alter-/CSI-Varianten betragen:
-
-| Kriterium | Maximum | Grenze |
-| --- | --- | --- |
-| Wideband-Verlust / dB | 0,000574092 | 0,5 |
-| Töne mit Rangänderung | 0 | 0 |
-| Skalierter Singularwertfehler D_sigma | 0,084527716 | 1 |
-| Ton-/Stream-SINR / dB | 0,037378018 | 1 |
-| Effektive Stream-SINR / dB | 0,007641967 | 0,5 |
-| MI-Effizienz / bit/s/Hz | 0,004928625 | 0,2 |
-
-Damit sind 100000 Samples für die getestete repräsentative Matrix gegen
-die endliche 1000000-Samplereferenz innerhalb der vorab festgelegten
-Toleranzen stabil. Das zertifiziert weder asymptotische Konvergenz noch
-andere Szenen, Bewegungen, Arrays oder Evolutionsraten. Der Verlust von
-0,203776 bit/s/Hz durch Alter bei 06 ist kein Konvergenzfehler; die
-0,2-Grenze gilt ausschließlich für Unterschiede zwischen Samplebudgets.
-
-Die CFR-Laufzeitmediane betragen 0,690818 s bei 100000 und 6,147503 s bei
-1000000 Samples (je zwölf Traces). Native Analysen benötigen median
-1,332 beziehungsweise 1,338 ms; native Prozessaufrufe einschließlich
-CSV-Lesen rund 46 ms. `sweep_seconds` beträgt 112,055 s. Geteilte
-Frisch-/Tracezeitwerte werden nicht als unabhängige Laufzeitmessungen
-behandelt. Software/Backend entsprechen 5.2.2: Sionna/RT 2.0.1,
-Mitsuba 3.8.0, Dr.Jit 1.3.1, NumPy 2.5.2, PyTorch 2.9.1+cpu,
-LLVM-CPU mit einem Dr.Jit-Thread. Diese Zeiten bleiben host-/JIT-/lastabhängig.
-
-Der gezielte Build von `ns3_wifi_sumimo_benchmark` und `sionna-test` bestand.
-Die vorhandenen Benchmarktests wurden um einen analytischen Vollranganker
-mit frischem SVD, 45-Grad-Mischung, Statik, Wiederholung und ungültigen
-Zeit-/Ratenangaben sowie eine optionale Prüfung des vollständigen lokalen
-Exports ergänzt. Neue Testdateien oder gespeicherte Fixtures sind nicht
-erforderlich. Der Exporttest prüft die komplette Matrix, Kanal-/Config-
-Hashes, Übereinstimmung mit 5.2.2, jede unabhängige Referenzrechnung,
-Wiederholungen, Zusammenfassungen, Zeitfelder, Degradation und die
-erneut berechneten Budgetentscheidungen. Ein anfänglicher Fehler beim
-Vergleich geplanter Validierungsregeln mit gemessenen Manifestverdicts
-wurde ausschließlich im Test korrigiert; die Messimplementierung und
-Messwerte blieben unverändert. Messzeitpunkt-Quellhashes bleiben im
-Manifest erhalten, die finalen Test-/Quellhashes stehen separat lokal.
-
-Die abschließenden 23 Python-Benchmarktests und die nativen Suites
-`sionna`, `sionna-mimo-csi-feedback`, `sionna-example-sumimo-precoding`
-und `sionna-example-sumimo-precoding-negative` wurden erfolgreich ausgeführt.
-Die beiden Altersplots wurden visuell geprüft. Produktionsmodelle, Helper,
-Server und Protobuf wurden nicht verändert; teure unveränderte MU-/
-Serverregressionen wurden nicht erneut ausgeführt.
-
-Raw-CFRs, Messwerte, Konfigurationen, Plots, Manifest, Prüfprotokolle und
-finale Quellhashes liegen lokal unter `data/phase5_2_csi_aging/`, vollständig
-von Git ignoriert. Der Commit enthält keine neuen Datensätze oder Fixtures.
-Nach den finalen Dokumentationsänderungen wurde das PDF genau einmal
-erzeugt und über Seitenzahl, Textextraktion, vollständige Seitenfußzeilen
-und Sichtprüfung validiert; der Nachweis bleibt ebenfalls lokal.
-
-Die Unterphase ist ein kontrollierter Empfindlichkeitsvergleich mit
-perfekter RX-CSI und exaktem, lediglich verzögertem TX-CSI. Quantisierung,
-Schätzfehler, physikalischer Doppler, bewegte Geometrie, Sounding-/MAC-
-Overhead und automatische Updateereignisse fehlen. Die periodische
-analytische Rotation rechtfertigt keine extrapolierte, für beliebige Alter
-monotone Verlustkurve. Hohe gaußsche MI-Werte und alle 256 FFT-Bins
-einschließlich DC/Guards sind Kanaldiagnostik, keine Wi-Fi-Payloadraten.
-PER wird nicht berechnet: Die dokumentierte Kalibrierung gilt nur für
-HE MCS 0/BCC/32 Byte/1x1 und wird nicht auf diese 2x2-Fälle übertragen.
-
-### 7.19 R1/R3-Inkrement: portable Provenienz und erste CPU-CI
-
-Dieses Inkrement erweitert die vorhandenen Runner und korrigiert ausschließlich
-den deaktivierten Cachepfad. Die historischen Messmanifeste, Exporte und
-Messzeitpunkt-Quellhashes bleiben erhalten; R1/R3 waren zu diesem Zeitpunkt offen.
-Der vollständige Vertrag steht in `doc/provenance-cpu-increment.md`.
-
-Neue Benchmarkläufe besitzen ein additives `run.json` mit
-`schema=ns3sionna.run`, `schema_version=1`; Kalibrier-CLI-Läufe verwenden
-`<output>.run.json`. Erfasst werden Konfiguration, Fall-/Seedidentitäten,
-Revision/lokale Änderungen/Quellhashes vor dem Lauf, tatsächliches Backend,
-CPU-/Paket-/Buildidentität, Befehle sowie Eingangs- und Artefakthashes.
-Die bisherigen Exportschemata bleiben unverändert. Historische Läufe ohne
-Sidecar haben keinen nachträglich behaupteten Ausführungsstatus; aktuelle
-Replayquellen ersetzen niemals ihre historischen Messquellen.
-
-Für Binärdaten gilt weiterhin der Rohbyte-SHA-256. UTF-8-Text erhält zusätzlich
-einen versionierten Digest
-\[
- d_{\mathrm{LF},1}(T)=\operatorname{SHA256}
- \left(\operatorname{UTF8encode}
- \left(\operatorname{CRLFtoLF}(\operatorname{UTF8decode}(T))\right)\right).
-\]
-Nur CRLF wird normalisiert; einzelne CR, Leerzeichen, BOM und Endzeilen bleiben
-relevant. Der Rohdigest bleibt parallel sichtbar. `.gitattributes` erzwingt LF
-für historische CSV-/JSON-Checkouts; Protobufs werden niemals textnormalisiert.
-Die alten Rohhashes werden weder umgedeutet noch neu geschrieben.
-
-Vor der Ausführung steht atomar `incomplete`; Ausnahmen liefern `failed` mit
-lokalem Traceback und gegebenenfalls Subprozess-stdout/stderr. Regulärer
-Abschluss schreibt atomar `success` mit Artefaktindex. Wissenschaftliche
-Akzeptanz bleibt separat unter `validation`: erfolgreicher Programmablauf ist
-keine Freigabe eines abgelehnten Kalibrierprofils. Unterbrechungen bleiben
-`incomplete`; vorhandene Ausgaben werden geschützt, Resume wird nicht angeboten.
-Der unvollständige GPU-Selektor wurde auf den bisherigen strikten CPU-Vertrag
-zurückgeführt. Auch ein abgelehntes Backend wird im Fehlermanifest benannt.
-
-Bei deaktiviertem Cache wurden zuvor neue Antworten gespeichert und ältere,
-noch gültige Antworten erneut ausgewählt. Der neue native REQ/REP-Test
-konstruiert unterschiedliche überlappend gültige Antworten ausschließlich im
-Speicher. Vor der Korrektur lieferte er Verlust 41 statt 42, Verzögerung 1 ns
-statt 3 ns und CFR `(1,-1)` statt `(4,-4)`; nach Wiederaktivierung wurde weiter
-41 verwendet, und nur vier statt fünf Anfragen erreichten den Peer.
-`SetCaching(false)` leert jetzt vorhandene Snapshots. Die gesamte neue Antwort
-wird vor der Rückgabe validiert; der passende aktuelle Eintrag wird direkt
-zurückgegeben, ohne andere Empfänger oder Look-ahead-Snapshots zu speichern.
-Die inklusive Zeitgültigkeit und bestehende Richtungsprüfung bleiben erhalten.
-Wiederaktivierung beginnt kalt und füllt den Cache regulär neu. Der Test prüft
-auch den anschließenden Treffer ohne zusätzliche Anfrage.
-
-Die neue CPU-CI baut den aktuellen Modulcheckout gegen die feste ns-3.40-
-Revision `4fdc985b5d5b800992e0ce87df7a727e32033794`, mit frisch generierten
-C++-/Python-Protobuf-Bindings. Python 3.12.12, pip 26.0.1 und 55 direkte/transitive
-Paketversionen sind exakt festgelegt (`requirements_cpu_ci.lock`); `pip check`
-und der Vergleich aller installierten Versionen bestanden. Der lokale frische
-Linux-Build und die einmalige vollständige Auswahl über
-`tools/run_cpu_regressions.py` bestanden: 50 native Testfälle in den sieben
-Suites `sionna`, `sionna-mimo-csi-feedback`, `dl-mu-mimo-runtime`, `dl-mu-mimo-ru`,
-`he-dl-mu-spectrum-ru`, `ul-mu-mimo` und `he-ul-mu-mimo-phy-adapter` sowie
-56 erfolgreiche Python-Tests. Unter den insgesamt 57 ausgewählten Python-Tests
-wurde ein optionaler lokaler Alterungsexporttest ausgelassen; drei teure frische
-RT-Prüfungen wurden ausdrücklich aus dieser CI-Auswahl herausgenommen.
-Vertrags-, Kalibrier-, Policy-, Provenienz- und eingefrorene Benchmarkprüfungen
-verwendeten die bestehenden drei versionierten Exportstudien. Die tatsächlich
-gewählte Mitsuba-Variante war `llvm_ad_mono_polarized`.
-
-Zusätzlich bestanden ein lokaler IPC-Smoke mit einem Fall (64 Töne, TX 2/RX 4, ein Link,
-drei frische Prozesse) und der Kalibrier-CLI-Replay mit Prüfung der neuen
-Sidecars und Artefakthashes. Der historische selektive MAE bleibt 0,054886
-bei Grenze 0,10; daraus folgt keine Freigabe für 0,05 oder weitere PHY-Profile.
-Die GitHub-Workflowdatei und ihre festen Action-Revisionen wurden geprüft;
-der gehostete Job selbst wurde hier nicht ausgeführt. Ubuntu-Systempakete
-folgen weiterhin den Paketquellen, Wheelhashes sind noch nicht gesperrt.
-Verfügbare CI-Installations-/Build-/Testlogs werden als Artefakt gesichert;
-unerwartete native Testfehler enthalten auch erfasstes stdout/stderr. Nach der
-abschließenden Erweiterung des Artefaktindex auf binäre Plotdateien bestanden
-die neun gezielten Provenienztests erneut; PNG-Hashes bleiben rohbytegeprüft.
-
-Lokale Logs, Builds und Smoke-Ausgaben liegen unter `/tmp/r1r3-*` beziehungsweise
-`/tmp/ns3-r1r3-*`; es werden keine neuen Datensätze oder aufgezeichneten Fixtures
-versioniert. Die PDF-Abschlussprüfung erfolgt nach der finalen Dokumentation
-mit genau einer Neuerzeugung; Seitenzahl, Textextraktion, vollständige
-Seitenfußzeilen und ausgewählte Seiten werden geprüft. Ihr Protokoll bleibt lokal.
-
-Zum Abschluss des ersten Inkrements blieben insbesondere externer Artefaktzugang für 5.2.4/5.2.5,
-Seed-/Run-/Streamunabhängigkeit, Resume, Wheel-/Systempaket-Locking und aktuelle
-Containerrezepte aus R1 sowie breitere Cache-Zeit-/Richtungs-/Batchregressionen,
-Belegungs-/Nullzugriffsstatistik, inaktive Linkbereinigung, Allokationsbudgets,
-Langzeitspeichergrenzen und erweiterte Sweeps aus R3. Vollständige RT-, Live-,
-GPU- und neue Referenzläufe sind kein Nachweis dieses Inkrements. Die Kalibrierung
-bleibt HE MCS 0/BCC/32 Byte/1x1; 2x2-Ergebnisse bleiben MMSE-/SVD-/MI-Diagnostik.
-Die nachfolgende Cachearbeit ist getrennt in Abschnitt 7.20 dokumentiert.
-
-### 7.20 Zweites R3-Inkrement: Cachekorrektheit und Belegungsstatistik
-
-Dieses Inkrement ergänzt den vorhandenen nativen Sockettest und IPC-Runner.
-Die historischen Exportdateien, Fixtures, Manifeste und Messzeitpunkt-Hashes
-bleiben erhalten; ihre früheren Laufzeiten werden nicht als neue Messung
-interpretiert. R1/R3 waren zum Zeitpunkt dieses Inkrements nicht vollständig abgeschlossen.
-Der ausführliche referenzierte Phase-5-Plan fehlt weiterhin im Checkout;
-der eingebettete R1-R6-Plan bleibt die verwendete Anforderungsgrundlage.
-
-Der Cache verwendet unverändert inklusive Gültigkeit
-\[
- t_{\mathrm{start}} \leq t_{\mathrm{now}} \leq t_{\mathrm{end}}.
-\]
-Bei Überlappung gewinnt der erste passende Eintrag in Antwort-/Einfügereihenfolge.
-Zukünftige Einträge werden gespeichert, aber vor ihrem Beginn nicht ausgewählt.
-MU-Einträge mit Nutzeridentität gelten nur für ihre explizite TX/RX-Richtung;
-der bestehende reziproke Legacy-Pfad bleibt erhalten. Eine kalte Anfrage muss
-in ihrer neuen Antwort einen jetzt gültigen passenden Link besitzen.
-Eine fehlende Zuordnung wird als `std::invalid_argument` abgelehnt; der frühere
-Fallback auf einen nicht initialisierten Dummy-Eintrag entfällt.
-
-Die vollständige Antwort wird vor Veröffentlichung der neuen Cacheeinträge
-validiert. Ungültige Wrapper, Zeitintervalle und Zeit-/Delay-Konvertierungen,
-leere Empfängerlisten, doppelte Empfänger, nichtendliche Verluste/CFR-Werte
-und inkonsistente CFR-Längen oder Dimensionen liefern `std::invalid_argument`.
-Die Multiplikation der CFR-Dimensionen wird vor Reserve/Allokation auf
-`size_t`-Überlauf geprüft. Die bestehenden MU-Identitätsprüfungen bleiben aktiv.
-Bei einem fehlerhaften späteren Eintrag wird auch ein gültiges Präfix nicht
-gespeichert. Vorher gültige Einträge bleiben nutzbar; bereits abgelaufene
-Einträge dürfen unabhängig davon bereinigt werden. Diese Atomarität gilt
-für Datenvalidierung, nicht für einen Allokationsfehler während der Übernahme.
-Transporttimeouts und absolute Antwort-/Allokationsbudgets bleiben offen.
-
-`GetStats()` liefert vor dem ersten Lookup 0 statt des früheren `0/0`.
-Fehlgeschlagene RPC-Versuche zählen als Miss; Statistiklesen ist kein Lookup.
-Die additive API `GetStorageStatistics()` liefert aktuelle und lebenslange
-Spitzenwerte für Links, Snapshots, Nutzbytes und Vektorkapazität. Für die
-zurückgehaltenen Snapshots \(e\) gilt
-\[
- B_{\mathrm{payload}} = \sum_e
- \left(|H_e|\,\operatorname{sizeof}(\mathrm{complex<double>})
- + |F_e|\,\operatorname{sizeof}(\mathrm{int})\right).
-\]
-`capacityBytes` zählt stattdessen die Kapazitäten der CFR-/Frequenzvektoren
-und zusätzlich `capacity * sizeof(CacheEntry)` der Linkvektoren. Spitzen sind
-das Maximum der veröffentlichten Belegung über die Objektlebensdauer.
-`SetCaching(false)` setzt die aktuelle Belegung auf null und erhält diese
-Spitzen; deaktivierte Anfragen speichern weiterhin keine Snapshots.
-Mapknoten, Allokatoroverhead, RSS und temporäre Protobuf-/Dekodierkopien werden
-nicht durch diese logischen Zähler erfasst. Teilweise belegte Linkvektoren
-behalten ihre Kapazität; vollständiges Leeren entfernt den Bucket.
-
-Nach Überschreiten der frühesten gespeicherten Endzeit entfernt ein stabiler
-Sweep auf dem nächsten Cache-Lookup oder `GetStorageStatistics()` sämtliche
-abgelaufenen Snapshots, auch in nie erneut angefragten Links. Er erhält
-Reihenfolge und gültige zukünftige Look-ahead-Snapshots. Vor dieser Endzeit
-entfällt der Sweep. Ein ganz ruhender Cache wird ohne erneuten Zugriff nicht
-bereinigt; ein Sweep kostet linear viele Snapshotprüfungen und ist keine
-harte Speicher-/Latenzschranke oder periodische Hintergrundbereinigung.
-
-Validierung am 1. Oktober 2026: drei zusätzliche native Cachefälle prüfen
-exakte Start-/Endränder und Zeit danach, Überlappungsreihenfolge, kalte Links,
-Legacy-Reziprozität, gerichtete MU-Antworten, Zukunftserhaltung, inaktive
-Bereinigung sowie aktuelle/Spitzenzähler und Leeren. Der dritte Fall lehnt
-13 fehlerhafte Antworten atomar ab und prüft nach jeder Ablehnung den alten
-Link; anschließend gelingt ein gültiger Retry. Alle Antworten entstehen im
-Speicher, ohne aufgezeichnete neue Fixtures. Der bestehende IPC-Runner
-prüft die Zähler zusätzlich gegen seine eingefrorenen CFR-/Frequenzlängen
-und nach Ablauf/Refresh; sein JSON-/CSV-Exportschema bleibt unverändert.
-
-Der inkrementelle Build im zuvor frisch erzeugten, festgelegten ns-3.40-
-Checkout bestand. Die einmalige vollständige Auswahl über
-`tools/run_cpu_regressions.py` bestand mit 53 nativen Fällen in sieben Suites
-und 56 erfolgreichen Python-Tests unter den 57 ausgewählten Tests.
-Ein optionaler lokaler Alterungsexporttest wurde ausgelassen; dieselben drei
-frischen RT-Prüfungen bleiben separat. Verwendet wurden die zuvor geprüften
-Python-/Paketpins und `llvm_ad_mono_polarized`. Die bestehenden eingefrorenen
-IPC-Replays bestanden einschließlich der neuen Zählerprüfungen.
-Logs und Builddaten liegen unter `/tmp/r3-*` und `/tmp/ns3-r1r3-*`.
-Die PDF wird nach den finalen Dokumentationsänderungen genau einmal erzeugt;
-Seitenzahl, Text, alle Fußzeilen und ausgewählte Seiten werden lokal geprüft.
-
-Der gehostete CPU-Job bleibt unvalidiert: Der Remotezweig steht noch auf
-`7dead3b`, vor der lokalen Workflowimplementierung. Eine Ausführung benötigt
-die Veröffentlichung der lokalen Commits. Es wird kein gehosteter Erfolg
-behauptet. Offen aus R3 bleiben insbesondere vor dem RT geprüfte Antwort-/
-Allokationsbudgets, langfristige Grenzen für gültige/überlappende/zukünftige
-Snapshots, Mobilitätshistorien-/Allokatormessungen, CFR-Kopieroptimierungen
-und erweiterte Live-/Zeit-/Link-/Look-ahead-Sweeps. Die offenen R1-Pakete aus
-7.19 sowie weitere PHY-Profile, GPU- und neue Referenzvalidierung bleiben offen.
-
-### 7.21 Drittes R3-Inkrement: Budgets und Look-ahead-Tiefe
-
-Dieses begrenzte Inkrement ergänzt die vorhandenen Cache-/Serververträge,
-Statistiken und Tests. R3 war zu diesem Messzeitpunkt offen. Der referenzierte ausführliche
-Phase-5-Plan ist nicht vorhanden; der eingebettete R1-R6-Plan bleibt maßgeblich.
-Historische Exporte, aufgezeichnete Fixtures und Provenienz werden unverändert
-weiterverwendet. Neue Logs und Messungen bleiben ausschließlich lokal.
-
-Native `SionnaPropagationCache::ResourceLimits` werden mit
-`cache->SetResourceLimits(limits)` gesetzt. Python verwendet
-`SionnaEnv(resource_limits=ResourceLimits(...))`; die Server-CLI bietet die
-entsprechenden `--max_subcarriers`, `--max_rx_antennas`, `--max_tx_antennas`,
-`--max_coefficients_per_channel`, `--max_batch_coefficients`, `--max_reply_bytes`,
-`--max_snapshots` und `--max_payload_bytes`. Alle Grenzen sind positiv und
-inklusiv und wirken gleichzeitig. Die gemeinsamen Standardwerte lauten:
-
-| Größe | Native Feld / Python Feld | Standardgrenze |
-| --- | --- | --- |
-| Töne | `maxSubcarriers` / `max_subcarriers` | 4096 |
-| RX-/TX-Antennen | `maxRxAntennas`, `maxTxAntennas` / `max_rx_antennas`, `max_tx_antennas` | je 64 |
-| Koeffizienten je Link | `maxCoefficientsPerChannel` / `max_coefficients_per_channel` | 4194304 |
-| Koeffizienten je Antwortbatch | `maxBatchCoefficients` / `max_batch_coefficients` | 16777216 |
-| Antwortbytes | `maxReplyBytes` / `max_reply_bytes` | 268435456 (256 MiB) |
-| Link-Snapshots | `maxSnapshots` / `max_snapshots` | 65536 |
-| Zurückgehaltene Nutzbytes | `maxPayloadBytes` / `max_payload_bytes` | 536870912 (512 MiB) |
-
-Die bisherigen nativen Deserialisierer bleiben verfügbar und delegieren an
-neue Überladungen mit Standardgrenzen. Leere Legacy-CFRs bleiben unterstützt.
-Ein Link-Snapshot ist ein RX-Eintrag eines Zeitpunkts, nicht ein gesamtes
-`ChannelState` mit mehreren Empfängern. Die Snapshotgrenze begrenzt auch die
-Anzahl aller zu dekodierenden RX-Einträge einer Antwort, einschließlich bereits
-abgelaufener Einträge. Dimensionsgrenzen gelten für neue CFR-Dekodierungen.
-
-Für jeden CFR gilt \(C_e=N_{\mathrm{sc},e}N_{\mathrm{rx},e}N_{\mathrm{tx},e}\).
-Native Multiplikationen, Summen und Allokationsbytes werden vor Reserve,
-CFR-Konstruktion und Cacheeinfügung gegen Überlauf und Grenzen geprüft.
-Python verwendet beliebig große Ganzzahlen und prüft die CFR-Bytezahl gegen
-`sys.maxsize`. Der gesamte Antwortbatch wird vor seiner ersten CFR-Allokation
-geprüft. Nach der bestehenden Ablaufbereinigung gilt für die geplante Aufnahme
-\[
- S_{\mathrm{alt}}+S_{\mathrm{neu}}\leq S_{\max},\qquad
- B_{\mathrm{alt}}+\sum_{\mathrm{neue,\ nicht\ abgelaufene}\ e}
- (16C_e+4N_{\mathrm{sc},e})\leq B_{\max}.
-\]
-Dies verwendet die logischen Nutzbytes aus 7.20. Bei Budgetverletzung wird die
-vollständige Antwort als `std::invalid_argument` verworfen, ohne gültiges
-Präfix aufzunehmen oder gültige/zukünftige Snapshots zu entfernen. Auch ein
-Absenken des Speicherbudgets unter die aktuelle gültige/zukünftige Belegung
-wird abgelehnt; die bisherige Konfiguration bleibt bestehen. Ein späterer Retry
-kann nach regulärem Ablauf Platz erhalten. Deaktivierter Cache behält keine
-Snapshots, unterliegt aber weiterhin den Antwort-/Dekodiergrenzen.
-
-Der native Empfang prüft die tatsächliche ZMQ-Antwortlänge vor Protobuf-Parsing
-und dessen `int`-Längenkonvertierung. Das bereits empfangene ZMQ-Buffer ist damit
-nicht begrenzt. Der Server prüft geplante Linkanzahl, Dimensionen und eine
-konservative Wire-Obergrenze vor Mobilitätsfortschritt, Platzierung und RT.
-Für \(R\) Empfänger, \(D\) Zeitpunkte, \(C=N_{\mathrm{sc}}N_{\mathrm{rx}}N_{\mathrm{tx}}\)
-und \(I\) UTF-8-Bytes der Array-Identitätsstrings verwendet er bei CFR-Ausgabe
-\[
- B_{\mathrm{wire,plan}}=64+256D+RD(512+I+16C+10N_{\mathrm{sc}}).
-\]
-Zehn Bytes pro Frequenz decken negative Protobuf-`int32`-Varints ab; die übrigen
-Pauschalen decken Wrapper, Zeit-/Positions-/Identitätsfelder und Längen ab.
-Ohne CFR-Ausgabe entfallen die beiden CFR-/Frequenzterme; die internen
-CFR-Koeffizientengrenzen bleiben aktiv. Die Nutzbytegrenze prüft serverseitig
-nur den geplanten Batch, nativ zusätzlich die bestehende Cachebelegung.
-Die endgültige `ByteSize()` wird nochmals vor Serialisierung geprüft.
-Serverablehnungen liefern eine bestehende negative `sim_ack` mit Fehlertext;
-der native Client reicht ihn in seiner Ausnahme weiter. Es gibt keine neue
-Protobuf-Nachricht oder automatische Aushandlung der beiden Konfigurationen.
-
-Look-ahead erzeugt tatsächlich
-\[
- D=\left\lfloor\frac{\mathrm{sub\_mode}}{\mathrm{receiver\_count}}\right\rfloor,
- \qquad \mathrm{receiver\_count}=|\mathrm{nodes}|-1.
-\]
-`sub_mode` zählt parallele Links, nicht die gewünschte Tiefe. Für drei Empfänger
-liefern beispielsweise 5, 14 und 50 die Tiefen 1, 4 und 16. Keine Empfänger oder
-\(D=0\) werden bei Initialisierung bzw. Anfrage klar abgelehnt, statt einen
-leeren Antwortbatch zu erzeugen. Die Nulltiefenmeldung lautet
-`Zero look-ahead depth: sub_mode must be at least receiver_count`.
-
-Validierung am 2. Oktober 2026: Ein zusätzlicher nativer Socketfall prüft
-inklusive Dimensions-/Koeffizienten-/Wire-/Speichergrenzen, Überlauf,
-sechs atomare Budgetablehnungen, unveränderte Belegung/Spitzen, Ablehnung eines
-zu kleinen neuen Speicherbudgets, erfolgreichen Retry nach Ablauf und einen
-späteren Treffer im zuvor gespeicherten Zukunftssnapshot. Vier zusätzliche
-Pythonfälle prüfen Grenzen, Allokationsüberlauf, unveränderte Nachrichten nach
-abgelehnter CFR-Konvertierung und Recovery, Tiefen 1/4/16 mit Restdivision sowie
-Ablehnung vor Mobilitätsaufruf/PathSolver ohne gefüllte Antwort.
-
-Der bestehende IPC-Runner bietet zusätzlich `--storage-steps=1..128`; ohne diese
-Option bleiben die bisherigen Exportschemata erhalten. Der kleine Lauf nutzte
-64 Töne, TX 2/RX 4, vier Links und 16 zusätzliche Zeitfortschritte. Die 18 Fills
-inklusive erster Befüllung und bestehender Ablaufprüfung erreichten zuletzt
-85,000017 ms Simulationszeit. Aktuelle und maximale Belegung blieben bei genau
-vier Snapshots und 33792 Nutzbytes, jeweils der konfigurierten Grenze.
-Alle 43 tatsächlichen Kanal-RPCs, Zeitstempel und Koeffizienten wurden geprüft;
-`run.json` meldet `success` mit getrenntem bestandenem Validierungsstatus.
-Der Allokator-Deltaindikator betrug 33504 Byte; RSS mit dem gemessenen Cache
-betrug 27602944 Byte, Prozess-Lebenszeitspitze 52342784 Byte. Diese Größen sind
-keine Speicherbudget-Abnahmekriterien und keine CFR-/RSS-Gleichsetzung.
-
-Der inkrementelle Build im festgelegten ns-3.40-Checkout und die bestehende
-vollständige CPU-Auswahl bestanden mit 54 nativen Fällen in sieben Suites
-sowie 60 bestandenen Python-Tests unter 61 ausgewählten Tests. Ein optionaler
-Alterungsexporttest blieb ausgelassen; die drei frischen RT-Prüfungen bleiben
-separat. Python 3.12.12, pip 26.0.1 und alle 55 Paketpins wurden geprüft;
-`pip check` bestand, Backend `llvm_ad_mono_polarized`. Historische eingefrorene
-Export-/IPC-Regressionsprüfungen bestanden unverändert. Logs liegen unter
-`/tmp/r3-budget-*`, Build/Paketumgebung unter `/tmp/ns3-r1r3-*`.
-
-Reproduktion vom vorbereiteten ns-3-Verzeichnis aus, mit leerem Ausgabeordner:
-
-~~~sh
-python contrib/sionna/tools/run_cpu_regressions.py
-python contrib/sionna/tools/benchmark_cache_ipc.py --storage-steps=16 \
-  --output=/tmp/r3-budget-storage
-~~~
-
-Nach der letzten Dokumentationsänderung wird die PDF genau einmal regeneriert;
-Seitenzahl, Textextraktion, sämtliche Fußzeilen und ausgewählte Seiten werden
-lokal validiert. Neue Datensätze, Fixtures, Logs und Plots werden nicht committed.
-
-Offen bleiben Mobilitätshistorien, RT-/CIR-Zwischenspeicher, temporäre
-Protobuf-/CFR-Kopien, Allokatorpools und RSS; die Budgetgrenzen sind keine harte
-Prozessspeichergrenze. Budgetablehnung ist atomar, ein `bad_alloc` während der
-Cacheübernahme besitzt weiterhin keine vollständige Rollbackgarantie.
-Eine serverseitig passende Antwort kann wegen bereits zurückgehaltener
-Snapshots oder unterschiedlich konfigurierter Clientlimits dennoch abgelehnt
-werden; der zustandsbehaftete Server wird dadurch nicht automatisch
-zurückgespult. Kein erforderlicher gültiger oder zukünftiger Snapshot wird
-zur Freigabe von Platz verdrängt. Transporttimeouts, Budgetaushandlung,
-Kopieroptimierungen, lange wechselnde Arbeitsmengen, breite Live-/GPU- und
-Look-ahead-Sweeps sowie der gehostete CPU-Nachweis bleiben außerhalb dieses
-Inkrements. R3 war zu diesem Messzeitpunkt nicht abgeschlossen; seine Abschlussabnahme steht in 7.24.
-
-### 7.22 Viertes R3-Inkrement: CFR-Kopierreduktion und Gettereigentum
-
-Dieses nächste begrenzte Phase-5-Inkrement setzt den Kopier-/Wiederverwendungspunkt
-von R3 um. Vier Produktionsdateien ändern ausschließlich Eigentum und Datenhaltung:
-`mimo-channel-matrix.{h,cc}` und `sionna-propagation-cache.{h,cc}`. Der vorhandene
-IPC-Benchmark und seine Tests werden erweitert; ein zweites Framework oder neue
-versionierte Messfixtures entstehen nicht. Der Vertrag steht in Abschnitt 5.25.
-R3 und Phase 5 insgesamt waren zu diesem Messzeitpunkt offen; R3 schließt in 7.24.
-
-Die Baseline ist die vor den Produktionsänderungen gebaute native Bibliothek zum
-Modulstand `11fd05c`. Sie wurde lokal gesichert und ihr SHA-256 gegen die bereits
-aufgezeichnete Buildidentität geprüft. Für den vollständigen Gettervergleich
-verwendeten Baseline und Kandidat dasselbe neue Benchmarkprogramm; nur die
-Sionna-Bibliothek wurde über `LD_LIBRARY_PATH` gewechselt. `ldd` bestätigte den
-Baselinepfad. Die alte Bibliothek wird damit nicht als Ergebnis neuer Quellen
-bezeichnet. Baseline-Buildidentität, Kriterien und Rohmessungen stehen in
-`/tmp/r3-copy-baseline/`; Kandidatprovenienz und vollständige Exporte in
-`/tmp/r3-copy-profile-final/`. Ein früherer Kandidatenlauf bleibt separat unter
-`/tmp/r3-copy-profile/`, Vergleiche unter `/tmp/r3-copy-comparison*.json` erhalten.
-Keine dieser Messungen oder Bibliotheken wird in Git aufgenommen.
-
-Gemessen wurde am 6. Oktober 2026 auf AMD Ryzen 5 PRO 2500U, x86_64,
-Linux 7.0.0-38 und glibc 2.39, mit dem lokalen ns-3.40-`default`-Build und
-aktiven Assertions. Die Vergleichsziele wurden vor Kandidatenmessungen
-festgehalten. Jeder Tabellenwert ist der Median dreier Prozessmediane;
-Zeitstreuung und p95 bleiben separat verfügbar. Für 1024 Töne, TX/RX 8/8
-und 16 Links ergeben sich:
-
-| Operation | Baseline (µs) | Finaler Kandidat (µs) | Medianreduktion |
-| --- | ---: | ---: | ---: |
-| Matrixgetter | 75,289 | 71,667 | 4,81 Prozent |
-| Konstanter Lossgetter | 73,365 | 0,831 | 98,87 Prozent |
-| Delaygetter | 73,135 | 0,922 | 98,74 Prozent |
-| Frequenzgetter | 72,889 | 1,022 | 98,60 Prozent |
-| CSI-Vektorgetter | 126,807 | 73,716 | 41,87 Prozent |
-| Einzel-CFR-Dekodierung | 258,033 | 81,676 | 68,35 Prozent |
-| Kalter vollständiger Cache-Miss | 23321,386 | 17319,350 | 25,74 Prozent |
-
-Das vorab gesetzte 20-Prozent-Ziel für den großen Matrixgetter wurde ausdrücklich
-**nicht** erreicht. Dessen notwendige öffentliche CFR-Wertkopie bleibt bestehen;
-keine allgemein schnellere Matrix-API wird behauptet. Die skalaren Getter erfüllen
-das 20-Prozent-Ziel deutlich; die Frequenzausgabe kopiert nur noch Frequenzen.
-Der erste Kandidat machte gleichzeitig eine langsamere Einzeldekodierung sichtbar.
-Die abschließende Anpassung verwendet eine einmalig vorgeprüfte Vektorlänge und
-indizierte Schreibzugriffe; der finale Decodervergleich ist oben ausgewiesen.
-Alle früheren Beobachtungen bleiben lokal erhalten.
-
-Beim kleinen Profilfall mit 64 Tönen, TX/RX 2/2 und einem Link sinkt der
-Matrix-Prozessmedian von 2,975 auf 1,563 µs, die Einzeldekodierung von 1,714
-auf 0,536 µs. Ein separat gemessener unveränderter Default-Matrixpfad prüft das
-vorab gesetzte Höchstens-zehn-Prozent-Regressionsziel: 2,265 µs Baseline und
-1,493 µs finaler Prozessmedian entsprechen Verhältnis 0,659 und bestehen die
-Grenze 1,10. Alle drei finalen Default-Prozesse bestanden dieselben Daten-/
-Requestprüfungen; der Vergleich steht in `/tmp/r3-copy-default-final.json`. Profilmodus und Defaultmodus werden nicht zu
-einem gepoolten Zeitdatensatz zusammengefasst.
-
-Die großen Matrix-Prozessmediane streuen von 70,510 bis 75,024 µs;
-die prozessweisen p95 liegen zwischen 90,807 und 153,668 µs. Die Lossmediane
-liegen bei 0,812 bis 0,842 µs und p95 bei 0,980 bis 1,102 µs. Kleine CPU-Zeiten
-und die Verteilungen belegen keine harte Latenzgrenze. Die aufgezeichneten
-Live-Heap-Deltas des großen Falls liegen bei rund 16,068 MiB, Linux-RSS mit
-Cache bei 106,352 bis 106,492 MiB. Die logischen Nutzbytes betragen unverändert
-16842752 Byte (klein: 4352 Byte). Allokatorpools, Map-/Protobuf-/Socketbedarf und
-RSS bleiben getrennte Beobachtungen; keine Gleichsetzung mit dem Cachebudget.
-
-Der finale Profilrunner validierte sechs unabhängige native/REP-Prozesspaare,
-4446 Zeitstichproben, 162 Kanal-RPCs und sechs bestätigte Close-Anfragen. Alle
-Koeffizienten, Dimensionen, Frequenzen, Delay-/Loss-Felder, Zeitränder,
-Trefferverhältnisse und Requesttranskripte bestanden. Die deterministischen
-Felder waren innerhalb jedes Falls identisch. `run.json` meldet `success`,
-Backend `frozen-protobuf-local-zmq` und separat `validation.status=passed`.
-Die zehn bestehenden/erweiterten IPC-Tests bestanden zusätzlich gegen diesen
-neuen Export einschließlich aller Statistiken, Hashes und frischer Replays.
-
-Der neue native Eigentumstest prüft die unveränderte Allokationsadresse bei
-Rvalue-Matrixaufbau und die unabhängige Lvalue-Kopie. Er variiert die Wire-
-Nutzerreihenfolge mit unterschiedlichen gerichteten MU-CFRs, mutiert öffentliche
-Ergebnisse und prüft die alten Werte nach Ablauf, Bereinigung, Cacheabschaltung
-und Wiederaktivierung. Ein korrektes MU-Präfix mit fehlerhaftem späteren Snapshot
-wird vollständig verworfen; Belegung und Spitzen bleiben erhalten, vorherige
-Kanäle bleiben nutzbar. Wiederholte Getterhits verursachen keine zusätzlichen RPCs.
-
-Der abschließende Zielbuild für `sionna-test` und die Benchmark-/SU-/MU-Beispiele
-bestand. Die bestehende vollständige Auswahl `run_cpu_regressions.py` wurde nach
-Stabilisierung einmal ausgeführt: 55 native Fälle in sieben Suites bestanden,
-sowie 65 bestandene Python-Tests unter 66 ausgewählten Tests. Nur der optionale
-lokale Alterungsexporttest wurde ausgelassen; die drei frischen RT-Prüfungen bleiben
-separat. Die früheren eingefrorenen Messungen und ihre Quellenhashes wurden nicht
-umgeschrieben. Python 3.12.12, sämtliche 55 Paketpins und `pip check` bestanden;
-der Serverimport bestätigte `llvm_ad_mono_polarized`.
-
-Zusätzlich bestanden sechs vorhandene Beispiel-Suites mit 13 Fällen für
-SU-MIMO, Helper-Konfiguration/-Laufzeit, Precoding/Feedback/Alterung und MU-MIMO,
-einschließlich der bestehenden Negativtests. Der MU-End-to-End-Vergleich prüfte
-vier Downlinkmethoden, zwei Kanäle, aktuelles/verzögertes CSI und drei
-Uplinkmethoden; seine vorhandene Referenzausgabe blieb exakt erhalten.
-
-Build-, CPU-, Export- und Beispielprotokolle liegen unter `/tmp/r3-copy-*.log`.
-Nach der letzten Dokumentationsänderung wird die PDF genau einmal erzeugt und
-auf Seitenzahl, vollständige Textextraktion, alle Fußzeilen und ausgewählte Seiten
-geprüft. Neue Rohdaten, Zeitmessungen und Fixtures bleiben ausschließlich lokal.
-
-Zum damaligen Messzeitpunkt waren breitere Sweeps, Mobilitätshistorien und
-Allokatorpools offen. Die verbleibende R3-Abnahme wird in 7.24 geschlossen;
-RT-/CIR-/Protobuf-/Transportbedarf, Transporttimeouts, Budgetaushandlung sowie
-Live-/GPU-/gehostete CPU-Evidenz bleiben außerhalb dieser Speicherabnahme.
-Der ungecachte Getter behält seine unabhängige öffentliche Wertkopie. Dieses
-Inkrement reduziert keine MU-PHY-Gruppenrechnung und erweitert weder die
-HE-MCS-0/BCC/32-Byte/1x1-Kalibrierung noch den physikalischen CSI-Vertrag.
-
-### 7.23 Native R1-Abnahme
+| 5.1: HE MCS 0, BCC, 32 Byte, 1x1, 20 MHz, 800 ns GI | Beta 1,0383687667; Offset −0,4958921206 dB; AWGN-MAE 0,013024, selektive MAE 0,054886 | erfüllt 0,05/0,10; selektiv verfehlt 0,05; ideales Timing/perfekte RX-CSI, drei Zweitapkanäle |
+| R2, 7. Oktober: Pilot im tatsächlichen HE-SU-Empfang | Profil-/Kontext-/Fehlermodelltests, flache und selektive PHY-Rezeption, Chunkaufteilung und Ablauf bestanden | explizite Installation, nicht aggregierte 32-Byte-PSDU; keine neue Link-Level-Kalibrierung |
+| 5.2.1: Abstand/Orientierung | zwölf 2x2-Fälle, byteidentische Wiederholungen, Rang zwei an allen Tönen | feste Szene/Geometrien, MMSE-/MI-Diagnostik |
+| 5.2.2: Samplekonvergenz | alle zwölf 100000/1000000-Paare bestehen; 10000 Samples scheitern bei Fall 03/Seed 43 | vier Links, drei Seeds; endliche Referenz, keine allgemeine Konvergenzgarantie |
+| 5.2.3: Cache/IPC | 64/256/1024 Töne, fünf TX/RX-Formen, 1/16/64 Links; exakte Daten-/RPC-/Payloadprüfungen bestanden | eingefrorene lokale Prozess-IPC, kein Live-RT/PHY-Nachweis |
+| 5.2.4/5.2.5: getrennte Abstände/CSI-Alter | 42 bzw. 24 initiale RT-Traces; Wiederholungen, Referenzrechnung und statische Kontrollen bestanden | Rohdaten lokal/unversioniert; analytische Rotation belegt keinen physikalischen Doppler |
+| R3: Kopier-/Eigentumsprüfung | großer Matrix-/Loss-Median um 4,81 %/98,87 % verbessert; Matrixziel 20 % verfehlt; kleine Default-Regressionsgrenze 1,10 erfüllt | instrumentierte lokale Baseline, keine universelle Latenzgarantie |
+| R3: Zeit-/Link-/Look-ahead-Sweep | 18 Fälle, 54 Prozesspaare, 6912 Epochen, 52200 RPCs; maximale Retention 557056 Byte; ungecacht null | 128 Epochen je Prozess; zwei zusätzliche 1024-Epochen-Läufe bestehen |
+| R1, 7. Oktober | sieben frische Seed-Traces, verschobener 20-Dateien-Prüfsatz frisch reproduziert; 129 Studienartefakte verifiziert; strikter Lockcheck | native Conda-CPU-Abnahme, keine Container-/GPU-Freigabe |
+| R4, 7. Oktober | 42 frische Prozesspaare, 21 Cachekontrollen, 1890 RPCs und 912 erfolgreiche PHY-Rezeptionen | instrumentiertes lokales LLVM; feste Geometrie und Diagnose-Beta, keine GPU-/PER-Freigabe |
+| CPU-Regressionen, 7. Oktober | 57 Sionna- und 35 Wi-Fi-Fälle; 70 Python-Tests bestanden, zwei optionale Exporttests ausgelassen | drei frische RT-Tests separat; hosted CI/CUDA hier nicht ausgeführt |
+
+Die versionierten Referenzen stehen unter
+`data/phase5_2_spacing_orientation/`, `data/phase5_2_sample_convergence/`,
+`data/phase5_2_cache_ipc/` und in den drei `data/he_mcs0_bcc_32_*`-Dateien.
+Sie enthalten Pläne, Konfigurationen, Rohdaten/Hashes und Validierungsurteile.
+5.2.4/5.2.5 sind zusätzlich als vollständige lokale Bundles im Artefaktkatalog zugänglich. Die jüngsten Cache-Messungen liegen unter
+`/tmp/r3-copy-*`, `/tmp/r3-workload-final` und `/tmp/r3-workload-long`;
+temporäre Pfade sind kein portables Reproduktionspaket.
+
+R1, R3, R4 und R5 sind im jeweils festgelegten nativen CPU-Umfang abgeschlossen. Phase 5 insgesamt bleibt
+offen: physikalische Alterung und die CPU/GPU-CI-/Backendabnahme. Zusätzliche MCS, Codearten, Paketgrößen,
+MIMO-/MU-Profile und physikalischer Doppler besitzen weiterhin keine Freigabe.
 
 Am 7. Oktober 2026 bestanden im bestehenden nativen Conda-CPU-Environment:
 
@@ -5810,7 +3894,7 @@ Die vollständigen lokalen Pakete und unveränderlichen Indexidentitäten stehen
 im versionierten Artefaktkatalog. Neue Messdaten bleiben außerhalb von Git;
 historische Messhashes, Datensätze und R2 wurden nicht verändert.
 
-### 7.24 R3-Abschluss: begrenzte Mobilitäts- und Pool-Speicherung
+### 7.14 R3-Abschluss: begrenzte Mobilitäts- und Pool-Speicherung
 
 Am 7. Oktober 2026 wurde die verbleibende R3-Abnahme als eine Unterphase im
 bestehenden nativen Conda-CPU-Environment abgeschlossen:
@@ -5840,9 +3924,9 @@ Neue Pläne, Rohantworten, CSVs, Logs und Eingangsbytes sind lokal im
 zugänglich. Das verschobene 39-Dateien-Paket verifiziert vollständig; ein neuer nativer
 CPU-Lauf reproduziert alle deterministischen Speicher-/Trajektorienfelder exakt. Historische
 Messhashes und R1/R2 bleiben unverändert. R3 besitzt keine Live-RT/PHY-Latenz-,
-physikalische Doppler-, CFR-/Protobuf-Allokator- oder RSS-Freigabe; R4 ist gemäß Abschnitt 7.25 abgeschlossen, R5 ist im festgelegten CPU-Umfang abgeschlossen; R6 bleibt offen.
+physikalische Doppler-, CFR-/Protobuf-Allokator- oder RSS-Freigabe; R4 ist gemäß Abschnitt 7.15 abgeschlossen, R5 ist im festgelegten CPU-Umfang abgeschlossen; R6 bleibt offen.
 
-### 7.25 R4-Abschluss: Live-CPU-Server-/PHY-Skalierung
+### 7.15 R4-Abschluss: Live-CPU-Server-/PHY-Skalierung
 
 Am 7. Oktober 2026 wurde R4 als eine vollständige Unterphase abgeschlossen.
 Die feste Abnahme verwendet AMD Ryzen 5 PRO 2500U, Conda/Python 3.12.12,
@@ -5917,7 +4001,7 @@ R4 ist im festgelegten instrumentierten CPU-Messumfang abgeschlossen.
 Weitere Szenen, PHY-/MU-/MAC-Lasten, Pools, universelle RSS-/Leistungsgrenzen,
 R5 schließt die begrenzte physikalische CPU-Alterung ab; GPU-Abnahme bleibt R6.
 
-### 7.26 R5-Abschluss: physikalische CSI-Alterung
+### 7.16 R5-Abschluss: physikalische CSI-Alterung
 
 Am 8. Oktober 2026 wurde R5 als **eine vollständige Unterphase** im vorab
 festgelegten CPU-Umfang abgeschlossen. Der [R5-Vertrag](doc/r5-physical-aging.md)
@@ -6044,7 +4128,7 @@ bewegte Streuer, neue Abstand-/Elevations-/Roll-/NLOS-Szenen, größere statisti
 Studien, PER-/Goodput-Kalibrierung und GPU-Nachweise bleiben spätere Arbeit.
 Phase 5 insgesamt bleibt wegen R6 und der dokumentierten Profil-/Szenengrenzen offen.
 
-### 7.27 R6: Backendvergleich und vollständiges Reproduktionspaket
+### 7.17 R6: Backendvergleich und vollständiges Reproduktionspaket
 
 R6 ist seit dem 20. Oktober 2026 auf Anwenderentscheid **abgeschlossen**.
 Die CPU-Regressionen und alle zwölf CPU-/CUDA-Vergleiche auf der RTX 3060
@@ -6344,6 +4428,13 @@ Gleichzeitigkeitsauswahl und dem erweiterten CPU-Phasenbeispiel ab.
 Automatische Sounding-/Feedbackabläufe, Synchronisationsfehler und eine
 vollständige MAC-Schedulerinstallation bleiben Forschungsgrenzen für Phase 5.
 
+### 8.1 Weitere Kalibrierung nach der allgemeinen BER-Abstraktion
+
+Die allgemeine parameterfreie BER-Abstraktion ist in Abschnitt 5.20 implementiert.
+Gepoolte EESM-Fits nach MCS/Codierungsfamilie und validierte spezifische Profile
+bleiben spätere Arbeit. Die vorhandene log(1+SINR)-MI-Diagnostik ist weiterhin
+keine PER-Abbildung. Eine universelle PER-Fehlergrenze wird nicht behauptet.
+
 ## 9. Ausführung
 
 Vom ns-3.40-Verzeichnis:
@@ -6370,107 +4461,29 @@ Vom ns-3.40-Verzeichnis:
 
     ./ns3 run "ns3_wifi_mumimo --eesmBetaLinear=2 --rzfAlpha=0.25 --verify=1"
 
-Reproduzierbarer Phase-5.2.1-Benchmark, vom ns-3-Verzeichnis aus, mit leerem
-Ausgabeverzeichnis und ohne laufenden ZMQ-Server:
+Phase 5 im dokumentierten CPU-Environment, jeweils mit neuem Ausgabeordner:
 
-    ./ns3 build ns3_wifi_sumimo_benchmark sionna-test
-    conda run --no-capture-output -n sionna-venv python \
-      contrib/sionna/tools/benchmark_sumimo.py \
-      --output=/tmp/sumimo-spacing-orientation
-    cd contrib/sionna/tools
-    conda run --no-capture-output -n sionna-venv python \
-      -m unittest -v test_benchmark_sumimo
-
-Die Tests nutzen standardmäßig die versionierte CPU-Referenz. Mit
-`SUMIMO_BENCHMARK_RESULTS=/tmp/sumimo-spacing-orientation` wird die neue
-vollständige Ausgabe überprüft. Ein einzelner eingefrorener realer Kanal
-kann vom ns-3-Verzeichnis aus ohne Raytracing erneut ausgewertet werden:
-
-    ./ns3 run 'ns3_wifi_sumimo_benchmark --action=analyze --input=contrib/sionna/data/phase5_2_spacing_orientation/case_00/channel_00.pb --output=/tmp/sumimo-replay.csv'
-
-Reproduzierbare Phase-5.2.2-Samplekonvergenz, wieder vom ns-3-Verzeichnis
-aus mit leerem Ausgabeverzeichnis:
-
-    ./ns3 build ns3_wifi_sumimo_benchmark sionna-test
-    conda run --no-capture-output -n sionna-venv python \
-      contrib/sionna/tools/benchmark_rt_convergence.py \
-      --output=/tmp/sumimo-sample-convergence
-    cd contrib/sionna/tools
-    conda run --no-capture-output -n sionna-venv python \
-      -m unittest -v test_benchmark_rt_convergence
-
-Die neue Testsuite verwendet standardmäßig die versionierte 5.2.2-CPU-Referenz;
-`SUMIMO_CONVERGENCE_RESULTS=/tmp/sumimo-sample-convergence` prüft eine neue
-vollständige Ausgabe. Der Runner exportiert zwei frische Traces pro
-Fall/Seed/Budget, bewertet gepaarte Seeds und erzeugt vier unversionierte
-Vergleichsplots. Der bestehende 5.2.1-Runner bleibt mit seinen Defaultkontrollen
-unverändert nutzbar.
-
-Reproduzierbare Phase-5.2.3-Cache-/IPC-Skalierung, vom ns-3-Verzeichnis aus:
-
-    ./ns3 configure --enable-examples --enable-tests
-    ./ns3 build ns3_sionna_cache_ipc_benchmark sionna-test
-    conda run --no-capture-output -n sionna-venv python \
-      contrib/sionna/tools/benchmark_cache_ipc.py \
-      --output=/tmp/sionna-cache-ipc
-    cd contrib/sionna/tools
-    conda run --no-capture-output -n sionna-venv python \
-      -m unittest -v test_benchmark_cache_ipc
-
-Ein leerer Ausgabeordner ist erforderlich. Der Runner startet und beendet
-seinen lokalen Frozen-REP-Prozess selbst; ein Sionna-RT-Server ist nicht nötig.
-Die Tests verwenden die versionierte Referenz unter `data/phase5_2_cache_ipc/`;
-`CACHE_IPC_BENCHMARK_RESULTS=/tmp/sionna-cache-ipc` prüft einen neuen Export.
-Alle Fixture-, Cache- und IPC-Validierungen bleiben von PER-Kalibrierung
-unabhängig. Native/RPC-Zeitstichproben und speicherbezogene Diagnosen stehen
-in CSV; die drei generierten PNG-Plots bleiben unversioniert.
-
-Viertes Phase-5-R3-Inkrement, mit leerem Ausgabeordner:
-
-    ./ns3 build -j 2 sionna-test ns3_sionna_cache_ipc_benchmark
+    ./ns3 build -j 2 test-runner sionna-test ns3_wifi_mimo_awgn_curve \
+      ns3_wifi_sumimo_benchmark ns3_sionna_cache_ipc_benchmark
     python contrib/sionna/tools/run_cpu_regressions.py
-    python contrib/sionna/tools/benchmark_cache_ipc.py --copy-profile \
-      --output=/tmp/r3-copy-profile
-    cd contrib/sionna/tools
-    CACHE_IPC_BENCHMARK_RESULTS=/tmp/r3-copy-profile \
-      python -m unittest -v test_benchmark_cache_ipc
+    python contrib/sionna/tools/calibrate_eesm.py \
+      --model-awgn contrib/sionna/data/he_mcs0_bcc_32_ns3_awgn.csv \
+      --reference contrib/sionna/data/he_mcs0_bcc_32_matlab_r2026a.json \
+      --output=/tmp/he-calibration.json
+    python contrib/sionna/tools/benchmark_sumimo.py --output=/tmp/sumimo
+    python contrib/sionna/tools/benchmark_rt_convergence.py --output=/tmp/convergence
+    python contrib/sionna/tools/benchmark_cache_ipc.py --output=/tmp/cache-ipc
+    python contrib/sionna/tools/benchmark_cache_ipc.py --workload-sweep \
+      --output=/tmp/cache-workload
 
-Es gilt das dokumentierte CPU-Environment. Ohne `--copy-profile` bleibt die
-bisherige Messmatrix aktiv; ohne Exportoverride prüfen die Tests weiterhin
-die historische eingefrorene Referenz.
-
-Phase 5.2.4 verwendet denselben Runner mit optionalem kleinem Sweep:
-
-    ./ns3 build ns3_wifi_sumimo_benchmark sionna-test
-    conda run --no-capture-output -n sionna-venv python \
-      contrib/sionna/tools/benchmark_rt_convergence.py \
-      --independent-spacing --output=/tmp/sumimo-independent-spacing
-
-Ein leerer Ausgabeordner ist erforderlich. Die vorhandenen Tests werden mit
-`python -m unittest -v test_benchmark_sumimo test_benchmark_rt_convergence`
-im Tools-Verzeichnis ausgeführt. Der Runner prüft jede neue CFR gegen die
-unabhängigen Referenzformeln und jeden höheren Budgetlauf gegen die vorab
-festgelegten Toleranzen. Neue Messergebnisse und Fixtures bleiben lokal.
-
-Phase 5.2.5 verwendet denselben Runner für aktuelles/verzögertes SVD-CSI:
-
-    ./ns3 build ns3_wifi_sumimo_benchmark sionna-test
-    conda run --no-capture-output -n sionna-venv python \
-      contrib/sionna/tools/benchmark_rt_convergence.py \
-      --csi-aging --output=/tmp/sumimo-csi-aging
-    cd contrib/sionna/tools
-    SUMIMO_AGING_RESULTS=/tmp/sumimo-csi-aging \
-      conda run --no-capture-output -n sionna-venv python \
-      -m unittest -v test_benchmark_sumimo test_benchmark_rt_convergence
-
-Ein leerer Ausgabeordner ist erforderlich. Ohne `SUMIMO_AGING_RESULTS` wird
-nur der optionale lokale Exporttest übersprungen; der neue analytische
-Alterungstest läuft weiterhin. Natives Replay einer initialen CFR:
-
-    ./ns3 run 'ns3_wifi_sumimo_benchmark --action=aging --input=/tmp/sumimo-csi-aging/case_03/seed_42/samples_100000/channel_00.pb --output=/tmp/aging-replay.csv --csiAgeMs=5 --transmissionMs=5 --rotationRateDegPerMs=9'
-
-Zeitstempel beziehen sich auf die initiale CFR bei t=0. Rate null hält den
-Kanal statisch; die ältere Open-Loop-Aktion `analyze` bleibt unverändert.
+Der Konvergenzrunner bietet `--independent-spacing` und `--csi-aging`,
+der IPC-Runner `--copy-profile`, `--storage-steps` und `--workload-steps`.
+Jede Variante benötigt ihren eigenen leeren Ausgabeordner; Details und
+Defaults stehen unter `--help`. `run_cpu_regressions.py` prüft die versionierten
+Referenzen und native Kontrollen. Lokale Exporte werden zusätzlich über
+`SUMIMO_BENCHMARK_RESULTS`, `SUMIMO_CONVERGENCE_RESULTS`, `SUMIMO_AGING_RESULTS`,
+`CACHE_IPC_BENCHMARK_RESULTS` bzw. `CACHE_IPC_WORKLOAD_RESULTS` ausgewählt.
+Frische RT-Läufe und lokale Studien bleiben separate Prüfungen.
 
 Python-Vertrag und Server vom Verzeichnis contrib/sionna/model/ns3sionna:
 
@@ -6535,9 +4548,8 @@ Allgemeinen BER-Vergleich ausführen:
 
 PDF neu erzeugen:
 
-    conda run -n sionna-venv python
-      contrib/sionna/tools/render_model_pdf.py
-      contrib/sionna/ns3sionna_mimo_model.md
+    python contrib/sionna/tools/render_model_pdf.py \
+      contrib/sionna/ns3sionna_mimo_model.md \
       contrib/sionna/ns3sionna_mimo_model.pdf
 
 Das Rendering-Skript benötigt nur Matplotlib und läuft im vorhandenen
