@@ -1,9 +1,9 @@
 # ns3sionna: MIMO-Abstraktionsmodell für IEEE 802.11ax/be
 
-Stand: 12. Oktober 2026. Phasen 1–4 implementiert; Phase 5 mit enger
-HE-MCS-0-Kalibrierung und begrenzten CPU-Studien teilweise validiert.
-R1–R5 sind im jeweils festgelegten CPU-Umfang abgeschlossen. R6 ist implementiert;
-CPU-Abnahme erfolgreich, RTX-3060-/CUDA-CI-Hardwareabnahme ausstehend.
+Stand: 20. Oktober 2026. Phasen 1–5 und die ns3sionna-MU-MIMO-Implementierung
+sind im vereinbarten Umfang abgeschlossen. R6 wurde nach erfolgreichem
+CPU-/RTX-3060-Vergleich vom Anwender abgenommen (Abschnitt 7.17).
+Frühere Offen-Vermerke dokumentieren historische Zwischenstände.
 R5 ergänzt getrennte physikalische Sounding-/Sendekanäle mit Bewegung und Doppler.
 
 Arbeitszweig: feature/su-mimo-minimal
@@ -6046,12 +6046,13 @@ Phase 5 insgesamt bleibt wegen R6 und der dokumentierten Profil-/Szenengrenzen o
 
 ### 7.27 R6: Backendvergleich und vollständiges Reproduktionspaket
 
-R6 wurde als **ein Implementierungsinkrement** mit dem vorab festgelegten
-[Backendvertrag](doc/r6-backend-completion.md) umgesetzt. Die lokale CPU-Abnahme
-ist erfolgreich; die physische CUDA-Abnahme auf der vom Anwender bereitgestellten
-RTX 3060 und eine tatsächliche Ausführung der CUDA-CI stehen noch aus. R6 wird
-deshalb ausdrücklich **nicht als vollständig hardwarevalidiert** ausgewiesen.
-R1–R5 und deren historische Messhashes bleiben unverändert.
+R6 ist seit dem 20. Oktober 2026 auf Anwenderentscheid **abgeschlossen**.
+Die CPU-Regressionen und alle zwölf CPU-/CUDA-Vergleiche auf der RTX 3060
+bestanden. Der verbleibende JSON-Parser-Test wird auf Anwenderwunsch erlassen.
+Damit sind Phase 5 und die ns3sionna-MU-MIMO-Implementierung im vereinbarten
+Umfang abgeschlossen. Eine separate CUDA-CI-Ausführung und abschließende
+Bundleprüfung werden nicht als durchgeführt ausgewiesen.
+Die folgenden Prüfberichte beschreiben frühere Zwischenstände.
 
 `benchmark_backends.py` startet getrennte frische CPU-/CUDA-Prozesse und setzt
 vor dem Import der variantenspezifischen Sionna-Klassen exakt
