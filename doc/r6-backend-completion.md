@@ -94,6 +94,31 @@ automatically. Afterward, rerun with a fresh output directory; keep the failed
 run's logs. If a target is unknown, the selected checkout lacks that benchmark's
 source or CMake registration; report the error instead of starting a clean build.
 
+On hosts with older glibc headers, `mallinfo2` may be unavailable. The cache
+benchmark now selects `mallinfo2` for glibc >=2.33 and `mallinfo` otherwise
+([glibc API introduction](https://sourceware.org/pipermail/glibc-cvs/2020q3/070685.html)).
+Both report allocator-used arena bytes plus mmap bytes. The native JSON field
+`heap_accounting` identifies `glibc_mallinfo2` or `glibc_mallinfo_32bit`;
+historical fixture bytes remain unchanged. Legacy fields are signed `int`,
+so they have a per-counter INT_MAX range and cannot support large-heap accuracy
+claims. Negative counters are rejected, and addition widens both operands first.
+Allocator accounting remains separate from RSS and logical cache payloads.
+
+The local patch `experiments/r6/r6-mallinfo-compat.patch` changes only this
+helper and its result metadata. Copy it separately to the remote home directory,
+then apply it from the existing ns-3 root and resume the two remaining targets:
+
+```sh
+patch -p1 < "$HOME/r6-mallinfo-compat.patch"
+./ns3 build -j 2 ns3_sionna_cache_ipc_benchmark ns3_sionna_live_benchmark
+```
+
+Local validation compiled the production helper against simulated new/legacy
+interfaces, including values above 32-bit range, widened legacy sums and both
+negative-counter cases. No ns-3 or remote build was executed locally. The patch
+was also applied in temporary trees against both the committed and user-edited
+benchmark, preserving unrelated changes.
+
 This mode requires `--source`, implies `--use-existing-environment`, and does
 not extract another ns-3 copy, configure, compile, regenerate bindings, create
 a venv or install packages. The three companion runner files are updated in

@@ -42,10 +42,29 @@ Require(bool condition, const char* message)
 uint64_t
 HeapBytes()
 {
+#if defined(__GLIBC__) && (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 33))
     const auto info = mallinfo2();
+#else
+    // mallinfo2 was introduced in glibc 2.33. Older glibc exposes the same
+    // counters through signed int fields; reject visible overflow and widen
+    // each field before addition. Legacy counters cannot represent > INT_MAX.
+    const auto info = mallinfo();
+    Require(info.uordblks >= 0 && info.hblkhd >= 0,
+            "Legacy mallinfo heap counters overflowed; use glibc >= 2.33 for large heaps");
+#endif
     // glibc arena-used accounting plus mmap blocks. Freed tcache chunks can
     // remain in uordblks; this is an allocator proxy, not a live-object census.
-    return info.uordblks + info.hblkhd;
+    return static_cast<uint64_t>(info.uordblks) + static_cast<uint64_t>(info.hblkhd);
+}
+
+const char*
+HeapAccounting()
+{
+#if defined(__GLIBC__) && (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 33))
+    return "glibc_mallinfo2";
+#else
+    return "glibc_mallinfo_32bit";
+#endif
 }
 
 uint64_t
@@ -480,6 +499,7 @@ main(int argc, char* argv[])
         {
             result << "  \"" << field.first << "\": " << field.second << ",\n";
         }
+        result << "  \"heap_accounting\": \"" << HeapAccounting() << "\",\n";
         result << "  \"coefficient_digest\": \"" << std::hex << std::setw(16) << std::setfill('0')
                << digest << "\",\n  \"cpp_zmq_version\": \"" << std::dec << major << '.' << minor
                << '.' << patch << "\"\n}\n";

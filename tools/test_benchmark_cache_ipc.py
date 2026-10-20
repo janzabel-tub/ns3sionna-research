@@ -12,6 +12,7 @@ import itertools
 import json
 import os
 from pathlib import Path
+import shutil
 import struct
 import subprocess
 import tempfile
@@ -19,6 +20,45 @@ import unittest
 
 import numpy as np
 import benchmark_cache_ipc as benchmark
+
+
+class TestHeapAccountingPortability(unittest.TestCase):
+    def test_production_helper_compiles_with_new_and_legacy_glibc_interfaces(self):
+        source = (benchmark.base.MODULE / "examples/ns3_sionna_cache_ipc_benchmark.cc").read_text()
+        helper = source[source.index("void\nRequire("):source.index("uint64_t\nRssBytes(")]
+        compiler = shutil.which("c++")
+        self.assertIsNotNone(compiler, "A C++ compiler is required for the native helper test")
+        cases = (
+            (33, "uint64_t", "mallinfo2", "8589934592ULL", "4294967296ULL",
+             0, "12884901888 glibc_mallinfo2"),
+            (32, "int", "mallinfo", "1234", "5678", 0, "6912 glibc_mallinfo_32bit"),
+            (31, "int", "mallinfo", "2147483647", "2147483647",
+             0, "4294967294 glibc_mallinfo_32bit"),
+            (31, "int", "mallinfo", "-1", "1", 2, "overflowed"),
+            (31, "int", "mallinfo", "1", "-1", 2, "overflowed"),
+        )
+        with tempfile.TemporaryDirectory(prefix="cache-heap-portability-") as temporary:
+            root = Path(temporary)
+            for index, (minor, field_type, function, arena, mapped, status, expected) in enumerate(cases):
+                with self.subTest(glibc_minor=minor, arena=arena, mapped=mapped):
+                    path = root / f"case{index}.cc"
+                    path.write_text(
+                        '#include <cstdint>\n#include <iostream>\n#include <stdexcept>\n'
+                        'using std::uint64_t;\n#undef __GLIBC__\n#undef __GLIBC_MINOR__\n'
+                        f'#define __GLIBC__ 2\n#define __GLIBC_MINOR__ {minor}\n'
+                        f'struct HeapInfo {{ {field_type} uordblks, hblkhd; }};\n'
+                        f'HeapInfo {function}() {{ return {{{arena}, {mapped}}}; }}\n' + helper +
+                        'int main() { try { auto bytes = HeapBytes(); '
+                        'std::cout << bytes << " " << HeapAccounting(); return 0; } '
+                        'catch (const std::invalid_argument& error) { '
+                        'std::cerr << error.what(); return 2; } }\n')
+                    binary = root / f"case{index}"
+                    subprocess.run([compiler, "-std=c++17", "-Wall", "-Wextra", "-Werror",
+                                    str(path), "-o", str(binary)],
+                                   check=True, text=True, capture_output=True, timeout=60)
+                    result = subprocess.run([str(binary)], text=True, capture_output=True, timeout=10)
+                    self.assertEqual(result.returncode, status, result.stderr)
+                    self.assertIn(expected, result.stdout + result.stderr)
 
 
 class TestFrozenFixtures(unittest.TestCase):
