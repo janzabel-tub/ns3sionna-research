@@ -28,6 +28,7 @@ MIMO and timing variables:
   TCP_VARIANT=ns3::TcpCubic RNG_RUN=1 LDPC=true
   AP_POSITION='x,y,z' STA_POSITIONS='x,y,z;x,y,z' (optional scene overrides)
   SERVER_URL=tcp://localhost:5555 BUILD=true VERBOSE=false PRINT_THROUGHPUT=false
+  RUN_TIMEOUT_SECONDS=1800 (wall-clock limit; 0 disables it)
   ENABLE_PCAP=false ENABLE_MIMO_TRACE=false ENABLE_THROUGHPUT_10MS=false
 
 Minstrel adapts HE MCS, NSS, bandwidth and GI using the beta-free BER mapping.
@@ -42,12 +43,22 @@ computationtime.csv}; process output goes to run.log at OUTPUT_DIR.
 CLI flags use old TCP spelling: --mobile_scenario, --mobile_speed, --sub_mode,
 --txPower, --minstrelRateTrace. Use --prtTput=true for live station throughput.
 For all C++ flags, run the ns-3 target with --PrintHelp.
+The wall-clock limit covers the whole simulation invocation, including its
+station-count sweep; build time is excluded. On expiry, GNU timeout sends TERM
+to the simulation process group, then KILL after 5 seconds if needed. Partial
+outputs are kept. The external Sionna server is left running.
 This runner uses an existing server; start it using your normal Sionna setup.
+It does not start, monitor, or restart the server.
 HELP
     exit 0
 fi
 DRY_RUN=false
 if [[ ${1:-} == --dry-run ]]; then DRY_RUN=true; shift; fi
+RUN_TIMEOUT_SECONDS=${RUN_TIMEOUT_SECONDS:-1800}
+[[ $RUN_TIMEOUT_SECONDS =~ ^[0-9]+$ ]] || {
+    echo '[runner] RUN_TIMEOUT_SECONDS must be a non-negative integer (0 disables it)' >&2
+    exit 2
+}
 OUTPUT_DIR=${OUTPUT_DIR:-"$NS3_DIR/results/mimo-monolith/$(date +%Y%m%d-%H%M%S)-$$"}
 # Resolve relative output paths against the caller, before changing directory.
 if [[ $OUTPUT_DIR != /* ]]; then OUTPUT_DIR="$PWD/$OUTPUT_DIR"; fi
@@ -85,6 +96,9 @@ if [[ -z $OUTPUT_DIR ]]; then echo '[runner] output directory cannot be empty' >
 if [[ $OUTPUT_DIR != /* ]]; then OUTPUT_DIR="$PWD/$OUTPUT_DIR"; fi
 args+=("$@" "--outputDirectory=$OUTPUT_DIR")
 command=(./ns3 run --no-build ns3sionna-performance-sionna-mimo-monolith -- "${args[@]}")
+if [[ ! $RUN_TIMEOUT_SECONDS =~ ^0+$ ]]; then
+    command=(timeout --signal=TERM --kill-after=5 "$RUN_TIMEOUT_SECONDS" "${command[@]}")
+fi
 if [[ $DRY_RUN == true ]]; then
     printf 'cd %q\n' "$NS3_DIR"
     printf '%q ' "${command[@]}"
@@ -102,7 +116,16 @@ for option in "$@"; do
 done
 if [[ -e $OUTPUT_DIR ]]; then echo "[runner] output directory already exists: $OUTPUT_DIR" >&2; exit 2; fi
 cd -- "$NS3_DIR"
+if [[ ! $RUN_TIMEOUT_SECONDS =~ ^0+$ ]]; then
+    command -v timeout >/dev/null || { echo '[runner] GNU timeout is required for RUN_TIMEOUT_SECONDS' >&2; exit 2; }
+fi
 if [[ ${BUILD:-true} == true ]]; then ./ns3 build ns3sionna-performance-sionna-mimo-monolith -j 2; fi
 mkdir -p -- "$OUTPUT_DIR"
 printf '[runner] %s -> %s\n' "${RUN_LABEL:-manual}" "$OUTPUT_DIR"
-"${command[@]}" 2>&1 | tee "$OUTPUT_DIR/run.log"
+status=0
+"${command[@]}" 2>&1 | tee "$OUTPUT_DIR/run.log" || status=$?
+if [[ ! $RUN_TIMEOUT_SECONDS =~ ^0+$ && ( $status == 124 || $status == 137 ) ]]; then
+    printf '[runner] simulation stopped (exit %s; wall-clock limit %s s, kill grace 5 s); partial outputs: %s\n' \
+        "$status" "$RUN_TIMEOUT_SECONDS" "$OUTPUT_DIR" | tee -a "$OUTPUT_DIR/run.log" >&2
+fi
+exit "$status"

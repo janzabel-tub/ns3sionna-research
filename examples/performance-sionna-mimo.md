@@ -21,13 +21,34 @@ in `.failed-attempt-N` directories, and server restarts get separate logs.
 Successful configurations are kept and the sweep continues. Other errors or
 exhausted retries stop the sweep. Existing outputs are rejected.
 
-Use `watchdog-mimo.sh` to start the local server and run with crash monitoring
-enabled. It delegates to the same runner and accepts its sweep variables and
-options:
+`watchdog-mimo.sh` now starts and supervises the **TCP-style MIMO monolith**,
+`performance-sionna-mimo-monolith.sh`. It uses one AP with a default 1/2/4-STA
+sweep, HE Minstrel and beta-free BER mapping. Edit the configuration block at
+the top of the watchdog for all experiment, recording, server and timeout
+settings; environment variables and monolith CLI options can override them.
+Optional packet recordings are disabled by default.
 
 ```bash
 bash contrib/sionna/examples/watchdog-mimo.sh
+# Print the resolved monolith commands without starting anything:
+bash contrib/sionna/examples/watchdog-mimo.sh --dry-run
+# Sweep coherence times and seeds; each invocation sweeps station counts:
+COHERENCE_TIMES_MS='0 10 100' START_SEED=1 END_SEED=3 \
+bash contrib/sionna/examples/watchdog-mimo.sh --prtTput=true
 ```
+
+The watchdog builds the monolith once, starts a local server using
+`SERVER_PYTHON`, waits for readiness and checks liveness every `CHECK_INTERVAL`
+seconds (default 1). `RUN_TIMEOUT_SECONDS=1800` covers each coherence/seed
+invocation including its station-count sweep; zero disables the limit. Managed
+server crashes and simulation timeouts archive partial outputs and retry up to
+`MAX_RETRIES=3` times. Only its owned server and simulation processes are stopped.
+`START_SERVER=false` uses an existing server without managing its process.
+Results are written below `OUTPUT_BASE/tcN_seedM/stas-K/`; server and per-attempt
+logs are kept at the root. The output root must be new.
+
+The remaining examples below describe the separate AP/STA-pair runner,
+`performance-sionna-mimo.sh`.
 
 From the ns-3 directory, inspect options without starting simulations:
 
