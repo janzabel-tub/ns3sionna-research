@@ -31,6 +31,8 @@ export NUM_RES=16
 export NUM_STAS=1
 export MOBILE_SPEED=7
 export DATA_RATE=150
+export RATE_ADAPTATION=${RATE_ADAPTATION:-minstrel}
+export MCS=${MCS:-11}
 export ENVIRONMENT="apartment/apartment.xml"  # Use "munich/munich.xml" for Munich positions
 export TX_POWER=30
 

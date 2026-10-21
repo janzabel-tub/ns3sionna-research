@@ -20,6 +20,8 @@ MOBILE_SPEED=${MOBILE_SPEED:-1}
 COHERENCE_TIME=${COHERENCE_TIME:-0}
 SEED=${SEED:-1}
 DATA_RATE=${DATA_RATE:-600}
+RATE_ADAPTATION=${RATE_ADAPTATION:-minstrel}
+MCS=${MCS:-11}
 ENVIRONMENT=${ENVIRONMENT:-"apartment/apartment.xml"}
 TX_POWER=${TX_POWER:-20}
 OUTPUT_DIR=${OUTPUT_DIR:-"results/tc${COHERENCE_TIME}"}
@@ -53,6 +55,8 @@ EXTRA_FLAGS=""
   --sub_mode=${NUM_RES} \
   --fixedCoherenceTimeMs=${COHERENCE_TIME} \
   --dataRate=${DATA_RATE} \
+  --rateAdaptation=${RATE_ADAPTATION} \
+  --mcs=${MCS} \
   --txPower=${TX_POWER} \
   --seed=${SEED} \
   ${EXTRA_FLAGS}"

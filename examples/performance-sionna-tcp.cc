@@ -579,6 +579,8 @@ RunSimulation(  const std::string environment,
                 const bool verbose,
                 const int fixed_coherence_time_ms,
                 const int data_Rate_mbps,
+                const std::string& rate_adaptation,
+                const uint32_t mcs,
                 const int seed,
                 const bool enable_snr,
                 const bool enable_positions,
@@ -652,11 +654,24 @@ RunSimulation(  const std::string environment,
                              std::to_string(channel_width) + ", BAND_5GHZ, 0}";
     spectrumPhy.Set("ChannelSettings", StringValue(channelStr));
 
-    std::string wifiManager("MinstrelHt");
+    const std::string wifiManager = rate_adaptation == "fixed" ? "ConstantRate" : "MinstrelHt";
     uint32_t rtsThreshold = 999999; // disabled even for large A-MPDU
-    wifi.SetRemoteStationManager("ns3::" + wifiManager + "WifiManager",
-                                 "RtsCtsThreshold",
-                                 UintegerValue(rtsThreshold));
+    if (rate_adaptation == "fixed")
+    {
+        wifi.SetRemoteStationManager("ns3::" + wifiManager + "WifiManager",
+                                     "DataMode",
+                                     StringValue("HeMcs" + std::to_string(mcs)),
+                                     "ControlMode",
+                                     StringValue("OfdmRate24Mbps"),
+                                     "RtsCtsThreshold",
+                                     UintegerValue(rtsThreshold));
+    }
+    else
+    {
+        wifi.SetRemoteStationManager("ns3::" + wifiManager + "WifiManager",
+                                     "RtsCtsThreshold",
+                                     UintegerValue(rtsThreshold));
+    }
 
     // TCP Setup
     DataRate dataRate(std::to_string(data_Rate_mbps) + "Mb/s");
@@ -950,6 +965,8 @@ main(int argc, char* argv[])
    int sub_mode = 16;
    int fixed_coherence_time_ms = 0;
    int data_Rate_mbps = 150;
+   std::string rate_adaptation = "minstrel";
+   uint32_t mcs = 11;
    int seed = 1;
    bool enable_snr = false;
    bool enable_positions = false;
@@ -968,6 +985,8 @@ main(int argc, char* argv[])
    cmd.AddValue("verbose", "Enable logging", verbose);
    cmd.AddValue("fixedCoherenceTimeMs", "The fixed coherence time in msec", fixed_coherence_time_ms);
    cmd.AddValue("dataRate", "Data Rate in Mb/s", data_Rate_mbps);
+   cmd.AddValue("rateAdaptation", "Rate control: minstrel or fixed", rate_adaptation);
+   cmd.AddValue("mcs", "Fixed HE MCS when rateAdaptation=fixed (0--11)", mcs);
    cmd.AddValue("seed", "Set the seed for the run", seed);
    cmd.AddValue("snr", "Enable PHY-level per-reception SNR logging (including failed decodes) to snr_results.csv", enable_snr);
    cmd.AddValue("positions", "Enable PHY-level per-reception position logging to position_results.csv", enable_positions);
@@ -975,6 +994,15 @@ main(int argc, char* argv[])
    cmd.AddValue("txPower", "Transmit power in dBm (used by PHY and SNR math)", TX_POWER_DBM);
 
    cmd.Parse(argc, argv);
+
+   if (rate_adaptation != "minstrel" && rate_adaptation != "fixed")
+   {
+       NS_FATAL_ERROR("rateAdaptation must be 'minstrel' or 'fixed'");
+   }
+   if (rate_adaptation == "fixed" && mcs > 11)
+   {
+       NS_FATAL_ERROR("fixed HE MCS must be in [0, 11]");
+   }
 
    if (enable_snr)
        ofs_snr.open("snr_results.csv");
@@ -1005,6 +1033,10 @@ main(int argc, char* argv[])
    std::cout << " speed " << mobile_speed;
    std::cout << " caching " << caching << " env " << environment;
    std::cout << " mode " << mode << " submode " << sub_mode << std::endl;
+   std::cout << " rateAdaptation " << rate_adaptation;
+   if (rate_adaptation == "fixed")
+       std::cout << " MCS " << mcs;
+   std::cout << std::endl;
    std::cout << " txPower " << TX_POWER_DBM << " dBm";
    std::cout << " snr " << enable_snr
              << " positions " << enable_positions
@@ -1017,7 +1049,8 @@ main(int argc, char* argv[])
        computationTime = RunSimulation(environment, numStas, mobile_scenario,
                                        mobile_speed, caching, mode, sub_mode,
                                        verbose, fixed_coherence_time_ms,
-                                       data_Rate_mbps, seed, enable_snr,
+                                       data_Rate_mbps, rate_adaptation, mcs,
+                                       seed, enable_snr,
                                        enable_positions,
                                        enable_minstrel_rate_trace);
        numStas = numStas * 2;

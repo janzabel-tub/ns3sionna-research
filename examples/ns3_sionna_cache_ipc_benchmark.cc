@@ -179,7 +179,7 @@ ValidateCache(Ptr<SionnaPropagationCache> cache,
     for (int link = 0; link < state.rx_nodes_size(); ++link)
     {
         const auto& rx = state.rx_nodes(link);
-        auto channel = cache->GetPropagationChannelMatrix(radios[0], radios[link + 1]);
+        auto channel = cache->GetPropagationChannelMatrix(radios[0], radios[rx.id()]);
         Require(channel.GetNumSubcarriers() == static_cast<uint32_t>(rx.frequencies_size()) &&
                     channel.GetNumRxAntennas() == rx.num_rx_antennas() &&
                     channel.GetNumTxAntennas() == rx.num_tx_antennas(),
@@ -202,20 +202,20 @@ ValidateCache(Ptr<SionnaPropagationCache> cache,
                 }
             }
         }
-        const auto frequencies = cache->GetPropagationFreq(radios[0], radios[link + 1]);
+        const auto frequencies = cache->GetPropagationFreq(radios[0], radios[rx.id()]);
         Require(std::vector<int>(rx.frequencies().begin(), rx.frequencies().end()) == frequencies,
                 "Cache changed frequency order");
         const double loss = cache->GetPropagationLoss(Ptr<const MobilityModel>(radios[0]),
-                                                     Ptr<const MobilityModel>(radios[link + 1]));
+                                                     Ptr<const MobilityModel>(radios[rx.id()]));
         Require(copyProfile ? Bits(loss) == Bits(rx.wb_loss()) : loss == rx.wb_loss(),
                 "Cache changed wideband loss");
-        Require(cache->GetPropagationDelay(radios[0], radios[link + 1]).GetNanoSeconds() ==
+        Require(cache->GetPropagationDelay(radios[0], radios[rx.id()]).GetNanoSeconds() ==
                     static_cast<int64_t>(rx.delay()),
                 "Cache changed delay");
         if (copyProfile)
         {
             // Validate every owning CSI result outside the measured getter loops.
-            const auto csi = cache->GetPropagationCSI(radios[0], radios[link + 1]);
+            const auto csi = cache->GetPropagationCSI(radios[0], radios[rx.id()]);
             Require(csi.size() == static_cast<std::size_t>(rx.csi_real_size()),
                     "Cache changed CSI dimensions");
             for (std::size_t i = 0; i < csi.size(); ++i)
@@ -228,6 +228,120 @@ ValidateCache(Ptr<SionnaPropagationCache> cache,
     }
     return digest;
 }
+
+void
+RunWorkload(SionnaHelper& helper,
+            const std::vector<Ptr<SionnaMobilityModel>>& radios,
+            const ns3sionna::ChannelStateResponse::ChannelState& source,
+            const std::string& output,
+            const std::string& timings,
+            const std::string& trajectory,
+            uint32_t steps,
+            uint32_t depth,
+            bool enabled)
+{
+    const uint32_t links = source.rx_nodes_size();
+    const uint32_t active = std::max(1u, links / 8);
+    const uint64_t perSnapshot = source.rx_nodes(0).csi_real_size() * sizeof(std::complex<double>) +
+                                 source.rx_nodes(0).frequencies_size() * sizeof(int);
+    auto cache = MakeCache(helper);
+    SionnaPropagationCache::ResourceLimits limits;
+    limits.maxSnapshots = active * depth;
+    limits.maxPayloadBytes = perSnapshot * active * depth;
+    cache->SetResourceLimits(limits);
+    cache->SetCaching(enabled);
+    std::ofstream trace(trajectory), samples(timings);
+    Require(trace.is_open() && samples.is_open(), "Cannot write workload trajectory/timings");
+    trace << "step,time_ns,active_first,active_links,links,snapshots,payload_bytes,capacity_bytes,"
+             "peak_snapshots,peak_payload_bytes,heap_bytes,rss_bytes,coefficient_digest\n";
+    samples << "operation,iteration,nanoseconds\n";
+    const uint64_t heapBefore = HeapBytes(), rssBefore = RssBytes();
+    uint64_t digest = 0;
+    for (uint32_t step = 0; step < steps; ++step)
+    {
+        Simulator::Schedule(NanoSeconds(5000001LL * step), [&, step] {
+            const uint32_t first = ((step / depth) * active) % links;
+            // Construct an independent expected snapshot from the immutable input.
+            auto expected = source;
+            expected.clear_rx_nodes();
+            for (uint32_t i = 0; i < active; ++i)
+            {
+                auto* radio = expected.add_rx_nodes();
+                radio->CopyFrom(source.rx_nodes(first + i));
+                radio->set_wb_loss(radio->wb_loss() + step / 8.0);
+                radio->set_delay(radio->delay() + step);
+                for (int j = 0; j < radio->csi_real_size(); ++j)
+                {
+                    const double real = radio->csi_real(j), imag = radio->csi_imag(j);
+                    switch (step % 4)
+                    {
+                    case 1: radio->set_csi_real(j, -imag); radio->set_csi_imag(j, real); break;
+                    case 2: radio->set_csi_real(j, -real); radio->set_csi_imag(j, -imag); break;
+                    case 3: radio->set_csi_real(j, imag); radio->set_csi_imag(j, -real); break;
+                    default: break;
+                    }
+                }
+            }
+            const auto start = Clock::now();
+            digest = ValidateCache(cache, radios, expected, false);
+            const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - start);
+            samples << "workload_epoch," << step << ',' << elapsed.count() << '\n';
+            const auto live = cache->GetStorageStatistics();
+            const uint64_t count = enabled ? active * (depth - step % depth) : 0;
+            Require(live.links == (enabled ? active : 0) && live.snapshots == count &&
+                        live.payloadBytes == count * perSnapshot &&
+                        live.peakSnapshots == (enabled ? limits.maxSnapshots : 0) &&
+                        live.peakPayloadBytes == (enabled ? limits.maxPayloadBytes : 0),
+                    "Workload retained stale/inactive snapshots or exceeded its budget");
+            trace << step << ',' << Simulator::Now().GetNanoSeconds() << ',' << first + 1 << ','
+                  << active << ',' << live.links << ',' << live.snapshots << ',' << live.payloadBytes << ','
+                  << live.capacityBytes << ',' << live.peakSnapshots << ',' << live.peakPayloadBytes << ','
+                  << HeapBytes() << ',' << RssBytes() << ',' << std::hex << std::setw(16)
+                  << std::setfill('0') << digest << std::dec << '\n';
+        });
+    }
+    Simulator::Schedule(NanoSeconds(5000001LL * steps), [&] {
+        const auto empty = cache->GetStorageStatistics();
+        Require(empty.links == 0 && empty.snapshots == 0 && empty.payloadBytes == 0 &&
+                    empty.capacityBytes == 0,
+                "Workload did not release expired inactive links");
+    });
+    Simulator::Run();
+    const auto storage = cache->GetStorageStatistics();
+    const uint64_t calls = 4ULL * active * steps;
+    const uint64_t misses = enabled ? steps / depth : calls;
+    const double hitRatio = cache->GetStats();
+    Require(std::abs(hitRatio - static_cast<double>(calls - misses) / calls) <= 1e-12,
+            "Workload cache request accounting differs");
+    const uint64_t heapExpired = HeapBytes(), rssExpired = RssBytes();
+    cache = nullptr;
+    const uint64_t heapReleased = HeapBytes(), rssReleased = RssBytes();
+    helper.Destroy();
+    Simulator::Destroy();
+    std::ofstream result(output);
+    Require(result.is_open(), "Cannot write workload summary");
+    result << std::setprecision(17) << "{\n"
+           << "\"steps\":" << steps << ",\"look_ahead\":" << depth
+           << ",\"cache_enabled\":" << enabled << ",\"links\":" << links
+           << ",\"active_links\":" << active << ",\"getter_calls\":" << calls
+           << ",\"cache_miss_count\":" << misses << ",\"cache_hit_count\":" << calls - misses
+           << ",\"cache_hit_ratio\":" << hitRatio
+           << ",\"snapshot_budget\":" << limits.maxSnapshots
+           << ",\"payload_budget_bytes\":" << limits.maxPayloadBytes
+           << ",\"peak_snapshots\":" << storage.peakSnapshots
+           << ",\"peak_payload_bytes\":" << storage.peakPayloadBytes
+           << ",\"final_snapshots\":" << storage.snapshots
+           << ",\"final_payload_bytes\":" << storage.payloadBytes
+           << ",\"final_capacity_bytes\":" << storage.capacityBytes
+           << ",\"heap_before_bytes\":" << heapBefore << ",\"rss_before_bytes\":" << rssBefore
+           << ",\"heap_expired_bytes\":" << heapExpired << ",\"rss_expired_bytes\":" << rssExpired
+           << ",\"heap_released_bytes\":" << heapReleased << ",\"rss_released_bytes\":" << rssReleased
+           << ",\"peak_rss_bytes\":" << RssBytes("VmHWM:") << "\n}\n";
+    trace.close();
+    samples.close();
+    result.close();
+    Require(!trace.fail() && !samples.fail() && !result.fail(), "Cannot finish workload exports");
+}
 } // namespace
 
 int
@@ -235,6 +349,9 @@ main(int argc, char* argv[])
 {
     std::string input, output, timings, endpoint;
     bool copyProfile = false;
+    bool cacheEnabled = true;
+    uint32_t workloadSteps = 0, lookAhead = 1;
+    std::string trajectory;
     uint32_t storageSteps = 0;
     uint32_t links = 1, iterations = 16, hitIterations = 128, missIterations = 5, warmup = 3;
     CommandLine command(__FILE__);
@@ -249,12 +366,21 @@ main(int argc, char* argv[])
     command.AddValue("warmup", "Warmup iterations for non-miss measurements", warmup);
     command.AddValue("storageSteps", "Additional advancing-time refreshes (0..128)", storageSteps);
     command.AddValue("copyProfile", "Also measure const loss, delay, frequency and CSI hits", copyProfile);
+    command.AddValue("workloadSteps", "Advancing-time workload epochs (multiple of depth, <=4096)", workloadSteps);
+    command.AddValue("lookAhead", "Workload snapshots per active receiver (1, 4, 16)", lookAhead);
+    command.AddValue("cacheEnabled", "Retain workload snapshots", cacheEnabled);
+    command.AddValue("trajectory", "Workload occupancy and memory CSV", trajectory);
     command.Parse(argc, argv);
     try
     {
         Require(storageSteps <= 128 && links > 0 && links <= 64 && iterations > 0 && hitIterations > 0 &&
                     missIterations > 0 && warmup > 0,
                 "Positive counts and at most 64 cached links are required");
+        Require(workloadSteps == 0 || (workloadSteps <= 4096 &&
+                    (lookAhead == 1 || lookAhead == 4 || lookAhead == 16) && workloadSteps % lookAhead == 0 &&
+                    (links == 1 || links == 16 || links == 64) && !copyProfile && storageSteps == 0 &&
+                    !trajectory.empty() && trajectory != input && trajectory != output && trajectory != timings),
+                "Invalid workload steps, look-ahead, links or output paths");
         Require(!input.empty() && !output.empty() && !timings.empty() &&
                     input != output && input != timings && output != timings &&
                     endpoint.rfind("ipc://", 0) == 0,
@@ -294,6 +420,11 @@ main(int argc, char* argv[])
         helper.m_zmq_socket.set(zmq::sockopt::linger, 0);
         helper.m_zmq_socket.set(zmq::sockopt::rcvtimeo, 10000);
         helper.m_zmq_socket.set(zmq::sockopt::sndtimeo, 10000);
+        if (workloadSteps)
+        {
+            RunWorkload(helper, radios, state, output, timings, trajectory, workloadSteps, lookAhead, cacheEnabled);
+            return 0;
+        }
         ns3sionna::Wrapper request;
         request.mutable_channel_state_request()->set_rx_node(1);
         const std::string requestWire = request.SerializeAsString();

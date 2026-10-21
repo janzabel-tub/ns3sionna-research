@@ -262,9 +262,18 @@ class Reporter
         csv << now.GetSeconds() << ',' << seconds << ',' << link << ',' << ap << ',' << sta
             << ',' << bytes << ',' << throughputMbps
             << ',' << db << ',' << samples << '\n';
-        if (link == -1 && printThroughput)
+        if (printThroughput)
         {
-            std::cout << now.GetSeconds() << "s:\t" << throughputMbps << " Mbit/s" << std::endl;
+            std::cout << now.GetSeconds() << "s: ";
+            if (link == -1)
+            {
+                std::cout << "aggregate";
+            }
+            else
+            {
+                std::cout << "AP node " << ap << " -> STA node " << sta;
+            }
+            std::cout << ": " << throughputMbps << " Mbit/s" << std::endl;
         }
     }
 };
@@ -288,7 +297,7 @@ main(int argc, char* argv[])
     double eesmBetaLinear{std::numeric_limits<double>::quiet_NaN()};
     uint32_t antennaCount{2}, arrayRows{1}, streams{0}, numPairs{2};
     uint32_t channelWidthMhz{20}, channelNumber{0}, mcs{11}, seed{1}, run{1};
-    int fixedCoherenceTimeMs{0}, mode{1}, subMode{1};
+    int fixedCoherenceTimeMs{0}, mode{2}, subMode{16};
     bool caching{true}, snr{true};
     bool prtTput{false};
     CommandLine cmd(__FILE__);
@@ -316,7 +325,7 @@ main(int argc, char* argv[])
     cmd.AddValue("simulationTimeSeconds", "Simulation end time", simulationTimeSeconds);
     cmd.AddValue("trafficStartSeconds", "TCP start after association warmup", trafficStartSeconds);
     cmd.AddValue("reportIntervalMs", "Throughput/SNR summary interval in ms", reportIntervalMs);
-    cmd.AddValue("prtTput", "Print aggregate throughput at each report interval", prtTput);
+    cmd.AddValue("prtTput", "Print per-link AP/STA and aggregate throughput at each report interval", prtTput);
     cmd.AddValue("snr", "Aggregate downlink PHY SNR including decoded payload failures", snr);
     cmd.AddValue("mcs", "Fixed HE MCS (0--11)", mcs);
     cmd.AddValue("eesmBetaLinear", "Required explicit positive EESM beta for multi-antenna links", eesmBetaLinear);
@@ -327,7 +336,7 @@ main(int argc, char* argv[])
     cmd.AddValue("caching", "Enable propagation-cache reuse", caching);
     cmd.AddValue("fixedCoherenceTimeMs", "Fixed Sionna coherence time; 0 uses dynamic calculation", fixedCoherenceTimeMs);
     cmd.AddValue("mode", "Sionna IPC mode: 1=P2P, 2=P2MP, 3=lookahead", mode);
-    cmd.AddValue("subMode", "Sionna lookahead depth", subMode);
+    cmd.AddValue("subMode", "Parallel-link limit; used for lookahead only in mode 3", subMode);
     cmd.AddValue("fixedPathLossDb", "Uniform path loss for fixed-channel smoke tests only", fixedPathLossDb);
     // Accept the flag by itself as a convenience, while retaining ns-3's
     // standard --prtTput=true/false form.
@@ -490,7 +499,7 @@ main(int argc, char* argv[])
         for (auto* phy : {&apPhy, &staPhy})
         {
             phy->SetChannel(channel);
-            phy->SetErrorRateModel("ns3::TableBasedErrorRateModel");
+            phy->SetErrorRateModel("ns3::NistErrorRateModel");
             phy->Set("ChannelSettings", StringValue("{" + std::to_string(channelNumber) + ", " +
                                                     std::to_string(channelWidthMhz) + ", BAND_5GHZ, 0}"));
             phy->Set("TxPowerStart", DoubleValue(txPowerDbm));

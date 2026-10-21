@@ -24,14 +24,14 @@ Other variables:
   ENVIRONMENT=apartment/apartment.xml  SERVER_URL=tcp://localhost:5555
   AP_POSITIONS='-1,0.5,1.5;-1.5,5.5,1.5'  STA_POSITIONS='-2,1.5,1.6;-2.5,6.5,1.6'
   ARRAY_ROWS=1  ANTENNA_SPACING_LAMBDA=0.5  NOISE_FIGURE_DB=7  RNG_RUN=1
-  CACHING=true  COHERENCE_TIME_MS=0  MODE=1  SUB_MODE=1
+  CACHING=true  COHERENCE_TIME_MS=0  MODE=2  SUB_MODE=16
   OUTPUT_BASE=<ns-3>/results/mimo/<timestamp>  BUILD=true  RUN_TIMEOUT_SECONDS=1800
   CHANNEL_SOURCE=sionna  (fixed requires SPEEDS_MPS=0; no server needed)
   START_SERVER=false     Set true to start and stop a local Sionna server
   SERVER_PYTHON=python3  RT_FAST=true  (only used with START_SERVER=true)
   RESTART_SERVER_ON_CRASH=true  MAX_RETRIES=3  (requires START_SERVER=true)
   Crashes/timeouts retry the current run; failed attempts and server logs are kept.
-  --prtTput               Print aggregate interval throughput (off by default).
+  --prtTput               Print per-link AP/STA and aggregate interval throughput live.
 
 Extra --name=value options are forwarded to every run; see the C++ --PrintHelp
 for all options. Each configuration writes interval CSV, summary CSV, config,
@@ -190,7 +190,7 @@ for power in "${powers[@]}"; do
         "--trafficStartSeconds=${TRAFFIC_START_SECONDS:-1}" "--reportIntervalMs=${REPORT_INTERVAL_MS:-100}"
         "--offeredRate=${OFFERED_RATE:-1Gbps}" "--tcpVariant=${TCP_VARIANT:-ns3::TcpCubic}"
         "--snr=${ENABLE_SNR:-true}" "--caching=${CACHING:-true}"
-        "--fixedCoherenceTimeMs=${COHERENCE_TIME_MS:-0}" "--mode=${MODE:-1}" "--subMode=${SUB_MODE:-1}"
+        "--fixedCoherenceTimeMs=${COHERENCE_TIME_MS:-0}" "--mode=${MODE:-2}" "--subMode=${SUB_MODE:-16}"
         "--apPositions=${AP_POSITIONS:--1,0.5,1.5;-1.5,5.5,1.5}"
         "--staPositions=${STA_POSITIONS:--2,1.5,1.6;-2.5,6.5,1.6}"
         "--outputDirectory=$run_dir"
@@ -221,7 +221,18 @@ for power in "${powers[@]}"; do
         fi
         printf '[runner] %s (attempt %s)\n' "$tag" "$attempt"
         if [[ $status == 0 ]]; then
-            setsid "${command[@]}" > "$run_dir/run.log" 2>&1 &
+            if [[ $PRINT_THROUGHPUT == true ]]; then
+                # Keep the full output in run.log, while forwarding interval
+                # throughput lines to the terminal.
+                setsid bash -c '
+                    log_file=$1
+                    shift
+                    "$@" 2>&1 | tee "$log_file" | grep --line-buffered "Mbit/s"
+                    exit "${PIPESTATUS[0]}"
+                ' bash "$run_dir/run.log" "${command[@]}" &
+            else
+                setsid "${command[@]}" > "$run_dir/run.log" 2>&1 &
+            fi
             run_pid=$!
             while kill -0 "$run_pid" 2>/dev/null; do
                 if [[ $managed_server == true ]] && ! kill -0 "$server_pid" 2>/dev/null; then
