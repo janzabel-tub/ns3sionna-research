@@ -141,3 +141,11 @@ build_lib_example(
     LIBRARIES_TO_LINK ${libsionna} ${libwifi} ${libinternet} ${libapplications}
                       ${libmobility} ${libpropagation} ${libspectrum}
 )
+
+# Four-user TCP MU-MIMO experiment using the native helper-installed scheduler.
+build_lib_example(
+    NAME ns3sionna-performance-sionna-mumimo-monolith
+    SOURCE_FILES performance-sionna-mumimo-monolith.cc
+    LIBRARIES_TO_LINK ${libsionna} ${libwifi} ${libinternet} ${libapplications}
+                      ${libmobility} ${libpropagation} ${libspectrum}
+)
