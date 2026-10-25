@@ -449,7 +449,8 @@ class SionnaEnv:
         self._place_tx_rx_nodes_with_lah(lah_time_vec, tx_node_id, rx_nodes, lah_states)
 
         # create pathsolver; todo: check reuse
-        p_solver  = PathSolver()
+        # Sionna RT 2.2 requires this for repeatable paths at a fixed seed.
+        p_solver = PathSolver(deterministic=True)
 
         # Compute propagation paths
         paths = p_solver(scene=self.scene,
@@ -848,7 +849,8 @@ class SionnaEnv:
         self._place_tx_rx_node(tx_node, rx_nodes)
 
         # create pathsolver; todo: check reuse
-        p_solver  = PathSolver()
+        # Sionna RT 2.2 requires this for repeatable paths at a fixed seed.
+        p_solver = PathSolver(deterministic=True)
 
         # Compute propagation paths
         paths = p_solver(scene=self.scene,

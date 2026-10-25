@@ -69,7 +69,7 @@ class LookaheadStorageTest(unittest.TestCase):
             stack.enter_context(redirect_stdout(io.StringIO()))
             stack.enter_context(patch.object(server, 'Transmitter', _Radio))
             stack.enter_context(patch.object(server, 'Receiver', _Radio))
-            factory = lambda: lambda scene, **kwargs: _Paths(scene)
+            factory = lambda **options: lambda scene, **kwargs: _Paths(scene)
             stack.enter_context(patch.object(server, 'PathSolver', side_effect=factory))
             if fail == 'placement':
                 stack.enter_context(patch.object(env, '_place_tx_rx_nodes_with_lah', side_effect=RuntimeError('placement')))

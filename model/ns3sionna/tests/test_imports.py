@@ -4,10 +4,10 @@ from importlib.metadata import PackageNotFoundError, version
 
 
 EXPECTED_VERSIONS = {
-    "sionna": "2.0.1",
-    "sionna-rt": "2.0.1",
-    "mitsuba": "3.8.0",
-    "drjit": "1.3.1",
+    "sionna": "2.2.0",
+    "sionna-rt": "2.2.0",
+    "mitsuba": "3.9.1",
+    "drjit": "1.5.0",
 }
 
 

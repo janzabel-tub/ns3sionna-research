@@ -207,7 +207,7 @@ def trace(config, env_class, mode, speed, samples, directory):
                 "max_depth", "samples_per_src", "los", "specular_reflection",
                 "diffuse_reflection", "refraction", "synthetic_array", "diffraction",
                 "edge_diffraction", "diffraction_lit_region")}
-            paths = PathSolver()(scene=env.scene, seed=env.my_seed, **options)
+            paths = PathSolver(deterministic=True)(scene=env.scene, seed=env.my_seed, **options)
             raw = paths.cfr(frequencies=env.frequencies, sampling_frequency=1000,
                 num_time_steps=TRANSMISSION_MS+1, normalize_delays=True,
                 normalize=False, out_type="numpy")
