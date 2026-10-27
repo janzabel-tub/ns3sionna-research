@@ -6,10 +6,9 @@
 * Author: Yannik Pilz <y.pilz@campus.tu-berlin.de>
 */
 
-// Four-antenna AP, four single-antenna STAs, one TCP downlink per STA.
-// Reused from performance-sionna-mimo-monolith.cc (traffic, placement, mobility,
-// flags and reports); MU wiring follows ns3_wifi_mumimo.cc / InstallDownlink.
-// See performance-sionna-mumimo-monolith.md for the native scheduler limits.
+// One 2--8-antenna AP, one TCP downlink per single-antenna STA. A one-STA run
+// uses MRT as a SU baseline; runs with 2--8 STAs use a fixed full-band MU group.
+// Traffic, placement, mobility, flags and reports follow the MIMO monolith.
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -125,8 +124,9 @@ Time lastTime10, lastTimeReport;
 std::vector<uint32_t> g_stationIds;
 std::ofstream ofs_mimo, ofs_mu;
 uint64_t g_muPpdus{0}, g_suPpdus{0};
+uint32_t g_expectedMuUsers{4};
 
-// Constant-size counters establish whether four-user spatial multiplexing occurred.
+// Counters establish whether the configured full user group was spatially multiplexed.
 // The fixed runtime group rejects incomplete groups rather than using smaller MU.
 void
 DownlinkTxTrace(WifiConstPsduMap psdus, WifiTxVector tx, double)
@@ -137,8 +137,10 @@ DownlinkTxTrace(WifiConstPsduMap psdus, WifiTxVector tx, double)
         return;
     if (tx.GetPreambleType() == WIFI_PREAMBLE_HE_MU)
     {
-        Require(psdus.size() == 4 && tx.GetHeMuUserInfoMap().size() == 4 &&
-                    tx.GetChannelWidth() == 20, "expected a four-user 20 MHz MU PPDU");
+        Require(g_expectedMuUsers >= 2 && psdus.size() == g_expectedMuUsers &&
+                    tx.GetHeMuUserInfoMap().size() == g_expectedMuUsers &&
+                    tx.GetChannelWidth() == 20,
+                "MU PPDU did not contain the configured 20 MHz user group");
         for (const auto& [staId, info] : tx.GetHeMuUserInfoMap())
             Require(info.nss == 1 && info.ru == HeRu::RuSpec(HeRu::RU_242_TONE, 1, true),
                     "MU users must share the full-band RU with one stream each");
@@ -168,6 +170,42 @@ std::ofstream ofs_minstrel_rate_changes; // --minstrelRateTrace
 // Path-loss fallback is only an estimate; PHY SNR includes scalar interference.
 double TX_POWER_DBM = 20.0;
 double NOISE_FLOOR_DBM;
+Ptr<SionnaPropagationCache> g_singleUserCache;
+Ptr<SionnaSpectrumPropagationLossModel> g_singleUserSpectrumModel;
+Ptr<WifiNetDevice> g_singleUserAp;
+Ptr<WifiNetDevice> g_singleUserSta;
+
+// The MU scheduler installs MRT and a matching channel snapshot for SU
+// fallbacks. The one-STA baseline has no MU scheduler, so keep the same
+// transmission-time behavior here, including when mobility is enabled.
+void
+InstallSingleUserMrt(WifiConstPsduMap psdus, WifiTxVector tx, double)
+{
+    if (tx.GetPreambleType() != WIFI_PREAMBLE_HE_SU || psdus.empty())
+        return;
+    Require(g_singleUserCache && g_singleUserSpectrumModel && g_singleUserAp &&
+                g_singleUserSta,
+            "single-user MRT state is not initialized");
+    const auto apMobility = g_singleUserAp->GetNode()->GetObject<MobilityModel>();
+    const auto staMobility = g_singleUserSta->GetNode()->GetObject<MobilityModel>();
+    const auto channel = g_singleUserCache->GetPropagationChannelMatrix(apMobility, staMobility);
+    const auto frequencies = g_singleUserCache->GetPropagationFreq(apMobility, staMobility);
+    const auto now = Simulator::Now();
+    MultiUserChannelSnapshot snapshot{now, MultiUserChannelDirection::DOWNLINK, {}};
+    snapshot.users.push_back({1,
+                              g_singleUserAp->GetNode()->GetId(),
+                              g_singleUserSta->GetNode()->GetId(),
+                              MultiUserChannelDirection::DOWNLINK,
+                              now,
+                              {1, 1, g_options.antennaSpacingLambda,
+                               g_options.antennaSpacingLambda, "dipole", "V"},
+                              frequencies,
+                              g_singleUserCache->GetPropagationLoss(apMobility, staMobility),
+                              channel});
+    g_singleUserSpectrumModel->SetDownlinkTransmissionSnapshot(snapshot);
+    g_singleUserSpectrumModel->SetPrecodingMatrix(
+        MimoPrecodingMatrix::MaximumRatioTransmission(channel));
+}
 
 std::set<uint32_t> g_staNodeIds;
 std::map<std::string, uint32_t> g_macNodeIds;
@@ -703,6 +741,7 @@ RunSimulation(  const std::string environment,
                 const bool enable_minstrel_rate_trace)
 {
     g_muPpdus = g_suPpdus = 0;
+    g_expectedMuUsers = numStas;
     g_sinks.clear();
     g_phyRxBeginSamples.clear();
     g_phyRxFinalized.clear();
@@ -777,25 +816,41 @@ RunSimulation(  const std::string environment,
 
     SpectrumWifiPhyHelper spectrumPhy, apPhy;
     SionnaMimoConfiguration mimo;
-    mimo.mode = SionnaMimoMode::MU_MIMO;
+    mimo.mode = numStas == 1 ? SionnaMimoMode::SU_MIMO_SPATIAL_MULTIPLEXING
+                             : SionnaMimoMode::MU_MIMO;
     mimo.effectiveSinrModel = SionnaMimoEffectiveSinrModel::MEAN_UNCODED_BER;
     mimo.txArray.numRows = g_options.arrayRows;
-    mimo.txArray.numColumns = 4 / g_options.arrayRows;
+    mimo.txArray.numColumns = g_options.antennaCount / g_options.arrayRows;
     mimo.rxArray.numRows = mimo.rxArray.numColumns = 1;
     mimo.txArray.horizontalSpacing = mimo.rxArray.horizontalSpacing = g_options.antennaSpacingLambda;
     mimo.txArray.verticalSpacing = mimo.rxArray.verticalSpacing = g_options.antennaSpacingLambda;
-    mimo.numTxAntennas = 4;
+    mimo.numTxAntennas = g_options.antennaCount;
     mimo.numRxAntennas = mimo.maxNss = 1;
     mimo.receiverNoiseFigureDb = g_options.noiseFigureDb;
-    DlMuMimoRuntimeConfiguration runtime;
-    runtime.groupingMode = DlMuMimoGroupingMode::FIXED;
-    runtime.requestedUserIds = {1, 2, 3, 4};
-    runtime.precoder = g_options.precoding == "zf"
-                          ? DlMuMimoRuntimePrecoder::ZERO_FORCING
-                          : DlMuMimoRuntimePrecoder::REGULARIZED_ZERO_FORCING;
-    if (g_options.precoding == "rzf") runtime.rzfAlpha = g_options.rzfAlpha;
-    // Default timing: ideal current CSI; no invented historical channels.
-    mimo.dlMu = runtime;
+    if (numStas == 1)
+    {
+        // Dimension-valid bootstrap; replaced by current-CSI MRT before each
+        // HE-SU transmission. The STA remains a single-antenna receiver.
+        const auto bins = getFFTSize(WIFI_STANDARD_80211ax, channel_width) *
+                          SionnaHelper::GUARD_MULTIPLIER;
+        std::vector<std::complex<double>> bootstrap(g_options.antennaCount);
+        bootstrap.front() = 1.0;
+        mimo.precodingMatrix = MimoPrecodingMatrix::FrequencyFlat(
+            bins, g_options.antennaCount, 1, bootstrap);
+    }
+    else
+    {
+        DlMuMimoRuntimeConfiguration runtime;
+        runtime.groupingMode = DlMuMimoGroupingMode::FIXED;
+        for (uint32_t userId = 1; userId <= numStas; ++userId)
+            runtime.requestedUserIds.push_back(userId);
+        runtime.precoder = g_options.precoding == "zf"
+                              ? DlMuMimoRuntimePrecoder::ZERO_FORCING
+                              : DlMuMimoRuntimePrecoder::REGULARIZED_ZERO_FORCING;
+        if (g_options.precoding == "rzf") runtime.rzfAlpha = g_options.rzfAlpha;
+        // Default timing: ideal current CSI; no invented historical channels.
+        mimo.dlMu = runtime;
+    }
     if (rate_adaptation == "minstrel")
         SionnaMimoHelper(mimo).Apply(sionnaHelper, apPhy, spectrumPhy, spectrumLossModel);
     else
@@ -1023,9 +1078,6 @@ RunSimulation(  const std::string environment,
         points.push_back(wifiStaNodes.Get(i)->GetObject<MobilityModel>()->GetPosition());
         g_stationIds.push_back(wifiStaNodes.Get(i)->GetId());
     }
-    for (uint32_t i = 0; i < points.size(); ++i)
-        for (uint32_t j = i + 1; j < points.size(); ++j)
-            Require(CalculateDistance(points[i], points[j]) > 0, "initial positions must be distinct");
     NetDeviceContainer allDevices;
     allDevices.Add(apDevices);
     allDevices.Add(staDevices);
@@ -1047,9 +1099,10 @@ RunSimulation(  const std::string environment,
             auto sta = wifiStaNodes.Get(i)->GetObject<MobilityModel>();
             auto channel = propagationCache->GetPropagationChannelMatrix(ap, sta);
             auto frequencies = propagationCache->GetPropagationFreq(ap, sta);
-            Require(channel.GetNumTxAntennas() == 4 && channel.GetNumRxAntennas() == 1 &&
+            Require(channel.GetNumTxAntennas() == g_options.antennaCount &&
+                        channel.GetNumRxAntennas() == 1 &&
                         channel.GetNumSubcarriers() == 768 && frequencies.size() == 768,
-                    "live MU channels must have a 768-bin 1x4 HE 20 MHz grid");
+                    "live channels must have a 768-bin 1xN HE 20 MHz grid");
             Require(current.users.empty() || frequencies == current.users.front().frequencies,
                     "MU user frequency grids differ");
             current.users.push_back({i + 1, wifiApNode.Get(0)->GetId(),
@@ -1061,9 +1114,22 @@ RunSimulation(  const std::string environment,
         snapshot = std::move(current);
         return *snapshot;
     };
-    SionnaMimoHelper(mimo).InstallDownlink(DynamicCast<WifiNetDevice>(apDevices.Get(0)),
-        bindings, spectrumLossModel, provider, SionnaMimoDownlinkScheduling::MU);
-    DynamicCast<WifiNetDevice>(apDevices.Get(0))->GetPhy()->TraceConnectWithoutContext(
+    const auto apDevice = DynamicCast<WifiNetDevice>(apDevices.Get(0));
+    if (numStas == 1)
+    {
+        g_singleUserCache = propagationCache;
+        g_singleUserSpectrumModel = spectrumLossModel;
+        g_singleUserAp = apDevice;
+        g_singleUserSta = DynamicCast<WifiNetDevice>(staDevices.Get(0));
+        apDevice->GetPhy()->TraceConnectWithoutContext(
+            "PhyTxPsduBegin", MakeCallback(&InstallSingleUserMrt));
+    }
+    else
+    {
+        SionnaMimoHelper(mimo).InstallDownlink(apDevice,
+            bindings, spectrumLossModel, provider, SionnaMimoDownlinkScheduling::MU);
+    }
+    apDevice->GetPhy()->TraceConnectWithoutContext(
         "PhyTxPsduBegin", MakeCallback(&DownlinkTxTrace));
     // Establish BlockAck promptly, as in ns3_wifi_mumimo.cc, while keeping the
     // performance monolith's normal aggregation sizes and TCP applications.
@@ -1173,14 +1239,16 @@ RunSimulation(  const std::string environment,
     Require(bool(config), "cannot write config.txt");
     config << std::setprecision(17)
            << "environment=" << environment << "\nserverUrl=" << g_options.serverUrl
-           << "\nnumStas=" << numStas << "\napAntennas=4\nstaAntennas=1\nuserIds=1,2,3,4"
+           << "\nnumStas=" << numStas << "\napAntennas=" << g_options.antennaCount
+           << "\nstaAntennas=1\nuserIds=1.." << numStas
            << "\nstreams=" << g_options.streams << "\nprecoding=" << g_options.precoding
            << "\narrayRows=" << g_options.arrayRows << "\nantennaSpacingLambda=" << g_options.antennaSpacingLambda
            << "\nchannelNumber=" << wifi_channel_num << "\nchannelWidthMhz=" << channel_width
            << "\neffectiveSinrModel=MEAN_UNCODED_BER\nreceiver=LINEAR_MMSE"
            << "\nnormalization=UNIT_AVERAGE_PAIR_POWER\nrateAdaptation=" << rate_adaptation
            << "\nmcs=" << (rate_adaptation == "fixed" ? std::to_string(mcs) : "adaptive")
-           << "\nstreamsMeaning=one per STA; four jointly on RU242"
+           << "\nstreamsMeaning="
+           << (numStas == 1 ? "single-user MRT baseline" : "one per STA; configured group on RU242")
            << "\nrzfAlpha=" << g_options.rzfAlpha
            << "\ncsi=current query with configured propagation-cache coherence"
            << "\nmuCoding=BCC\nmaxHeMcs=9\nmuGuardIntervalNs=800"
@@ -1227,12 +1295,19 @@ RunSimulation(  const std::string environment,
     }
     std::ofstream muSummary(out / "mu_summary.csv");
     Require(bool(muSummary), "cannot write mu_summary.csv");
-    muSummary << "MuPpdusFourUsers,SuHePpdus,MeasurementSeconds\n"
-              << std::setprecision(12) << g_muPpdus << ',' << g_suPpdus << ',' << duration << '\n';
-    std::cout << "four_user_mu_ppdus=" << g_muPpdus << " su_he_ppdus=" << g_suPpdus << '\n';
-    if (g_muPpdus == 0)
-        std::cerr << "No four-user MU PPDU was sent; inspect queues, BlockAck and channel rank.\n";
+    muSummary << "MuPpdusConfiguredUsers,SuHePpdus,ConfiguredMuUsers,MeasurementSeconds\n"
+              << std::setprecision(12) << g_muPpdus << ',' << g_suPpdus << ','
+              << (numStas == 1 ? 0 : numStas) << ',' << duration << '\n';
+    std::cout << "configured_group_mu_ppdus=" << g_muPpdus
+              << " su_he_ppdus=" << g_suPpdus
+              << " configured_mu_users=" << (numStas == 1 ? 0 : numStas) << '\n';
+    if (numStas >= 2 && g_muPpdus == 0)
+        std::cerr << "No full-group MU PPDU was sent; inspect queues, BlockAck and channel rank.\n";
     Simulator::Destroy();
+    g_singleUserCache = nullptr;
+    g_singleUserSpectrumModel = nullptr;
+    g_singleUserAp = nullptr;
+    g_singleUserSta = nullptr;
 
     // propagationCache->PrintStats();
 
@@ -1282,9 +1357,9 @@ main(int argc, char* argv[])
     };
     addString("environment", "Sionna scene XML", environment);
     addString("serverUrl", "Running Sionna server endpoint", g_options.serverUrl);
-    addString("outputDirectory", "Result root; writes stas-4", g_options.outputDirectory);
-    cmd.AddValue("sim_min_stas", "Compatibility flag; must be 4", minStas);
-    cmd.AddValue("sim_max_stas", "Compatibility flag; must be 4", maxStas);
+    addString("outputDirectory", "Result root; writes stas-N", g_options.outputDirectory);
+    cmd.AddValue("sim_min_stas", "First station count; doubles through sim_max_stas", minStas);
+    cmd.AddValue("sim_max_stas", "Maximum station count, up to eight", maxStas);
     cmd.AddValue("channel", "5 GHz 20 MHz channel; 0 selects 36", g_options.channelNumber);
     cmd.AddValue("channelNumber", "Alias for channel", g_options.channelNumber);
     cmd.AddValue("channelWidthMhz", "Must be 20 MHz for the native MU scheduler", g_options.channelWidthMhz);
@@ -1304,7 +1379,7 @@ main(int argc, char* argv[])
     cmd.AddValue("run", "ns-3 RNG run number", g_options.run);
     cmd.AddValue("txPower", "Total transmit power per device in dBm", TX_POWER_DBM);
     cmd.AddValue("txPowerDbm", "Alias for txPower", TX_POWER_DBM);
-    cmd.AddValue("antennaCount", "AP antenna ports; must be 4 (each STA has one)", g_options.antennaCount);
+    cmd.AddValue("antennaCount", "AP antenna ports, 2--8 (each STA has one)", g_options.antennaCount);
     cmd.AddValue("arrayRows", "Array rows; must divide antennaCount", g_options.arrayRows);
     cmd.AddValue("antennaSpacingLambda", "Array spacing in wavelengths", g_options.antennaSpacingLambda);
     cmd.AddValue("streams", "Streams per STA; must be 1", g_options.streams);
@@ -1328,15 +1403,18 @@ main(int argc, char* argv[])
     cmd.Parse(argc, argv);
     try
     {
-        Require(minStas == 4 && maxStas == 4, "this experiment requires exactly four STAs");
+        Require(minStas >= 1 && minStas <= maxStas && maxStas <= 8,
+                "station counts must satisfy 1 <= sim_min_stas <= sim_max_stas <= 8");
         Require(rateAdaptation == "fixed" || rateAdaptation == "minstrel", "rateAdaptation must be fixed or minstrel");
         Require(mcs <= 9 && seed > 0 && g_options.run > 0 && dataRate > 0,
                 "native MU BCC requires MCS 0--9; seed, RNG run and data rate must be positive");
         Require(g_options.channelWidthMhz == 20, "native MU scheduler requires 20 MHz");
         if (!g_options.channelNumber) g_options.channelNumber = 36;
-        Require(g_options.antennaCount == 4 && g_options.streams == 1 &&
-                    g_options.arrayRows > 0 && 4 % g_options.arrayRows == 0,
-                "require four AP antennas, one stream per STA, and arrayRows dividing four");
+        Require(g_options.antennaCount >= 2 && g_options.antennaCount <= 8 &&
+                    g_options.streams == 1 && g_options.arrayRows > 0 &&
+                    g_options.antennaCount % g_options.arrayRows == 0 &&
+                    maxStas <= g_options.antennaCount,
+                "require 2--8 AP antennas, one stream per STA, and arrayRows dividing antennaCount");
         Require(g_options.precoding == "zf" || g_options.precoding == "rzf", "precoding must be zf or rzf");
         Require(g_options.precoding != "rzf" ||
                     (std::isfinite(g_options.rzfAlpha) && g_options.rzfAlpha > 0),

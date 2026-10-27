@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
+# --test_scenario=1 (default): one 4-antenna AP, four 1-antenna STAs.
+# --test_scenario=2: one 4-antenna AP, two 2-antenna STAs; currently unsupported.
+# Also accepts the environment variable test_scenario=1 or 2.
 # Four-user MU TCP monolith. Supervision/retries reuse performance-sionna-mimo.sh;
 # arguments, output ownership and timing follow performance-sionna-mimo-monolith.sh.
 set -euo pipefail
+test_scenario=${test_scenario:-1}
 EXAMPLES_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 NS3_DIR=$(cd -- "$EXAMPLES_DIR/../../.." && pwd)
 
@@ -104,14 +108,23 @@ fi
 DRY_RUN=false
 if [[ ${1:-} == --dry-run ]]; then DRY_RUN=true; shift; fi
 # Resolve runner-owned options before constructing the server and log paths.
+forwarded=()
 for option in "$@"; do
     case "$option" in
+        --test_scenario=*|test_scenario=*) test_scenario=${option#*=}; continue ;;
         --serverUrl=*) SERVER_URL=${option#*=} ;;
         --outputDirectory=*) OUTPUT_DIR=${option#*=} ;;
         --prtTput|--prtTput=true|--prtTput=1) PRINT_THROUGHPUT=true ;;
         --prtTput=false|--prtTput=0) PRINT_THROUGHPUT=false ;;
     esac
+    forwarded+=("$option")
 done
+set -- "${forwarded[@]}"
+case "$test_scenario" in
+    1) ;;
+    2) echo '[runner] scenario 2 requires extending the MU helper/scheduler for two antennas and streams per STA.' >&2; exit 2 ;;
+    *) echo '[runner] test_scenario must be 1 or 2' >&2; exit 2 ;;
+esac
 [[ $MAX_RETRIES =~ ^[0-9]+$ ]] || { echo 'MAX_RETRIES must be a non-negative integer' >&2; exit 2; }
 [[ $RUN_TIMEOUT_SECONDS =~ ^[0-9]+$ ]] || { echo 'RUN_TIMEOUT_SECONDS must be a non-negative integer' >&2; exit 2; }
 if [[ -z $OUTPUT_DIR ]]; then echo '[runner] output directory cannot be empty' >&2; exit 2; fi

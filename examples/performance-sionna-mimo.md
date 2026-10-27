@@ -137,6 +137,10 @@ Each run directory contains:
 - `config.txt`: resolved parameters and the SNR averaging definition.
 - `run.log`: process output, with no per-packet trace files or PCAP recording.
 
+`throughput_results.csv` is long-form: each interval has one row per STA, keyed
+by `STA_Index` and `STA_NodeId`. Plot `Time_s` versus `Throughput_Mbps` and group
+by `STA_Index` to get one line per station; aggregate rows are not emitted.
+
 `throughput_mbps = 8 * received_bytes / interval_seconds / 1e6`. Measurement
 starts at `TRAFFIC_START_SECONDS` (default 1 s, allowing association warmup)
 and ends at `SIMULATION_TIME_SECONDS`. TCP setup, contention and retransmissions
@@ -155,6 +159,18 @@ these callbacks while keeping throughput recording.
 
 The example retains interval counters, sinks, and one beamforming selection per
 transmitter. It does not retain or write a history of individual packets.
+
+## One-link SISO-to-SU-MIMO antenna sweep
+
+Run one AP and one STA at matching antenna counts from 1x1 through 8x8:
+
+```bash
+bash contrib/sionna/examples/performance-sionna-sumimo-antenna-sweep.sh
+```
+
+The sweep uses fixed apartment positions, 80 MHz, HE LDPC, Minstrel and a
+saturating 10 Gb/s TCP offered rate. It writes one `NxN/` directory per case
+under `OUTPUT_DIR`; mobility is optional with `MOBILE_SCENARIO=true`.
 
 ## Server-free verification
 
