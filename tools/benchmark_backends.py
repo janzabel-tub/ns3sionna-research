@@ -27,8 +27,8 @@ CASES = (("case_00", 90.0, 90.0), ("case_01", 90.0, 0.0))
 SEEDS = (42, 43, 44)
 SCHEMA = "ns3sionna.r6-backends"
 ENVIRONMENT_VARIABLE = "NS3SIONNA_R6_ENVIRONMENT_MODE"
-CORE_VERSIONS = {"sionna": "2.2.0", "sionna-rt": "2.2.0",
-                 "mitsuba": "3.9.1", "drjit": "1.5.0"}
+CORE_VERSIONS = {"sionna": "2.0.1", "sionna-rt": "2.0.1",
+                 "mitsuba": "3.8.0", "drjit": "1.3.1"}
 
 
 def environment_mode():

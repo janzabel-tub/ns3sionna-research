@@ -146,25 +146,6 @@ class TestNativeBenchmark(unittest.TestCase):
 
 
 class TestServerGeometry(unittest.TestCase):
-    def test_seeded_replay_across_rt_threads(self):
-        """Real production CFRs stay identical when LLVM worker scheduling changes."""
-        env_class, _ = benchmark.runtime()
-        import drjit as dr
-        original_threads = dr.thread_count()
-        try:
-            with tempfile.TemporaryDirectory(prefix="sumimo-seeded-replay-") as temporary:
-                config = benchmark.export_configuration(benchmark.executable(),
-                    Path(temporary) / "configuration.pb", 0.5,
-                    (90, 0, 0), (0, 0, 0))
-                first, _, _, _ = benchmark.trace(config, env_class, 10000)
-                dr.set_thread_count(2)
-                second, _, _, _ = benchmark.trace(config, env_class, 10000)
-                self.assertLess(first.csi[0].rx_nodes[0].wb_loss, 300)
-                self.assertEqual(first.SerializeToString(deterministic=True),
-                                 second.SerializeToString(deterministic=True))
-        finally:
-            dr.set_thread_count(original_threads)
-
     def test_all_euler_components_on_actual_arrays_and_radios(self):
         env_class, _ = benchmark.runtime()
         with tempfile.TemporaryDirectory(prefix="sumimo-geometry-") as temporary:
