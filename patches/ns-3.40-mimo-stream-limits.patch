@@ -1,0 +1,33 @@
+--- a/src/wifi/model/wifi-phy.cc
++++ b/src/wifi/model/wifi-phy.cc
+@@ -908,7 +908,7 @@
+     {
+         Configure80211a();
+     }
+-    AddPhyEntity(WIFI_MOD_CLASS_HT, Create<HtPhy>(m_txSpatialStreams));
++    AddPhyEntity(WIFI_MOD_CLASS_HT, Create<HtPhy>(std::min(HT_MAX_NSS, m_txSpatialStreams)));
+ 
+     // See Table 10-5 "Determination of the EstimatedAckTxTime based on properties
+     // of the PPDU causing the EIFS" of 802.11-2016
+--- a/src/wifi/model/wifi-mac.cc
++++ b/src/wifi/model/wifi-mac.cc
+@@ -1976,7 +1976,7 @@
+     capabilities.SetRxHighestSupportedDataRate(
+         static_cast<uint16_t>(maxSupportedRate / 1e6)); // in Mbit/s
+     capabilities.SetTxMcsSetDefined(phy->GetNMcs() > 0);
+-    capabilities.SetTxMaxNSpatialStreams(phy->GetMaxSupportedTxSpatialStreams());
++    capabilities.SetTxMaxNSpatialStreams(std::min<uint8_t>(4, phy->GetMaxSupportedTxSpatialStreams()));
+     // we do not support unequal modulations
+     capabilities.SetTxRxMcsSetUnequal(0);
+     capabilities.SetTxUnequalModulation(0);
+--- a/src/wifi/model/vht/vht-phy.cc
++++ b/src/wifi/model/vht/vht-phy.cc
+@@ -523,7 +523,7 @@
+ bool
+ VhtPhy::IsCombinationAllowed(uint8_t mcsValue, uint16_t channelWidth, uint8_t nss)
+ {
+-    if (mcsValue == 9 && channelWidth == 20 && nss != 3)
++    if (mcsValue == 9 && channelWidth == 20 && nss != 3 && nss != 6)
+     {
+         return false;
+     }

@@ -1,24 +1,26 @@
 cmake_minimum_required(VERSION 3.10)
 set(CMAKE_CXX_STANDARD 17)
 
-# The payload context hook is the only ns-3 core change required by calibration.
-# Apply to a fresh ns-3.40 checkout, or verify an already applied patch.
+# Apply the native ns-3.40 integration fixes, or verify an already patched checkout.
 find_program(SIONNA_PATCH_EXECUTABLE patch REQUIRED)
-set(he_context_patch "${CMAKE_CURRENT_SOURCE_DIR}/patches/ns-3.40-he-calibration-context.patch")
-execute_process(COMMAND ${SIONNA_PATCH_EXECUTABLE} --batch --dry-run --forward -p1 -i ${he_context_patch}
-                WORKING_DIRECTORY ${PROJECT_SOURCE_DIR} RESULT_VARIABLE patch_needed
-                OUTPUT_QUIET ERROR_QUIET)
-if(patch_needed EQUAL 0)
-    execute_process(COMMAND ${SIONNA_PATCH_EXECUTABLE} --batch --forward -p1 -i ${he_context_patch}
-                    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR} RESULT_VARIABLE patch_result)
-else()
-    execute_process(COMMAND ${SIONNA_PATCH_EXECUTABLE} --batch --dry-run --reverse -p1 -i ${he_context_patch}
-                    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR} RESULT_VARIABLE patch_result
+foreach(patch_name ns-3.40-he-calibration-context.patch ns-3.40-mimo-stream-limits.patch)
+    set(core_patch "${CMAKE_CURRENT_SOURCE_DIR}/patches/${patch_name}")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${core_patch}")
+    execute_process(COMMAND ${SIONNA_PATCH_EXECUTABLE} --batch --dry-run --forward -p1 -i "${core_patch}"
+                    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR} RESULT_VARIABLE patch_needed
                     OUTPUT_QUIET ERROR_QUIET)
-endif()
-if(NOT patch_result EQUAL 0)
-    message(FATAL_ERROR "Cannot apply or verify the ns-3.40 HE calibration context patch")
-endif()
+    if(patch_needed EQUAL 0)
+        execute_process(COMMAND ${SIONNA_PATCH_EXECUTABLE} --batch --forward -p1 -i "${core_patch}"
+                        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR} RESULT_VARIABLE patch_result)
+    else()
+        execute_process(COMMAND ${SIONNA_PATCH_EXECUTABLE} --batch --dry-run --reverse -p1 -i "${core_patch}"
+                        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR} RESULT_VARIABLE patch_result
+                        OUTPUT_QUIET ERROR_QUIET)
+    endif()
+    if(NOT patch_result EQUAL 0)
+        message(FATAL_ERROR "Cannot apply or verify ${patch_name}")
+    endif()
+endforeach()
 
 # Check for stdint.h
 check_include_file_cxx(stdint.h HAVE_STDINT_H)
