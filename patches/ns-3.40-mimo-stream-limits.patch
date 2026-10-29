@@ -31,3 +31,165 @@
      {
          return false;
      }
+--- a/src/wifi/model/wifi-remote-station-manager.cc
++++ b/src/wifi/model/wifi-remote-station-manager.cc
+@@ -1960,6 +1960,12 @@
+ uint8_t
+ WifiRemoteStationManager::GetNumberOfSupportedStreams(const WifiRemoteStation* station) const
+ {
++    // HE advertises up to eight streams, beyond the four covered by the HT MCS bitmap.
++    Ptr<const HeCapabilities> heCapabilities = station->m_state->m_heCapabilities;
++    if (heCapabilities)
++    {
++        return heCapabilities->GetHighestNssSupported();
++    }
+     Ptr<const HtCapabilities> htCapabilities = station->m_state->m_htCapabilities;
+ 
+     if (!htCapabilities)
+@@ -2081,7 +2087,14 @@
+ uint8_t
+ WifiRemoteStationManager::GetNumberOfSupportedStreams(Mac48Address address) const
+ {
+-    Ptr<const HtCapabilities> htCapabilities = LookupState(address)->m_htCapabilities;
++    auto state = LookupState(address);
++    // Prefer HE's NSS over the legacy HT stream count, as in the station-pointer overload.
++    Ptr<const HeCapabilities> heCapabilities = state->m_heCapabilities;
++    if (heCapabilities)
++    {
++        return heCapabilities->GetHighestNssSupported();
++    }
++    Ptr<const HtCapabilities> htCapabilities = state->m_htCapabilities;
+ 
+     if (!htCapabilities)
+     {
+--- a/src/wifi/test/wifi-test.cc
++++ b/src/wifi/test/wifi-test.cc
+@@ -24,6 +24,7 @@
+ #include "ns3/ap-wifi-mac.h"
+ #include "ns3/config.h"
+ #include "ns3/constant-position-mobility-model.h"
++#include "ns3/constant-rate-wifi-manager.h"
+ #include "ns3/error-model.h"
+ #include "ns3/fcfs-wifi-queue-scheduler.h"
+ #include "ns3/frame-exchange-manager.h"
+@@ -3814,3 +3815,120 @@
+ }
+ 
+ static WifiTestSuite g_wifiTestSuite; ///< the test suite
++
++/// Expose the station-pointer overload for the stream-capability regression test.
++class StreamCapabilityWifiManager : public ConstantRateWifiManager
++{
++  public:
++    using WifiRemoteStationManager::GetNumberOfSupportedStreams;
++};
++
++/**
++ * Check both stream-capability lookups, including HE peers whose NSS exceeds
++ * the four streams represented by their legacy HT capabilities.
++ */
++class WifiStreamCapabilitiesTest : public TestCase
++{
++  public:
++    WifiStreamCapabilitiesTest()
++        : TestCase("HE stream capabilities and HT and legacy fallbacks")
++    {
++    }
++
++  private:
++    void CheckStreams(Ptr<StreamCapabilityWifiManager> manager,
++                      Mac48Address address,
++                      uint8_t expected)
++    {
++        NS_TEST_EXPECT_MSG_EQ(manager->GetNumberOfSupportedStreams(address),
++                              expected,
++                              "Incorrect stream count from address lookup for NSS " << +expected);
++
++        WifiRemoteStationState state{};
++        state.m_htCapabilities = manager->GetStationHtCapabilities(address);
++        state.m_vhtCapabilities = manager->GetStationVhtCapabilities(address);
++        state.m_heCapabilities = manager->GetStationHeCapabilities(address);
++        WifiRemoteStation station;
++        station.m_state = &state;
++        NS_TEST_EXPECT_MSG_EQ(manager->GetNumberOfSupportedStreams(&station),
++                              expected,
++                              "Incorrect stream count from station lookup for NSS " << +expected);
++    }
++
++    void DoRun() override
++    {
++        YansWifiPhyHelper phy;
++        phy.SetChannel(YansWifiChannelHelper::Default().Create());
++        WifiHelper wifi;
++        wifi.SetStandard(WIFI_STANDARD_80211ax);
++        wifi.SetRemoteStationManager("ns3::ConstantRateWifiManager");
++        WifiMacHelper mac;
++        mac.SetType("ns3::AdhocWifiMac");
++        auto devices = wifi.Install(phy, mac, CreateObject<Node>());
++        auto device = DynamicCast<WifiNetDevice>(devices.Get(0));
++        auto manager = CreateObject<StreamCapabilityWifiManager>();
++        manager->SetupPhy(device->GetPhy());
++        manager->SetupMac(device->GetMac());
++
++        CheckStreams(manager, Mac48Address::Allocate(), 1);
++        VhtCapabilities vht;
++        for (uint8_t nss = 1; nss <= 8; ++nss)
++        {
++            vht.SetRxMcsMap(9, nss);
++        }
++        auto vhtAddress = Mac48Address::Allocate();
++        manager->AddStationVhtCapabilities(vhtAddress, vht);
++        CheckStreams(manager, vhtAddress, 1);
++
++        for (uint8_t nss = 1; nss <= 4; ++nss)
++        {
++            HtCapabilities ht;
++            for (uint8_t mcs = 0; mcs < 8 * nss; ++mcs)
++            {
++                ht.SetRxMcsBitmask(mcs);
++            }
++            auto address = Mac48Address::Allocate();
++            manager->AddStationHtCapabilities(address, ht);
++            CheckStreams(manager, address, nss);
++            manager->AddStationVhtCapabilities(address, vht);
++            CheckStreams(manager, address, nss);
++        }
++
++        HtCapabilities ht;
++        for (uint8_t mcs = 0; mcs < 32; ++mcs)
++        {
++            ht.SetRxMcsBitmask(mcs);
++        }
++        for (uint8_t nss = 1; nss <= 8; ++nss)
++        {
++            HeCapabilities he;
++            he.SetHighestNssSupported(nss);
++
++            // HE-only peers must not fall back to a single stream.
++            auto address = Mac48Address::Allocate();
++            manager->AddStationHeCapabilities(address, he);
++            CheckStreams(manager, address, nss);
++
++            // HE must take precedence over HT, even when its NSS is lower.
++            manager->AddStationHtCapabilities(address, ht);
++            CheckStreams(manager, address, nss);
++            manager->AddStationVhtCapabilities(address, vht);
++            CheckStreams(manager, address, nss);
++        }
++        manager->Dispose();
++        Simulator::Destroy();
++    }
++};
++
++/// Focused suite so stream-capability regressions can be run independently.
++class WifiStreamCapabilitiesTestSuite : public TestSuite
++{
++  public:
++    WifiStreamCapabilitiesTestSuite()
++        : TestSuite("wifi-stream-capabilities", UNIT)
++    {
++        AddTestCase(new WifiStreamCapabilitiesTest, TestCase::QUICK);
++    }
++};
++
++static WifiStreamCapabilitiesTestSuite g_wifiStreamCapabilitiesTestSuite;
