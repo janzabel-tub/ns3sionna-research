@@ -131,7 +131,7 @@ build_lib_example(
 build_lib_example(
     NAME ns3_wifi_ber_mapping
     SOURCE_FILES ns3_wifi_ber_mapping.cc
-    LIBRARIES_TO_LINK ${libsionna} ${libwifi} ${Protobuf_LIBRARIES}
+    LIBRARIES_TO_LINK ${libsionna} ${libwifi} protobuf::libprotobuf
 )
 
 # TCP-style, one-AP/many-STA MIMO experiment with opt-in packet diagnostics.
