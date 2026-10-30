@@ -64,9 +64,13 @@ fi
 for antennas in {1..8}; do
     case_dir="$OUTPUT_DIR/${antennas}x${antennas}"
     printf '[sweep] %sx%s -> %s\n' "$antennas" "$antennas" "$case_dir"
+    precoding=open-loop
+    if (( antennas > 1 )); then
+        precoding=svd
+    fi
     runner_args=("${forwarded[@]}"
         "--sim_min_stas=1" "--sim_max_stas=1"
-        "--antennaCount=$antennas" "--streams=0"
+        "--antennaCount=$antennas" "--streams=$antennas"
         "--outputDirectory=$case_dir")
     runner_prefix=()
     [[ $DRY_RUN == false ]] || runner_prefix+=(--dry-run)
@@ -77,11 +81,11 @@ for antennas in {1..8}; do
     MOBILE_SPEED=${MOBILE_SPEED:-1} \
     DATA_RATE=${DATA_RATE:-10000} \
     RATE_ADAPTATION=${RATE_ADAPTATION:-minstrel} \
-    PRECODING=${PRECODING:-open-loop} \
+    PRECODING="$precoding" \
     ARRAY_ROWS=${ARRAY_ROWS:-1} \
     ANTENNA_SPACING_LAMBDA=${ANTENNA_SPACING_LAMBDA:-0.5} \
-    CHANNEL_WIDTH_MHZ=${CHANNEL_WIDTH_MHZ:-80} \
-    CHANNEL=${CHANNEL:-42} \
+    CHANNEL_WIDTH_MHZ=${CHANNEL_WIDTH_MHZ:-20} \
+    CHANNEL=${CHANNEL:-40} \
     TX_POWER=${TX_POWER:-20} \
     LDPC=${LDPC:-true} \
     SIMULATION_TIME_SECONDS=${SIMULATION_TIME_SECONDS:-10} \

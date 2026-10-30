@@ -56,7 +56,8 @@ find_library(ZeroMQ_LIBRARY
 #target_link_libraries(sionna PRIVATE ${ZMQ_LIBRARIES})
 
 # protobuf lib
-find_package(Protobuf REQUIRED)
+set(protobuf_MODULE_COMPATIBLE TRUE)
+find_package(Protobuf CONFIG REQUIRED)
 if(NOT Protobuf_FOUND)
     message(STATUS "protobuf not found")
     return()
@@ -144,7 +145,7 @@ build_lib(
         ${libspectrum}
         ${libwifi}
         ${ZeroMQ_LIBRARIES}
-        ${Protobuf_LIBRARIES}
+        protobuf::libprotobuf
         TEST_SOURCES
         test/he-effective-sinr-mapping-test-suite.cc
         test/sionna-test-suite.cc
