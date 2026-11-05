@@ -72,7 +72,7 @@
  #include "ns3/error-model.h"
  #include "ns3/fcfs-wifi-queue-scheduler.h"
  #include "ns3/frame-exchange-manager.h"
-@@ -3814,3 +3815,120 @@
+@@ -3814,3 +3815,240 @@
  }
  
  static WifiTestSuite g_wifiTestSuite; ///< the test suite
@@ -181,6 +181,122 @@
 +    }
 +};
 +
++/**
++ * Verify association preserves HE NSS above four and Minstrel actually transmits
++ * those streams, even though the same peer advertises only four HT streams.
++ */
++class MinstrelHeStreamsTest : public TestCase
++{
++  public:
++    explicit MinstrelHeStreamsTest(uint8_t streams)
++        : TestCase("Minstrel HE transmissions with " + std::to_string(streams) + " streams"),
++          m_streams(streams)
++    {
++    }
++
++  private:
++    void TxTrace(WifiConstPsduMap psdus, WifiTxVector txVector, double txPowerW)
++    {
++        if (txVector.GetPreambleType() == WIFI_PREAMBLE_HE_SU &&
++            psdus.begin()->second->GetHeader(0).IsQosData())
++        {
++            m_maxNss = std::max(m_maxNss, txVector.GetNss());
++            NS_TEST_EXPECT_MSG_LT(+txVector.GetNss(), m_streams + 1, "Exceeded peer HE NSS");
++        }
++    }
++
++    void RxTrace(Ptr<const Packet> packet, const Address& from)
++    {
++        m_receivedBytes += packet->GetSize();
++    }
++
++    void DoRun() override
++    {
++        RngSeedManager::SetSeed(1);
++        RngSeedManager::SetRun(1);
++        NodeContainer nodes;
++        nodes.Create(2);
++        MobilityHelper mobility;
++        mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
++        mobility.Install(nodes);
++        nodes.Get(1)->GetObject<MobilityModel>()->SetPosition(Vector(1, 0, 0));
++
++        YansWifiPhyHelper phy;
++        phy.SetChannel(YansWifiChannelHelper::Default().Create());
++        phy.Set("ChannelSettings", StringValue("{36, 20, BAND_5GHZ, 0}"));
++        phy.Set("Antennas", UintegerValue(8));
++        phy.Set("MaxSupportedTxSpatialStreams", UintegerValue(8));
++        phy.Set("MaxSupportedRxSpatialStreams", UintegerValue(8));
++        WifiHelper wifi;
++        wifi.SetStandard(WIFI_STANDARD_80211ax);
++        wifi.ConfigHtOptions("LdpcSupported", BooleanValue(true));
++        wifi.ConfigHeOptions("GuardInterval", TimeValue(NanoSeconds(800)));
++        wifi.SetRemoteStationManager("ns3::MinstrelHtWifiManager",
++                                     "UseLatestAmendmentOnly",
++                                     BooleanValue(true));
++        WifiMacHelper mac;
++        mac.SetType("ns3::ApWifiMac", "Ssid", SsidValue(Ssid("he-streams")));
++        auto apDevices = wifi.Install(phy, mac, nodes.Get(0));
++        phy.Set("MaxSupportedTxSpatialStreams", UintegerValue(m_streams));
++        phy.Set("MaxSupportedRxSpatialStreams", UintegerValue(m_streams));
++        mac.SetType("ns3::StaWifiMac", "Ssid", SsidValue(Ssid("he-streams")));
++        auto staDevices = wifi.Install(phy, mac, nodes.Get(1));
++        wifi.AssignStreams(apDevices, 100);
++        wifi.AssignStreams(staDevices, 200);
++        auto ap = DynamicCast<WifiNetDevice>(apDevices.Get(0));
++        auto sta = DynamicCast<WifiNetDevice>(staDevices.Get(0));
++        ap->GetPhy()->TraceConnectWithoutContext(
++            "PhyTxPsduBegin", MakeCallback(&MinstrelHeStreamsTest::TxTrace, this));
++
++        PacketSocketHelper sockets;
++        sockets.Install(nodes);
++        PacketSocketAddress address;
++        address.SetSingleDevice(ap->GetIfIndex());
++        address.SetPhysicalAddress(sta->GetAddress());
++        address.SetProtocol(1);
++        auto client = CreateObject<PacketSocketClient>();
++        client->SetRemote(address);
++        client->SetAttribute("PacketSize", UintegerValue(1400));
++        client->SetAttribute("MaxPackets", UintegerValue(0));
++        client->SetAttribute("Interval", TimeValue(MicroSeconds(50)));
++        nodes.Get(0)->AddApplication(client);
++        client->SetStartTime(Seconds(0.2));
++        // Let Minstrel revisit rates initially deferred by its slow-sample policy.
++        client->SetStopTime(Seconds(3.2));
++        auto server = CreateObject<PacketSocketServer>();
++        address.SetSingleDevice(sta->GetIfIndex());
++        server->SetLocal(address);
++        server->TraceConnectWithoutContext("Rx",
++                                           MakeCallback(&MinstrelHeStreamsTest::RxTrace, this));
++        nodes.Get(1)->AddApplication(server);
++        server->SetStartTime(Seconds(0));
++        Simulator::Stop(Seconds(3.2));
++        Simulator::Run();
++
++        auto manager = ap->GetRemoteStationManager();
++        auto peer = sta->GetMac()->GetAddress();
++        NS_TEST_ASSERT_MSG_NE(manager->GetStationHeCapabilities(peer),
++                              nullptr,
++                              "No HE association");
++        auto htCapabilities = manager->GetStationHtCapabilities(peer);
++        NS_TEST_EXPECT_MSG_EQ(+htCapabilities->GetRxHighestSupportedAntennas(),
++                              4,
++                              "HT must retain its four-stream ceiling");
++        NS_TEST_EXPECT_MSG_EQ(+manager->GetNumberOfSupportedStreams(peer),
++                              +m_streams,
++                              "Association lost peer HE stream support");
++        NS_TEST_EXPECT_MSG_EQ(+m_maxNss,
++                              +m_streams,
++                              "Minstrel did not transmit at the HE NSS ceiling");
++        NS_TEST_EXPECT_MSG_GT(m_receivedBytes, 0, "No data delivered");
++        Simulator::Destroy();
++    }
++
++    uint8_t m_streams;
++    uint8_t m_maxNss{0};
++    uint64_t m_receivedBytes{0};
++};
++
 +/// Focused suite so stream-capability regressions can be run independently.
 +class WifiStreamCapabilitiesTestSuite : public TestSuite
 +{
@@ -189,6 +305,10 @@
 +        : TestSuite("wifi-stream-capabilities", UNIT)
 +    {
 +        AddTestCase(new WifiStreamCapabilitiesTest, TestCase::QUICK);
++        for (uint8_t streams = 5; streams <= 8; ++streams)
++        {
++            AddTestCase(new MinstrelHeStreamsTest(streams), TestCase::QUICK);
++        }
 +    }
 +};
 +

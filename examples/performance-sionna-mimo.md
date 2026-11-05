@@ -172,6 +172,38 @@ The sweep uses fixed apartment positions, 80 MHz, HE LDPC, Minstrel and a
 saturating 10 Gb/s TCP offered rate. It writes one `NxN/` directory per case
 under `OUTPUT_DIR`; mobility is optional with `MOBILE_SCENARIO=true`.
 
+For HE streams 5--8, the native ns-3 Wi-Fi library must include both
+`WifiRemoteStationManager::GetNumberOfSupportedStreams()` fixes in
+`patches/ns-3.40-mimo-stream-limits.patch`. Each overload reads HE's highest
+supported NSS before falling back to HT capabilities. HT's receive MCS bitmap
+represents at most four streams, so using it for an HE peer filters streams
+5--8 out of Minstrel's rate groups. The separate HT initialization and
+advertisement limits still stay at four. Rebuild the native Wi-Fi library and
+the example after updating the patch or copying changes to another checkout.
+
+The `wifi-stream-capabilities` test suite covers both lookups and actual
+Minstrel HE transmissions at NSS 5, 6, 7 and 8 after AP/STA association. Its
+high-SNR native Wi-Fi fixture runs without a Sionna server:
+
+```bash
+./ns3 build test-runner -j 2
+./ns3 run 'test-runner --suite=wifi-stream-capabilities --verbose' --no-build
+```
+
+For a new antenna sweep, record the transmitted NSS explicitly:
+
+```bash
+ENABLE_RATE_TRACE=true BUILD=true \
+  bash contrib/sionna/examples/performance-sionna-sumimo-antenna-sweep.sh
+```
+
+Each `NxN/stas-1/minstrel_rate_results.csv` records the actual PPDU's `Mode`,
+`Nss`, `SrcNodeId` and `DstNodeId`. Filter HE data transmissions by direction
+when comparing the AP's downlink with TCP ACK data in the reverse direction.
+`streams=N` is the adaptive ceiling; Minstrel can select fewer streams when
+their measured throughput is better. Equal application goodput alone does
+not establish which NSS was transmitted.
+
 ## Server-free verification
 
 A deterministic fixed-channel fixture verifies TCP delivery, interval arithmetic,
