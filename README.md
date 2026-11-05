@@ -67,7 +67,7 @@ cd ../
 Note: ns3sionna Protocol Buffer messages (C++ and Python) are build during configure.
 
 4. Install the server component of ns3sionna located in model/ns3sionna
-   (Python 3.11 or newer is required by Sionna 2.0.1):
+   (Python 3.11 or newer is required by Sionna 2.2.0):
 
 ```
 cd ./contrib/sionna/model/ns3sionna/
@@ -91,9 +91,10 @@ python3 -m pip install --upgrade -r requirements.txt
 python3 tests/test_imports.py # all packages should be correctly installed
 ```
 
-Note: ns3sionna is pinned and tested with Sionna==2.0.1 and
-Sionna-RT==2.0.1. Sionna 2 uses PyTorch instead of TensorFlow; Sionna RT
+Note: ns3sionna is pinned and tested with Sionna==2.2.0 and
+Sionna-RT==2.2.0. Sionna 2 uses PyTorch instead of TensorFlow; Sionna RT
 selects its CUDA or LLVM/Mitsuba backend independently during import.
+The matching ray-tracing dependencies are Mitsuba 3.9.1 and Dr.Jit 1.5.0.
 
 5. Start server component of ns3sionna
 
