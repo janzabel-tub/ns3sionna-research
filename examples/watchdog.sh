@@ -7,6 +7,9 @@
 #
 # Usage: ./watchdog.sh [--reset]
 #   --reset   delete saved state and start the sweep from the beginning
+# Run independent repetitions with distinct labels, e.g. RUN_LABEL=repeatA ./watchdog.sh
+# Reuse the same label to resume an interrupted sweep. Activate the Sionna220
+# Python environment first; this script uses its python executable.
 
 set -uo pipefail
 
@@ -36,8 +39,11 @@ export MCS=${MCS:-11}
 export ENVIRONMENT="apartment/apartment.xml"  # Use "munich/munich.xml" for Munich positions
 export TX_POWER=30
 
-# Output: each coherence time gets its own subdirectory under OUTPUT_BASE
-OUTPUT_BASE="$EXAMPLES/results_sionna2/regApartmenthighSpeed30dbm"
+# Each repetition has independent results, state and logs. OUTPUT_BASE may be
+# overridden with an absolute path; otherwise RUN_LABEL separates repetitions.
+OUTPUT_BASE="${OUTPUT_BASE:-$EXAMPLES/results_sionna2/regApartmenthighSpeed30dbm/$RUN_LABEL}"
+mkdir -p "$OUTPUT_BASE" || exit 1
+OUTPUT_BASE="$(cd "$OUTPUT_BASE" && pwd)" || exit 1
 
 # Optional features passed through to the C++ binary
 export ENABLE_SNR=true
@@ -52,19 +58,20 @@ CHECK_INTERVAL=60
 # Set to 0 to disable.
 RUN_TIMEOUT_SECONDS=${RUN_TIMEOUT_SECONDS:-1800}
 
-# Max consecutive failures before a seed is abandoned and the sweep continues
+# Max consecutive failures before the sweep stops with its state preserved
 MAX_RETRIES=3
 
 # ═══════════════════════════════════════════════════════════════════════════════
 
-STATE_FILE="$EXAMPLES/watchdog_state.txt"
+STATE_FILE="$OUTPUT_BASE/watchdog_state.txt"
+SERVER_LOG="$OUTPUT_BASE/server.log"
 SERVER_PID=""
 EXP_PID=""
 
 # ── State persistence ─────────────────────────────────────────────────────────
 # State file format: "<coherence_index> <seed>"
 # coherence_index is an index into COHERENCE_TIMES, not the value itself,
-# so the array can be freely reordered without corrupting saved progress.
+# Keep the array order and seed range unchanged when resuming a sweep.
 
 save_state() {
     echo "$1 $2" > "$STATE_FILE"
@@ -95,12 +102,12 @@ start_server() {
     cd "$SERVER_DIR" || { echo "Cannot cd to $SERVER_DIR"; exit 1; }
     export NS3SIONNA_MODEL_FOLDER="$SERVER_DIR/models"
     python ns3sionna_server.py \
-        --equidistant_walk_steps "$EQUIDISTANT_WALK_STEPS" > "$SERVER_DIR/server.log" 2>&1 &
+        --equidistant_walk_steps "$EQUIDISTANT_WALK_STEPS" >> "$SERVER_LOG" 2>&1 &
     SERVER_PID=$!
     echo "[watchdog] Server PID=${SERVER_PID}, waiting for init..."
     sleep 8
     if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-        echo "[watchdog] Server failed to start. Check $SERVER_DIR/server.log"
+        echo "[watchdog] Server failed to start. Check $SERVER_LOG"
         exit 1
     fi
     echo "[watchdog] Server running"
@@ -146,7 +153,7 @@ cleanup() {
     echo "[watchdog] Caught signal — shutting down cleanly"
     stop_run
     stop_server
-    echo "[watchdog] State preserved in ${STATE_FILE} — re-run watchdog.sh to resume"
+    echo "[watchdog] State preserved in ${STATE_FILE} — re-run with RUN_LABEL=${RUN_LABEL} and the same OUTPUT_BASE to resume"
     exit 0
 }
 
@@ -155,7 +162,8 @@ trap cleanup SIGINT SIGTERM
 # ── run_until_success ─────────────────────────────────────────────────────────
 # Runs one (tc, seed) pair. Handles server crashes and run timeouts by
 # restarting the server and re-launching the run. Gives up after MAX_RETRIES
-# consecutive failures, including repeated server crashes/timeouts.
+# consecutive failures, including repeated server crashes/timeouts; the caller
+# then stops the sweep and preserves the failed case for a later resume.
 #
 # Returns 0 when the run succeeds, 1 if MAX_RETRIES was hit.
 
@@ -177,11 +185,9 @@ run_until_success() {
             echo "[watchdog] Run timed out after ${elapsed}s (limit ${RUN_TIMEOUT_SECONDS}s) — restarting server and re-running seed=${seed} tc=${tc}ms"
 
             if [[ $retries -ge $MAX_RETRIES ]]; then
-                echo "[watchdog] Max retries reached after repeated timeouts for tc=${tc}ms seed=${seed} — skipping"
+                echo "[watchdog] Max retries reached after repeated timeouts for tc=${tc}ms seed=${seed}"
                 stop_run
                 stop_server
-                sleep 2
-                start_server
                 return 1
             fi
 
@@ -199,10 +205,8 @@ run_until_success() {
             ((retries++)) || true
             echo "[watchdog] Server crashed — restarting server and re-running seed=${seed} tc=${tc}ms"
             if [[ $retries -ge $MAX_RETRIES ]]; then
-                echo "[watchdog] Max retries reached after repeated server crashes for tc=${tc}ms seed=${seed} — skipping"
+                echo "[watchdog] Max retries reached after repeated server crashes for tc=${tc}ms seed=${seed}"
                 stop_run
-                sleep 2
-                start_server
                 return 1
             fi
             stop_run
@@ -226,7 +230,7 @@ run_until_success() {
                 echo "[watchdog] Run failed (attempt ${retries}/${MAX_RETRIES}): tc=${tc}ms seed=${seed}"
 
                 if [[ $retries -ge $MAX_RETRIES ]]; then
-                    echo "[watchdog] Max retries reached for tc=${tc}ms seed=${seed} — skipping"
+                    echo "[watchdog] Max retries reached for tc=${tc}ms seed=${seed}"
                     return 1
                 fi
 
@@ -266,6 +270,7 @@ echo "[watchdog] Position logging: ${ENABLE_POSITIONS}"
 echo "[watchdog] Equidistant walk step: ${EQUIDISTANT_WALK_STEPS} ns"
 echo "[watchdog] Run timeout:     ${RUN_TIMEOUT_SECONDS} s"
 echo "[watchdog] Output base:     ${OUTPUT_BASE}"
+echo "[watchdog] Server log:      ${SERVER_LOG}"
 echo "[watchdog] ════════════════════════════════════════════"
 
 load_state
@@ -284,7 +289,12 @@ while [[ $COHERENCE_IDX -lt ${#COHERENCE_TIMES[@]} ]]; do
         # Persist state before each run so a crash can resume here
         save_state "$COHERENCE_IDX" "$CURRENT_SEED"
 
-        run_until_success "$TC" "$CURRENT_SEED"
+        if ! run_until_success "$TC" "$CURRENT_SEED"; then
+            stop_run
+            stop_server
+            echo "[watchdog] Sweep failed: tc=${TC}ms seed=${CURRENT_SEED}; state preserved in ${STATE_FILE}"
+            exit 1
+        fi
 
         sleep 3  # brief pause between runs (matches original script)
         ((CURRENT_SEED++)) || true
