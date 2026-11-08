@@ -140,6 +140,56 @@ reported in the log. The example does not force a full-group transmission when
 the native scheduler cannot produce one. Both ZF and RZF reject rank-deficient
 groups on any required subcarrier; RZF does not lift this full-rank requirement.
 
+For compact scheduler and frame-exchange diagnostics, set
+`ENABLE_MU_DIAGNOSTICS=true` (or `--muDiagnostics=true`). This leaves selection,
+power, aggregation limits and rate control unchanged and enables the existing
+MIMO SINR/PER traces alongside four CSVs:
+
+- `mu_scheduler.csv`: one row per configured user per scheduler invocation,
+  with decision ID, outcome/detail, TID, queue counts, eligibility, CW, last backoff draw
+  and available time. Queue counts include in-flight/expired entries;
+  `queued_not_transmittable` is distinct from an empty queue. `not_checked`
+  means selection returned before evaluating that user. Runtime exception
+  details are retained, including rank and incomplete-group rejections.
+  BE CW/backoff values come from native traces; the backoff draw is not a count
+  of slots remaining at the scheduler invocation. `Available_ns` retains native
+  `Time::Min()` for an initial frame without a remaining-TXOP time budget.
+- `ppdu_tx.csv`: actual AP and STA transmissions, one row per receiver PSDU,
+  with a run-local `TxId`, native duration calculation, NAV Duration/ID, frame
+  kind (including TCP ACK, MAC ACK, BAR and BlockAck), MCS/GI/NSS/coding/RU,
+  aggregation, retries, power, queue bytes and CW. MU receiver rows share one
+  `TxId`; count airtime once. Same-time scheduler decisions are linked when
+  available. Native HE-FEM bypasses before BA establishment or for pending BARs
+  are not custom-scheduler rejections; deferred/unmatched selection is labeled.
+- `phy_tx.csv`: exact native PHY TX-state start/duration, one row per `TxId`.
+  Use this for airtime and overlaps; it does not use microsecond PCAP rounding.
+- `mac_events.csv`: individual ACK/negative-BlockAck/drop/timeout events,
+  addressed PHY drops, and BE CW/backoff changes on every device. `TxId=0` means
+  no known data attempt (for example a control timeout or a pre-TX drop).
+  `Value` contains the native timeout/drop enum or new contention value;
+  `Cw` is the CW at the callback, with subsequent updates recorded separately.
+  Attempt linkage includes packet UID, sequence, TID and peer to avoid sequence
+  wraparound and cross-user ambiguity. Events are not deduplicated by packet UID.
+
+The rate CSV correctly removes A-MPDU delimiters before decoding MAC addresses.
+The diagnostics are single-link records with nanosecond timestamps and include
+startup; apply the configured traffic window during analysis. Model PER remains
+a prediction rather than an acknowledgment outcome. Full PCAP is optional.
+
+The frame-exchange audit retains native `TryAddMpdu` acknowledgment/protection
+budgeting, native A-MSDU/A-MPDU construction, retry sequence numbers and
+HE-FEM's normal/BlockAck retry/NAV/TXOP handling. Partial MU success may reset
+CW under native rules; this alone is not an integration fault. SU-derived MU
+rate selection and legacy TCP-ACK uplink remain separate limitations. No CW,
+TXOP, acknowledgment policy or PHY error model is changed by this option.
+
+Combined verification on Sionna 2.2.0 (2026-11-08) passed the existing Sionna,
+MU runtime, BlockAck, HE multi-user MAC and TXOP suites. Paired seed/run-1
+eight-STA runs with diagnostics off/on produced identical throughput and
+MU/SU summaries (44.9804 Mbit/s, 116 MU / 3,902 HE-SU PPDUs). All 48,106 TX
+records matched native PHY durations; all 71,287 rate-log attempts matched
+per-peer MPDU counts. No native MAC behavioral change was justified by the audit.
+
 Run the one-AP user-count sweep (1 through 8 STAs, with an eight-antenna AP)
 from any directory:
 
@@ -177,6 +227,4 @@ delay, explicit CSI aging, MAC sounding and compressed MU feedback are not
 added. Cache/lookahead/mobility semantics remain those of the existing scripts;
 no historical channel is fabricated. External interference retains the native
 scalar treatment after spatial abstraction. Beta-free BER mapping does not
-claim universally calibrated coded PER. No build, syntax check, test or
-simulation was run while creating these files; runtime behavior remains to be
-validated when execution is authorized.
+claim universally calibrated coded PER.

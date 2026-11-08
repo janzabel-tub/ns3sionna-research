@@ -351,6 +351,15 @@ Use [performance-sionna-mimo](examples/performance-sionna-mimo.md) for configura
 TCP downlinks with two AP/STA pairs on one channel, antenna/channel-width sweeps,
 ideal SVD beamforming, and 100 ms throughput and average PHY SNR summaries.
 
+For the single-AP MU TCP example, set `ENABLE_MU_DIAGNOSTICS=true` to record
+scheduler rejection reasons and per-user eligibility, actual PPDU allocations,
+native PHY airtime, MAC acknowledgment outcomes and CW/backoff changes. It also
+enables existing MIMO SINR/PER traces; full PCAP is unnecessary for these checks.
+Selection, rate control and total transmit power are unchanged. See the
+[MU example and CSV contracts](examples/performance-sionna-mumimo-monolith.md).
+`START_SERVER=true` makes that runner stop its owned server on exit; an externally
+started server must be stopped separately to release GPU memory.
+
 ## Native CPU reproduction (Phase 5 R1)
 
 Use the existing Conda `sionna-venv` environment and the

@@ -56,6 +56,29 @@ struct SionnaMimoStationBinding
 /** Supplies a deterministic multi-user channel snapshot for an exact time. */
 using SionnaMimoDownlinkSnapshotProvider = std::function<MultiUserChannelSnapshot(Time)>;
 
+/** Read-only eligibility at one scheduler invocation; queue counts include in-flight MPDUs. */
+struct SionnaMimoDownlinkUserStatus
+{
+    uint32_t userId{0}, nodeId{0}, queuedPackets{0}, queuedBytes{0};
+    uint16_t staId{SU_STA_ID};
+    std::string eligibility{"not_checked"};
+};
+
+/** Optional diagnostics for scheduler decisions, not a notification of actual transmission. */
+struct SionnaMimoDownlinkDecision
+{
+    uint64_t id{0};
+    Time time, availableTime;
+    uint16_t allowedWidth{0};
+    uint8_t tid{255};
+    bool initialFrame{false};
+    std::string outcome, detail;
+    std::vector<SionnaMimoDownlinkUserStatus> users;
+};
+
+using SionnaMimoDownlinkDiagnostic =
+    std::function<void(const SionnaMimoDownlinkDecision&)>;
+
 /** Sionna antenna element patterns represented by the high-level API. */
 enum class SionnaMimoAntennaPattern
 {
@@ -297,7 +320,8 @@ class SionnaMimoHelper
         const std::vector<SionnaMimoStationBinding>& stationBindings,
         Ptr<SionnaSpectrumPropagationLossModel> spectrumModel,
         SionnaMimoDownlinkSnapshotProvider snapshotProvider,
-        SionnaMimoDownlinkScheduling scheduling) const;
+        SionnaMimoDownlinkScheduling scheduling,
+        SionnaMimoDownlinkDiagnostic diagnostic = {}) const;
 
     /** Validate and set the orientation of one ns-3 node ID. */
     void SetNodeOrientation(uint32_t nodeId, const SionnaMimoOrientation& orientation);

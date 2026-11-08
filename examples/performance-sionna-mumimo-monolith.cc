@@ -58,6 +58,7 @@
 #include "ns3/wifi-tx-vector.h"
 #include "ns3/tcp-westwood-plus.h"
 #include "ns3/minstrel-wifi-manager.h"
+#include "mu-mimo-diagnostics.h"
 
 using namespace ns3;
 
@@ -77,7 +78,7 @@ struct Options
     double antennaSpacingLambda{0.5}, noiseFigureDb{7};
     double simulationTimeSeconds{10}, trafficStartSeconds{1}, reportIntervalMs{100};
     bool pcap{false}, mimoTrace{false}, prtTput{false}, throughput10ms{false};
-    bool ldpc{false};
+    bool ldpc{false}, muDiagnostics{false};
 } g_options;
 
 void
@@ -488,7 +489,16 @@ MinstrelTxVectorTrace(std::string context,
     }
 
     WifiMacHeader hdr;
-    if (packet->PeekHeader(hdr) == 0 || !hdr.IsData())
+    // MonitorSnifferTx supplies an A-MPDU subframe, including its delimiter.
+    auto frame = packet->Copy();
+    if (txVector.IsAggregation())
+    {
+        AmpduSubframeHeader delimiter;
+        frame->RemoveHeader(delimiter);
+        if (delimiter.GetLength() == 0) return;
+        frame = frame->CreateFragment(0, delimiter.GetLength());
+    }
+    if (frame->PeekHeader(hdr) == 0 || !hdr.IsData())
     {
         return;
     }
@@ -752,6 +762,7 @@ RunSimulation(  const std::string environment,
     // Keep the monolith result layout, including opt-in traces.
     Require(!std::filesystem::exists(out), "output directory already exists: " + out.string());
     std::filesystem::create_directories(out);
+    MuMimoDiagnostics diagnostics(out, g_options.muDiagnostics);
     auto open = [&out](std::ofstream& stream, const char* name) {
         stream.open(out / name);
         Require(bool(stream), "cannot write " + (out / name).string());
@@ -1127,10 +1138,12 @@ RunSimulation(  const std::string environment,
     else
     {
         SionnaMimoHelper(mimo).InstallDownlink(apDevice,
-            bindings, spectrumLossModel, provider, SionnaMimoDownlinkScheduling::MU);
+            bindings, spectrumLossModel, provider, SionnaMimoDownlinkScheduling::MU,
+            diagnostics.SchedulerCallback());
     }
     apDevice->GetPhy()->TraceConnectWithoutContext(
         "PhyTxPsduBegin", MakeCallback(&DownlinkTxTrace));
+    diagnostics.Connect(allDevices);
     // Establish BlockAck promptly, as in ns3_wifi_mumimo.cc, while keeping the
     // performance monolith's normal aggregation sizes and TCP applications.
     for (uint32_t i = 0; i < allDevices.GetN(); ++i)
@@ -1266,7 +1279,8 @@ RunSimulation(  const std::string environment,
            << "\nthroughput10ms=" << g_options.throughput10ms
            << "\nsnr=" << enable_snr << "\npositions=" << enable_positions
            << "\nminstrelRateTrace=" << enable_minstrel_rate_trace << "\npcap=" << g_options.pcap
-           << "\nmimoTrace=" << g_options.mimoTrace << "\n";
+           << "\nmimoTrace=" << g_options.mimoTrace
+           << "\nmuDiagnostics=" << g_options.muDiagnostics << "\n";
     for (uint32_t i = 0; i < points.size(); ++i)
         config << (i == 0 ? "apPosition=" : "staPosition" + std::to_string(i - 1) + "=")
                << points[i].x << ',' << points[i].y << ',' << points[i].z << '\n';
@@ -1400,7 +1414,9 @@ main(int argc, char* argv[])
     cmd.AddValue("tracing", "Enable PCAP recording on all devices", g_options.pcap);
     cmd.AddValue("pcap", "Alias for tracing", g_options.pcap);
     cmd.AddValue("mimoTrace", "Record SU SINR/PER/rank and per-user MU SINR/PER/first-bin power", g_options.mimoTrace);
+    cmd.AddValue("muDiagnostics", "Record scheduler eligibility, PPDU airtime and MAC outcomes", g_options.muDiagnostics);
     cmd.Parse(argc, argv);
+    if (g_options.muDiagnostics) g_options.mimoTrace = true;
     try
     {
         Require(minStas >= 1 && minStas <= maxStas && maxStas <= 8,

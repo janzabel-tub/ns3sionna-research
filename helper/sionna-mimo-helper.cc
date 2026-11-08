@@ -19,6 +19,7 @@
 #include "ns3/simulator.h"
 #include "ns3/spectrum-wifi-phy.h"
 #include "ns3/wifi-mac-header.h"
+#include "ns3/wifi-mac-queue.h"
 #include "ns3/wifi-net-device.h"
 #include "ns3/wifi-phy.h"
 #include "ns3/wifi-psdu.h"
@@ -322,7 +323,8 @@ class SionnaMimoDownlinkScheduler final : public MultiUserScheduler
                    Ptr<SionnaSpectrumPropagationLossModel> spectrumModel,
                    SionnaMimoDownlinkSnapshotProvider snapshotProvider,
                    DlMuMimoRuntimeConfiguration runtimeConfiguration,
-                   SionnaMimoDownlinkScheduling scheduling)
+                   SionnaMimoDownlinkScheduling scheduling,
+                   SionnaMimoDownlinkDiagnostic diagnostic)
     {
         std::sort(stationBindings.begin(),
                   stationBindings.end(),
@@ -334,6 +336,7 @@ class SionnaMimoDownlinkScheduler final : public MultiUserScheduler
         m_runtimeConfiguration = runtimeConfiguration;
         m_runtime.emplace(std::move(runtimeConfiguration));
         m_scheduling = scheduling;
+        m_diagnostic = std::move(diagnostic);
         m_phy = apDevice->GetPhy();
         m_phy->TraceConnectWithoutContext(
             "PhyTxPsduBegin",
@@ -353,11 +356,38 @@ class SionnaMimoDownlinkScheduler final : public MultiUserScheduler
     TxFormat SelectTxFormat() override
     {
         m_hasPendingDlMu = false;
+        if (m_diagnostic)
+        {
+            m_decision = {};
+            m_decision.id = ++m_decisionId;
+            m_decision.time = Simulator::Now();
+            m_decision.availableTime = m_availableTime;
+            m_decision.initialFrame = m_initialFrame;
+            m_decision.allowedWidth = m_allowedWidth;
+            for (const auto& binding : m_stationBindings)
+            {
+                SionnaMimoDownlinkUserStatus status;
+                status.userId = binding.userId;
+                status.nodeId = binding.stationDevice->GetNode()->GetId();
+                m_decision.users.push_back(status);
+            }
+        }
         if (m_scheduling == SionnaMimoDownlinkScheduling::SU_ROUND_ROBIN)
         {
+            if (m_diagnostic)
+            {
+                m_decision.outcome = "policy_su";
+                m_diagnostic(m_decision);
+            }
             return SU_TX;
         }
-        return BuildDlMuInfo() ? DL_MU_TX : SU_TX;
+        const bool mu = BuildDlMuInfo();
+        if (m_diagnostic)
+        {
+            if (mu) m_decision.outcome = "mu_ready";
+            m_diagnostic(m_decision);
+        }
+        return mu ? DL_MU_TX : SU_TX;
     }
 
     DlMuInfo ComputeDlMuInfo() override
@@ -372,19 +402,30 @@ class SionnaMimoDownlinkScheduler final : public MultiUserScheduler
         return UlMuInfo{};
     }
 
+    bool RejectGroup(const std::string& reason, const std::string& detail = {})
+    {
+        if (m_diagnostic)
+        {
+            m_decision.outcome = reason;
+            m_decision.detail = detail;
+        }
+        return false;
+    }
+
     bool BuildDlMuInfo()
     {
         if (m_allowedWidth != 20 || !m_edca || !m_runtime)
         {
             ++m_rejectedGroups;
-            return false;
+            return RejectGroup("unsupported_scheduler_context");
         }
         Ptr<WifiMpdu> first = m_edca->PeekNextMpdu(m_linkId);
         if (!first || !first->GetHeader().IsQosData())
         {
-            return false;
+            return RejectGroup(first ? "non_qos_head" : "no_eligible_head");
         }
         const uint8_t tid = first->GetHeader().GetQosTid();
+        if (m_diagnostic) m_decision.tid = tid;
         const HeRu::RuSpec ru{HeRu::RU_242_TONE, 1, true};
         std::vector<Candidate> candidates;
         DlMuInfo candidateInfo;
@@ -394,18 +435,40 @@ class SionnaMimoDownlinkScheduler final : public MultiUserScheduler
             m_apMac->GetHeConfiguration()->GetGuardInterval().GetNanoSeconds());
         candidateInfo.txParams.m_txVector.SetBssColor(m_apMac->GetHeConfiguration()->GetBssColor());
 
-        for (const auto& binding : m_stationBindings)
+        for (std::size_t index = 0; index < m_stationBindings.size(); ++index)
         {
+            const auto& binding = m_stationBindings[index];
             const Mac48Address address = binding.stationDevice->GetMac()->GetAddress();
             const uint16_t staId = m_apMac->GetAssociationId(address, m_linkId);
-            if (staId == SU_STA_ID || !m_apMac->GetBaAgreementEstablishedAsOriginator(address, tid) ||
-                !GetWifiRemoteStationManager(m_linkId)->GetHeSupported(address))
+            auto* status = m_diagnostic ? &m_decision.users[index] : nullptr;
+            if (status)
             {
+                status->staId = staId;
+                const WifiContainerQueueId queue{WIFI_QOSDATA_QUEUE, WIFI_UNICAST, address, tid};
+                status->queuedBytes = m_edca->GetWifiMacQueue()->GetNBytes(queue);
+                status->queuedPackets = status->queuedBytes
+                    ? m_edca->GetWifiMacQueue()->GetNPackets(queue) : 0;
+            }
+            if (staId == SU_STA_ID)
+            {
+                if (status) status->eligibility = "unassociated";
+                continue;
+            }
+            if (!m_apMac->GetBaAgreementEstablishedAsOriginator(address, tid))
+            {
+                if (status) status->eligibility = "missing_block_ack";
+                continue;
+            }
+            if (!GetWifiRemoteStationManager(m_linkId)->GetHeSupported(address))
+            {
+                if (status) status->eligibility = "not_he_capable";
                 continue;
             }
             Ptr<WifiMpdu> mpdu = m_edca->PeekNextMpdu(m_linkId, tid, address);
             if (!mpdu)
             {
+                if (status) status->eligibility = status->queuedPackets
+                    ? "queued_not_transmittable" : "empty_queue";
                 continue;
             }
             const WifiTxVector suTx =
@@ -415,8 +478,10 @@ class SionnaMimoDownlinkScheduler final : public MultiUserScheduler
                  !m_spectrumModel->HasEesmBeta(suTx.GetMode().GetMcsValue())))
             {
                 ++m_rejectedGroups;
-                return false;
+                if (status) status->eligibility = "invalid_rate";
+                return RejectGroup("invalid_rate");
             }
+            if (status) status->eligibility = "eligible";
             const uint8_t mcs = suTx.GetMode().GetMcsValue();
             candidateInfo.txParams.m_txVector.SetHeMuUserInfo(staId, {ru, mcs, 1});
             candidateInfo.psduMap.emplace(staId, Create<WifiPsdu>(mpdu, true));
@@ -424,7 +489,7 @@ class SionnaMimoDownlinkScheduler final : public MultiUserScheduler
         }
         if (candidates.size() < 2)
         {
-            return false;
+            return RejectGroup("fewer_than_two_candidates");
         }
 
         std::vector<DlMuMimoStaUserBinding> runtimeBindings;
@@ -447,10 +512,13 @@ class SionnaMimoDownlinkScheduler final : public MultiUserScheduler
                 runtimeBindings,
                 now);
         }
-        catch (const std::invalid_argument&)
+        catch (const std::invalid_argument& error)
         {
             ++m_rejectedGroups;
-            return false;
+            const std::string detail = error.what();
+            return RejectGroup(detail.find("numerical rank") != std::string::npos ? "rank_rejected"
+                : detail.find("fixed requested user is absent") != std::string::npos
+                    ? "incomplete_fixed_group" : "runtime_rejected", detail);
         }
 
         DlMuInfo finalInfo;
@@ -471,7 +539,7 @@ class SionnaMimoDownlinkScheduler final : public MultiUserScheduler
             if (candidate == candidates.end())
             {
                 ++m_rejectedGroups;
-                return false;
+                return RejectGroup("selected_user_missing");
             }
             finalInfo.txParams.m_txVector.SetHeMuUserInfo(
                 candidate->staId, {ru, candidate->mcs, 1});
@@ -480,7 +548,7 @@ class SionnaMimoDownlinkScheduler final : public MultiUserScheduler
         if (selected.size() < 2)
         {
             ++m_rejectedGroups;
-            return false;
+            return RejectGroup("fewer_than_two_selected");
         }
 
         const Time available = m_initialFrame ? Time::Min() : m_availableTime;
@@ -489,7 +557,7 @@ class SionnaMimoDownlinkScheduler final : public MultiUserScheduler
             if (!GetHeFem(m_linkId)->TryAddMpdu(candidate.mpdu, finalInfo.txParams, available))
             {
                 ++m_rejectedGroups;
-                return false;
+                return RejectGroup("mpdu_time_or_size_limit");
             }
         }
         for (const auto& candidate : selected)
@@ -631,6 +699,9 @@ class SionnaMimoDownlinkScheduler final : public MultiUserScheduler
     bool m_hasPendingDlMu{false};
     uint64_t m_muTransmissions{0};
     uint64_t m_rejectedGroups{0};
+    SionnaMimoDownlinkDiagnostic m_diagnostic;
+    SionnaMimoDownlinkDecision m_decision;
+    uint64_t m_decisionId{0};
 };
 
 } // namespace
@@ -885,7 +956,8 @@ SionnaMimoHelper::InstallDownlink(
     const std::vector<SionnaMimoStationBinding>& stationBindings,
     Ptr<SionnaSpectrumPropagationLossModel> spectrumModel,
     SionnaMimoDownlinkSnapshotProvider snapshotProvider,
-    SionnaMimoDownlinkScheduling scheduling) const
+    SionnaMimoDownlinkScheduling scheduling,
+    SionnaMimoDownlinkDiagnostic diagnostic) const
 {
     Validate(m_configuration);
     if (m_configuration.mode != SionnaMimoMode::MU_MIMO || !m_configuration.dlMu)
@@ -943,7 +1015,8 @@ SionnaMimoHelper::InstallDownlink(
                          spectrumModel,
                          std::move(snapshotProvider),
                          *m_configuration.dlMu,
-                         scheduling);
+                         scheduling,
+                         std::move(diagnostic));
     apMac->AggregateObject(scheduler);
     return scheduler;
 }

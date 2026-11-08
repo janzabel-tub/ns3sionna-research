@@ -57,6 +57,7 @@ ENABLE_POSITIONS=${ENABLE_POSITIONS:-false}
 ENABLE_RATE_TRACE=${ENABLE_RATE_TRACE:-false}
 ENABLE_PCAP=${ENABLE_PCAP:-false}
 ENABLE_MIMO_TRACE=${ENABLE_MIMO_TRACE:-false}
+ENABLE_MU_DIAGNOSTICS=${ENABLE_MU_DIAGNOSTICS:-false}
 ENABLE_THROUGHPUT_10MS=${ENABLE_THROUGHPUT_10MS:-false}
 PRINT_THROUGHPUT=${PRINT_THROUGHPUT:-false}
 VERBOSE=${VERBOSE:-false}
@@ -83,6 +84,7 @@ All settings are grouped at the top of this file. Common overrides:
   RESTART_SERVER_ON_CRASH=true OUTPUT_DIR=<new directory>
   ENABLE_SNR=false ENABLE_POSITIONS=false ENABLE_RATE_TRACE=false
   ENABLE_PCAP=false ENABLE_MIMO_TRACE=false ENABLE_THROUGHPUT_10MS=false
+  ENABLE_MU_DIAGNOSTICS=false  # scheduler/PPDU/ACK/CW CSVs; also enables MIMO traces
   PRINT_THROUGHPUT=false VERBOSE=false
 
 Default uses an existing server. START_SERVER=true owns a local server,
@@ -147,6 +149,7 @@ args=(
     "--snr=$ENABLE_SNR" "--positions=$ENABLE_POSITIONS"
     "--minstrelRateTrace=$ENABLE_RATE_TRACE" "--pcap=$ENABLE_PCAP"
     "--mimoTrace=$ENABLE_MIMO_TRACE" "--throughput10ms=$ENABLE_THROUGHPUT_10MS"
+    "--muDiagnostics=$ENABLE_MU_DIAGNOSTICS"
     "--prtTput=$PRINT_THROUGHPUT" "--verbose=$VERBOSE"
 )
 if [[ -n $RZF_ALPHA ]]; then args+=("--rzfAlpha=$RZF_ALPHA"); fi
