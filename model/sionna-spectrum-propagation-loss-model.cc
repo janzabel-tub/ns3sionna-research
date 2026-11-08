@@ -1148,7 +1148,6 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
             wrapper->Configure(GetErrorRateModel(rxPhy));
             rxPhy->SetErrorRateModel(wrapper);
         }
-        const auto txPhy = GetTransmitterSpectrumWifiPhy(params);
         const auto width = wifiParams->ppdu->GetTxVector().GetChannelWidth();
         const auto type = width == 20 ? HeRu::RU_242_TONE : width == 40 ? HeRu::RU_484_TONE :
                           width == 80 ? HeRu::RU_996_TONE : HeRu::RU_2x996_TONE;
@@ -1157,7 +1156,15 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
         const double noise = WifiLinkBudget::Calculate(0.0, 0.0, width * 1e6,
             WIFI_NOISE_TEMPERATURE_K, m_receiverNoiseFigureDb).GetReceiverNoisePowerW();
         const double rxGain = DbToRatio(rxPhy->GetRxGain());
-        const double scalar = IntegralBand(*rxPsd, txPhy->GetBand(width).indices) * rxGain / noise;
+        // A rate controller can transmit a narrower PPDU than the operating
+        // channel. Its PSD has its own grid; PHY band indices refer to the
+        // operating RX grid and cannot index this transmitted PSD directly.
+        const uint32_t occupiedBins = std::llround(width * 1e6 / spectrum_bin_size);
+        NS_ABORT_MSG_IF(occupiedBins == 0 || occupiedBins > psdSubcarriers,
+                        "HE transmission bandwidth is outside the PSD grid");
+        const uint32_t firstBin = (psdSubcarriers - occupiedBins) / 2;
+        const double scalar = IntegralBand(*rxPsd, {firstBin, firstBin + occupiedBins - 1}) *
+                              rxGain / noise;
         if (scalar > 0)
         {
             std::vector<double> tones;
