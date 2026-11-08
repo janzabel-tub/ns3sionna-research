@@ -1,0 +1,8 @@
+[Warning: Unable to locate a personal folder for $documents/MATLAB.] 
+{Error using assert
+MATLAB/native mismatch: ul_near_far_zf, scaled error 1.33156e+07
+
+Error in validate_mumimo_matlab (line 83)
+    assert(all(isfinite(errors)) && all(scaled <= 1), ...
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+} 

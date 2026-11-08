@@ -1,0 +1,11 @@
+[Warning: Unable to locate a personal folder for $documents/MATLAB.] 
+{Error using assert
+Effective mismatch streams_mcs0_nss2_p2
+
+Error in validate_he_error_matlab>checkMapping (line 209)
+    assert(abs(n.effective-effective)<=1e-8+1e-8*effective,'Effective mismatch %s',c.id);
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error in validate_he_error_matlab (line 22)
+mathReport = checkMapping(allCases,native.cases);
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+} 

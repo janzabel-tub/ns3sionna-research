@@ -1,0 +1,1552 @@
+[
+  {
+    "id": "per_mcs0_ldpc0_nss1_flat",
+    "mcs": 0,
+    "ldpc": false,
+    "nss": 1,
+    "apep_bytes": 256,
+    "psdu_bytes": 257,
+    "trials": 600,
+    "errors": 282,
+    "measured_per": 0.47,
+    "predicted_per": 0.5269773192084235,
+    "wilson_lower": 0.39478907662646012,
+    "wilson_upper": 0.54659857071989137,
+    "table_prediction_inside_interval": true,
+    "mean_uncoded_ber": 0.085937744966154944,
+    "effective_sinr": 0.9332543007969929,
+    "sinr_min": 0.93325430079699112,
+    "sinr_max": 0.93325430079699112,
+    "raw_ber": 0.085674264007597339,
+    "expected_raw_ber": 0.085937744966155014,
+    "raw_bit_errors": 216516,
+    "raw_bit_count": 2.5272E+6,
+    "clean_packet_errors": false,
+    "pair": 0
+  },
+  {
+    "id": "per_mcs0_ldpc0_nss2_flat",
+    "mcs": 0,
+    "ldpc": false,
+    "nss": 2,
+    "apep_bytes": 256,
+    "psdu_bytes": 260,
+    "trials": 600,
+    "errors": 277,
+    "measured_per": 0.46166666666666667,
+    "predicted_per": 0.53109289545758109,
+    "wilson_lower": 0.38673326525364965,
+    "wilson_upper": 0.53837317302224408,
+    "table_prediction_inside_interval": true,
+    "mean_uncoded_ber": 0.085937744966154944,
+    "effective_sinr": 0.9332543007969929,
+    "sinr_min": 0.93325430079699112,
+    "sinr_max": 0.93325430079699112,
+    "raw_ber": [
+      0.085911680911680915,
+      0.085615701171256733
+    ],
+    "expected_raw_ber": [
+      0.085937744966155014,
+      0.085937744966155014
+    ],
+    "raw_bit_errors": [
+      108558,
+      108184
+    ],
+    "raw_bit_count": [
+      1.2636E+6,
+      1.2636E+6
+    ],
+    "clean_packet_errors": false,
+    "pair": 0
+  },
+  {
+    "id": "per_mcs0_ldpc0_nss2_unequal_streams",
+    "mcs": 0,
+    "ldpc": false,
+    "nss": 2,
+    "apep_bytes": 256,
+    "psdu_bytes": 260,
+    "trials": 600,
+    "errors": 0,
+    "measured_per": 0,
+    "predicted_per": 0.53109289545758109,
+    "wilson_lower": 0,
+    "wilson_upper": 0.023127455772526787,
+    "table_prediction_inside_interval": false,
+    "mean_uncoded_ber": 0.085937744966155027,
+    "effective_sinr": 0.933254300796992,
+    "sinr_min": 0.44819612636873424,
+    "sinr_max": 14.791083881682074,
+    "raw_ber": [
+      0.1714514086736309,
+      0
+    ],
+    "expected_raw_ber": [
+      0.17187546313443514,
+      2.6797875228922866E-8
+    ],
+    "raw_bit_errors": [
+      216646,
+      0
+    ],
+    "raw_bit_count": [
+      1.2636E+6,
+      1.2636E+6
+    ],
+    "clean_packet_errors": false,
+    "pair": 2
+  },
+  {
+    "id": "per_mcs0_ldpc0_nss2_frequency_selective",
+    "mcs": 0,
+    "ldpc": false,
+    "nss": 2,
+    "apep_bytes": 256,
+    "psdu_bytes": 260,
+    "trials": 600,
+    "errors": 0,
+    "measured_per": 0,
+    "predicted_per": 0.53109289545758109,
+    "wilson_lower": 0,
+    "wilson_upper": 0.023127455772526787,
+    "table_prediction_inside_interval": false,
+    "mean_uncoded_ber": 0.085937744966155027,
+    "effective_sinr": 0.933254300796992,
+    "sinr_min": 0.44819612636873424,
+    "sinr_max": 14.791083881682074,
+    "raw_ber": [
+      0.085861823361823367,
+      0.085657644824311485
+    ],
+    "expected_raw_ber": [
+      0.085937744966155055,
+      0.085937744966155055
+    ],
+    "raw_bit_errors": [
+      108495,
+      108237
+    ],
+    "raw_bit_count": [
+      1.2636E+6,
+      1.2636E+6
+    ],
+    "clean_packet_errors": false,
+    "pair": 2
+  },
+  {
+    "id": "per_mcs0_ldpc0_nss4_flat",
+    "mcs": 0,
+    "ldpc": false,
+    "nss": 4,
+    "apep_bytes": 256,
+    "psdu_bytes": 261,
+    "trials": 600,
+    "errors": 291,
+    "measured_per": 0.485,
+    "predicted_per": 0.53245678144602793,
+    "wilson_lower": 0.40934177639558467,
+    "wilson_upper": 0.561352047277591,
+    "table_prediction_inside_interval": true,
+    "mean_uncoded_ber": 0.085937744966154889,
+    "effective_sinr": 0.93325430079699334,
+    "sinr_min": 0.93325430079699112,
+    "sinr_max": 0.93325430079699112,
+    "raw_ber": [
+      0.086035612535612538,
+      0.0858019943019943,
+      0.085737891737891744,
+      0.0855997150997151
+    ],
+    "expected_raw_ber": [
+      0.085937744966155014,
+      0.085937744966155014,
+      0.085937744966155014,
+      0.085937744966155014
+    ],
+    "raw_bit_errors": [
+      60397,
+      60233,
+      60188,
+      60091
+    ],
+    "raw_bit_count": [
+      702000,
+      702000,
+      702000,
+      702000
+    ],
+    "clean_packet_errors": false,
+    "pair": 0
+  },
+  {
+    "id": "per_mcs0_ldpc0_nss4_unequal_streams",
+    "mcs": 0,
+    "ldpc": false,
+    "nss": 4,
+    "apep_bytes": 256,
+    "psdu_bytes": 261,
+    "trials": 600,
+    "errors": 0,
+    "measured_per": 0,
+    "predicted_per": 0.53245678144602793,
+    "wilson_lower": 0,
+    "wilson_upper": 0.023127455772526787,
+    "table_prediction_inside_interval": false,
+    "mean_uncoded_ber": 0.085937744966155,
+    "effective_sinr": 0.93325430079699245,
+    "sinr_min": 0.44819612636873424,
+    "sinr_max": 14.791083881682074,
+    "raw_ber": [
+      0.1721139601139601,
+      0.17215242165242164,
+      0,
+      0
+    ],
+    "expected_raw_ber": [
+      0.17187546313443514,
+      0.17187546313443514,
+      2.6797875228922866E-8,
+      2.6797875228922866E-8
+    ],
+    "raw_bit_errors": [
+      120824,
+      120851,
+      0,
+      0
+    ],
+    "raw_bit_count": [
+      702000,
+      702000,
+      702000,
+      702000
+    ],
+    "clean_packet_errors": false,
+    "pair": 5
+  },
+  {
+    "id": "per_mcs1_ldpc0_nss1_flat",
+    "mcs": 1,
+    "ldpc": false,
+    "nss": 1,
+    "apep_bytes": 256,
+    "psdu_bytes": 260,
+    "trials": 600,
+    "errors": 297,
+    "measured_per": 0.495,
+    "predicted_per": 0.51616775075830645,
+    "wilson_lower": 0.41908078258236414,
+    "wilson_upper": 0.57115049197536116,
+    "table_prediction_inside_interval": true,
+    "mean_uncoded_ber": 0.086192053962784509,
+    "effective_sinr": 1.8620871366628711,
+    "sinr_min": 1.862087136662868,
+    "sinr_max": 1.862087136662868,
+    "raw_ber": 0.086397989870212091,
+    "expected_raw_ber": 0.086192053962784676,
+    "raw_bit_errors": 218345,
+    "raw_bit_count": 2.5272E+6,
+    "clean_packet_errors": false,
+    "pair": 0
+  },
+  {
+    "id": "per_mcs1_ldpc0_nss2_flat",
+    "mcs": 1,
+    "ldpc": false,
+    "nss": 2,
+    "apep_bytes": 256,
+    "psdu_bytes": 261,
+    "trials": 600,
+    "errors": 296,
+    "measured_per": 0.49333333333333335,
+    "predicted_per": 0.51751690640135606,
+    "wilson_lower": 0.41745555053758476,
+    "wilson_upper": 0.56951948220604887,
+    "table_prediction_inside_interval": true,
+    "mean_uncoded_ber": 0.086192053962784482,
+    "effective_sinr": 1.8620871366628715,
+    "sinr_min": 1.862087136662868,
+    "sinr_max": 1.862087136662868,
+    "raw_ber": [
+      0.08594658119658119,
+      0.0860477207977208
+    ],
+    "expected_raw_ber": [
+      0.086192053962784676,
+      0.086192053962784676
+    ],
+    "raw_bit_errors": [
+      120669,
+      120811
+    ],
+    "raw_bit_count": [
+      1.404E+6,
+      1.404E+6
+    ],
+    "clean_packet_errors": false,
+    "pair": 0
+  },
+  {
+    "id": "per_mcs1_ldpc0_nss2_unequal_streams",
+    "mcs": 1,
+    "ldpc": false,
+    "nss": 2,
+    "apep_bytes": 256,
+    "psdu_bytes": 261,
+    "trials": 600,
+    "errors": 0,
+    "measured_per": 0,
+    "predicted_per": 0.51751690640135606,
+    "wilson_lower": 0,
+    "wilson_upper": 0.023127455772526787,
+    "table_prediction_inside_interval": false,
+    "mean_uncoded_ber": 0.086192053962784454,
+    "effective_sinr": 1.862087136662872,
+    "sinr_min": 0.8926205133850621,
+    "sinr_max": 29.51209226666386,
+    "raw_ber": [
+      0.17249074074074075,
+      0
+    ],
+    "expected_raw_ber": [
+      0.17238408014110876,
+      2.778446052213964E-8
+    ],
+    "raw_bit_errors": [
+      242177,
+      0
+    ],
+    "raw_bit_count": [
+      1.404E+6,
+      1.404E+6
+    ],
+    "clean_packet_errors": false,
+    "pair": 8
+  },
+  {
+    "id": "per_mcs1_ldpc0_nss2_frequency_selective",
+    "mcs": 1,
+    "ldpc": false,
+    "nss": 2,
+    "apep_bytes": 256,
+    "psdu_bytes": 261,
+    "trials": 600,
+    "errors": 0,
+    "measured_per": 0,
+    "predicted_per": 0.51751690640135606,
+    "wilson_lower": 0,
+    "wilson_upper": 0.023127455772526787,
+    "table_prediction_inside_interval": false,
+    "mean_uncoded_ber": 0.086192053962784454,
+    "effective_sinr": 1.862087136662872,
+    "sinr_min": 0.8926205133850621,
+    "sinr_max": 29.51209226666386,
+    "raw_ber": [
+      0.085732905982905977,
+      0.085891025641025645
+    ],
+    "expected_raw_ber": [
+      0.086192053962784787,
+      0.086192053962784787
+    ],
+    "raw_bit_errors": [
+      120369,
+      120591
+    ],
+    "raw_bit_count": [
+      1.404E+6,
+      1.404E+6
+    ],
+    "clean_packet_errors": false,
+    "pair": 8
+  },
+  {
+    "id": "per_mcs1_ldpc0_nss4_flat",
+    "mcs": 1,
+    "ldpc": false,
+    "nss": 4,
+    "apep_bytes": 256,
+    "psdu_bytes": 261,
+    "trials": 600,
+    "errors": 285,
+    "measured_per": 0.475,
+    "predicted_per": 0.51751690640135606,
+    "wilson_lower": 0.39963252435374336,
+    "wilson_upper": 0.55152384843488278,
+    "table_prediction_inside_interval": true,
+    "mean_uncoded_ber": 0.086192053962784468,
+    "effective_sinr": 1.862087136662872,
+    "sinr_min": 1.862087136662868,
+    "sinr_max": 1.862087136662868,
+    "raw_ber": [
+      0.085994776828110159,
+      0.08565052231718899,
+      0.085971035137701809,
+      0.085882003798670462
+    ],
+    "expected_raw_ber": [
+      0.086192053962784676,
+      0.086192053962784676,
+      0.086192053962784676,
+      0.086192053962784676
+    ],
+    "raw_bit_errors": [
+      72442,
+      72152,
+      72422,
+      72347
+    ],
+    "raw_bit_count": [
+      842400,
+      842400,
+      842400,
+      842400
+    ],
+    "clean_packet_errors": false,
+    "pair": 0
+  },
+  {
+    "id": "per_mcs3_ldpc0_nss1_flat",
+    "mcs": 3,
+    "ldpc": false,
+    "nss": 1,
+    "apep_bytes": 256,
+    "psdu_bytes": 261,
+    "trials": 600,
+    "errors": 417,
+    "measured_per": 0.695,
+    "predicted_per": 0.49360378129064797,
+    "wilson_lower": 0.62032761182462559,
+    "wilson_upper": 0.76065268042408885,
+    "table_prediction_inside_interval": false,
+    "mean_uncoded_ber": 0.094019637975046255,
+    "effective_sinr": 6.6069344800759691,
+    "sinr_min": 6.6069344800759593,
+    "sinr_max": 6.6069344800759593,
+    "raw_ber": 0.093612891737891737,
+    "expected_raw_ber": 0.094019637975046408,
+    "raw_bit_errors": 262865,
+    "raw_bit_count": 2.808E+6,
+    "clean_packet_errors": false,
+    "pair": 0
+  },
+  {
+    "id": "per_mcs3_ldpc0_nss2_flat",
+    "mcs": 3,
+    "ldpc": false,
+    "nss": 2,
+    "apep_bytes": 256,
+    "psdu_bytes": 261,
+    "trials": 600,
+    "errors": 446,
+    "measured_per": 0.74333333333333329,
+    "predicted_per": 0.49360378129064797,
+    "wilson_lower": 0.67104132627119784,
+    "wilson_upper": 0.80436997858617243,
+    "table_prediction_inside_interval": false,
+    "mean_uncoded_ber": 0.094019637975046241,
+    "effective_sinr": 6.6069344800759726,
+    "sinr_min": 6.6069344800759593,
+    "sinr_max": 6.6069344800759593,
+    "raw_ber": [
+      0.0941019705603039,
+      0.092982549857549862
+    ],
+    "expected_raw_ber": [
+      0.094019637975046408,
+      0.094019637975046408
+    ],
+    "raw_bit_errors": [
+      158543,
+      156657
+    ],
+    "raw_bit_count": [
+      1.6848E+6,
+      1.6848E+6
+    ],
+    "clean_packet_errors": false,
+    "pair": 0
+  },
+  {
+    "id": "per_mcs3_ldpc0_nss2_unequal_streams",
+    "mcs": 3,
+    "ldpc": false,
+    "nss": 2,
+    "apep_bytes": 256,
+    "psdu_bytes": 261,
+    "trials": 600,
+    "errors": 0,
+    "measured_per": 0,
+    "predicted_per": 0.49360378129064797,
+    "wilson_lower": 0,
+    "wilson_upper": 0.023127455772526787,
+    "table_prediction_inside_interval": false,
+    "mean_uncoded_ber": 0.094019637975046283,
+    "effective_sinr": 6.6069344800759637,
+    "sinr_min": 2.504746431204298,
+    "sinr_max": 104.71285480508993,
+    "raw_ber": [
+      0.18821403133903133,
+      1.1870845204178538E-6
+    ],
+    "expected_raw_ber": [
+      0.1880375012267434,
+      1.774723349097729E-6
+    ],
+    "raw_bit_errors": [
+      317103,
+      2
+    ],
+    "raw_bit_count": [
+      1.6848E+6,
+      1.6848E+6
+    ],
+    "clean_packet_errors": false,
+    "pair": 13
+  },
+  {
+    "id": "per_mcs3_ldpc0_nss2_frequency_selective",
+    "mcs": 3,
+    "ldpc": false,
+    "nss": 2,
+    "apep_bytes": 256,
+    "psdu_bytes": 261,
+    "trials": 600,
+    "errors": 1,
+    "measured_per": 0.0016666666666666668,
+    "predicted_per": 0.49360378129064797,
+    "wilson_lower": 0.00010325300382677503,
+    "wilson_upper": 0.026280444582791593,
+    "table_prediction_inside_interval": false,
+    "mean_uncoded_ber": 0.094019637975046283,
+    "effective_sinr": 6.6069344800759637,
+    "sinr_min": 2.504746431204298,
+    "sinr_max": 104.71285480508993,
+    "raw_ber": [
+      0.0928656220322887,
+      0.093411680911680908
+    ],
+    "expected_raw_ber": [
+      0.094019637975046116,
+      0.094019637975046116
+    ],
+    "raw_bit_errors": [
+      156460,
+      157380
+    ],
+    "raw_bit_count": [
+      1.6848E+6,
+      1.6848E+6
+    ],
+    "clean_packet_errors": false,
+    "pair": 13
+  },
+  {
+    "id": "per_mcs3_ldpc0_nss4_flat",
+    "mcs": 3,
+    "ldpc": false,
+    "nss": 4,
+    "apep_bytes": 256,
+    "psdu_bytes": 291,
+    "trials": 600,
+    "errors": 457,
+    "measured_per": 0.76166666666666671,
+    "predicted_per": 0.53170034304232194,
+    "wilson_lower": 0.69053839078245793,
+    "wilson_upper": 0.82069157402991977,
+    "table_prediction_inside_interval": false,
+    "mean_uncoded_ber": 0.094019637975046172,
+    "effective_sinr": 6.6069344800759744,
+    "sinr_min": 6.6069344800759593,
+    "sinr_max": 6.6069344800759593,
+    "raw_ber": [
+      0.094103454415954413,
+      0.0926121794871795,
+      0.093263888888888882,
+      0.093336004273504275
+    ],
+    "expected_raw_ber": [
+      0.094019637975046408,
+      0.094019637975046408,
+      0.094019637975046408,
+      0.094019637975046408
+    ],
+    "raw_bit_errors": [
+      105697,
+      104022,
+      104754,
+      104835
+    ],
+    "raw_bit_count": [
+      1.1232E+6,
+      1.1232E+6,
+      1.1232E+6,
+      1.1232E+6
+    ],
+    "clean_packet_errors": false,
+    "pair": 0
+  },
+  {
+    "id": "per_mcs3_ldpc0_nss4_unequal_streams",
+    "mcs": 3,
+    "ldpc": false,
+    "nss": 4,
+    "apep_bytes": 256,
+    "psdu_bytes": 291,
+    "trials": 600,
+    "errors": 0,
+    "measured_per": 0,
+    "predicted_per": 0.53170034304232194,
+    "wilson_lower": 0,
+    "wilson_upper": 0.023127455772526787,
+    "table_prediction_inside_interval": false,
+    "mean_uncoded_ber": 0.094019637975046255,
+    "effective_sinr": 6.6069344800759708,
+    "sinr_min": 2.504746431204298,
+    "sinr_max": 104.71285480508993,
+    "raw_ber": [
+      0.18819177350427349,
+      0.18650195868945868,
+      8.9031339031339028E-7,
+      1.7806267806267806E-6
+    ],
+    "expected_raw_ber": [
+      0.1880375012267434,
+      0.1880375012267434,
+      1.774723349097729E-6,
+      1.774723349097729E-6
+    ],
+    "raw_bit_errors": [
+      211377,
+      209479,
+      1,
+      2
+    ],
+    "raw_bit_count": [
+      1.1232E+6,
+      1.1232E+6,
+      1.1232E+6,
+      1.1232E+6
+    ],
+    "clean_packet_errors": false,
+    "pair": 16
+  },
+  {
+    "id": "per_mcs5_ldpc0_nss1_flat",
+    "mcs": 5,
+    "ldpc": false,
+    "nss": 1,
+    "apep_bytes": 256,
+    "psdu_bytes": 261,
+    "trials": 600,
+    "errors": 334,
+    "measured_per": 0.55666666666666664,
+    "predicted_per": 0.50753029821651929,
+    "wilson_lower": 0.4797960905278551,
+    "wilson_upper": 0.63091613115125855,
+    "table_prediction_inside_interval": true,
+    "mean_uncoded_ber": 0.058013881248826456,
+    "effective_sinr": 34.673685045253244,
+    "sinr_min": 34.673685045253187,
+    "sinr_max": 34.673685045253187,
+    "raw_ber": 0.057702991452991452,
+    "expected_raw_ber": 0.058013881248826643,
+    "raw_bit_errors": 145827,
+    "raw_bit_count": 2.5272E+6,
+    "clean_packet_errors": false,
+    "pair": 0
+  },
+  {
+    "id": "per_mcs5_ldpc0_nss2_flat",
+    "mcs": 5,
+    "ldpc": false,
+    "nss": 2,
+    "apep_bytes": 256,
+    "psdu_bytes": 291,
+    "trials": 600,
+    "errors": 364,
+    "measured_per": 0.60666666666666669,
+    "predicted_per": 0.45517466674208795,
+    "wilson_lower": 0.52987066818199136,
+    "wilson_upper": 0.67852880791986969,
+    "table_prediction_inside_interval": false,
+    "mean_uncoded_ber": 0.056506904655943796,
+    "effective_sinr": 35.481338923357612,
+    "sinr_min": 35.481338923357548,
+    "sinr_max": 35.481338923357548,
+    "raw_ber": [
+      0.056432811016144349,
+      0.056229226020892691
+    ],
+    "expected_raw_ber": [
+      0.056506904655943969,
+      0.056506904655943969
+    ],
+    "raw_bit_errors": [
+      95078,
+      94735
+    ],
+    "raw_bit_count": [
+      1.6848E+6,
+      1.6848E+6
+    ],
+    "clean_packet_errors": false,
+    "pair": 0
+  },
+  {
+    "id": "per_mcs5_ldpc0_nss2_unequal_streams",
+    "mcs": 5,
+    "ldpc": false,
+    "nss": 2,
+    "apep_bytes": 256,
+    "psdu_bytes": 291,
+    "trials": 600,
+    "errors": 37,
+    "measured_per": 0.061666666666666668,
+    "predicted_per": 0.45517466674208795,
+    "wilson_lower": 0.033843509375740155,
+    "wilson_upper": 0.109764893518175,
+    "table_prediction_inside_interval": false,
+    "mean_uncoded_ber": 0.056506904655941048,
+    "effective_sinr": 35.4813389233591,
+    "sinr_min": 16.170304312081406,
+    "sinr_max": 562.341325190349,
+    "raw_ber": [
+      0.11267034662867996,
+      5.9354226020892692E-7
+    ],
+    "expected_raw_ber": [
+      0.11301374275294078,
+      6.6558941333115034E-8
+    ],
+    "raw_bit_errors": [
+      189827,
+      1
+    ],
+    "raw_bit_count": [
+      1.6848E+6,
+      1.6848E+6
+    ],
+    "clean_packet_errors": false,
+    "pair": 19
+  },
+  {
+    "id": "per_mcs5_ldpc0_nss2_frequency_selective",
+    "mcs": 5,
+    "ldpc": false,
+    "nss": 2,
+    "apep_bytes": 256,
+    "psdu_bytes": 291,
+    "trials": 600,
+    "errors": 51,
+    "measured_per": 0.085,
+    "predicted_per": 0.45517466674208795,
+    "wilson_lower": 0.051113903473876836,
+    "wilson_upper": 0.13808188481732039,
+    "table_prediction_inside_interval": false,
+    "mean_uncoded_ber": 0.056506904655941048,
+    "effective_sinr": 35.4813389233591,
+    "sinr_min": 16.170304312081406,
+    "sinr_max": 562.341325190349,
+    "raw_ber": [
+      0.056296889838556505,
+      0.05636158594491928
+    ],
+    "expected_raw_ber": [
+      0.056506904655941208,
+      0.056506904655941208
+    ],
+    "raw_bit_errors": [
+      94849,
+      94958
+    ],
+    "raw_bit_count": [
+      1.6848E+6,
+      1.6848E+6
+    ],
+    "clean_packet_errors": false,
+    "pair": 19
+  },
+  {
+    "id": "per_mcs5_ldpc0_nss4_flat",
+    "mcs": 5,
+    "ldpc": false,
+    "nss": 4,
+    "apep_bytes": 256,
+    "psdu_bytes": 357,
+    "trials": 600,
+    "errors": 368,
+    "measured_per": 0.61333333333333329,
+    "predicted_per": 0.47734588737904327,
+    "wilson_lower": 0.5366063862231657,
+    "wilson_upper": 0.68481805713506139,
+    "table_prediction_inside_interval": false,
+    "mean_uncoded_ber": 0.05501253895156296,
+    "effective_sinr": 36.30780547701022,
+    "sinr_min": 36.307805477010142,
+    "sinr_max": 36.307805477010142,
+    "raw_ber": [
+      0.054773266856600188,
+      0.054915716999050332,
+      0.05466049382716049,
+      0.055157882241215574
+    ],
+    "expected_raw_ber": [
+      0.055012538951563029,
+      0.055012538951563029,
+      0.055012538951563029,
+      0.055012538951563029
+    ],
+    "raw_bit_errors": [
+      46141,
+      46261,
+      46046,
+      46465
+    ],
+    "raw_bit_count": [
+      842400,
+      842400,
+      842400,
+      842400
+    ],
+    "clean_packet_errors": false,
+    "pair": 0
+  },
+  {
+    "id": "per_mcs8_ldpc0_nss1_flat",
+    "mcs": 8,
+    "ldpc": false,
+    "nss": 1,
+    "apep_bytes": 256,
+    "psdu_bytes": 262,
+    "trials": 600,
+    "errors": 315,
+    "measured_per": 0.525,
+    "predicted_per": 0.46881621937707885,
+    "wilson_lower": 0.44847615156511711,
+    "wilson_upper": 0.60036747564625659,
+    "table_prediction_inside_interval": true,
+    "mean_uncoded_ber": 0.041509447536822043,
+    "effective_sinr": 154.88166189124857,
+    "sinr_min": 154.88166189124829,
+    "sinr_max": 154.88166189124829,
+    "raw_ber": 0.041321225071225071,
+    "expected_raw_ber": 0.041509447536822133,
+    "raw_bit_errors": 92824,
+    "raw_bit_count": 2.2464E+6,
+    "clean_packet_errors": false,
+    "pair": 0
+  },
+  {
+    "id": "per_mcs8_ldpc0_nss2_flat",
+    "mcs": 8,
+    "ldpc": false,
+    "nss": 2,
+    "apep_bytes": 256,
+    "psdu_bytes": 267,
+    "trials": 600,
+    "errors": 354,
+    "measured_per": 0.59,
+    "predicted_per": 0.47519086500428,
+    "wilson_lower": 0.51309297136157239,
+    "wilson_upper": 0.66274408659937278,
+    "table_prediction_inside_interval": false,
+    "mean_uncoded_ber": 0.041509447536822036,
+    "effective_sinr": 154.8816618912486,
+    "sinr_min": 154.88166189124829,
+    "sinr_max": 154.88166189124829,
+    "raw_ber": [
+      0.041436075498575496,
+      0.041337250712250709
+    ],
+    "expected_raw_ber": [
+      0.041509447536822133,
+      0.041509447536822133
+    ],
+    "raw_bit_errors": [
+      46541,
+      46430
+    ],
+    "raw_bit_count": [
+      1.1232E+6,
+      1.1232E+6
+    ],
+    "clean_packet_errors": false,
+    "pair": 0
+  },
+  {
+    "id": "per_mcs8_ldpc0_nss2_unequal_streams",
+    "mcs": 8,
+    "ldpc": false,
+    "nss": 2,
+    "apep_bytes": 256,
+    "psdu_bytes": 267,
+    "trials": 600,
+    "errors": 81,
+    "measured_per": 0.135,
+    "predicted_per": 0.47519086500428,
+    "wilson_lower": 0.090792039586901324,
+    "wilson_upper": 0.19609100312704322,
+    "table_prediction_inside_interval": false,
+    "mean_uncoded_ber": 0.0415094475368206,
+    "effective_sinr": 154.88166189125286,
+    "sinr_min": 74.386064719695185,
+    "sinr_max": 2454.7089156850325,
+    "raw_ber": [
+      0.0826860754985755,
+      0
+    ],
+    "expected_raw_ber": [
+      0.083018877015858264,
+      1.8057782967729916E-8
+    ],
+    "raw_bit_errors": [
+      92873,
+      0
+    ],
+    "raw_bit_count": [
+      1.1232E+6,
+      1.1232E+6
+    ],
+    "clean_packet_errors": false,
+    "pair": 24
+  },
+  {
+    "id": "per_mcs8_ldpc0_nss2_frequency_selective",
+    "mcs": 8,
+    "ldpc": false,
+    "nss": 2,
+    "apep_bytes": 256,
+    "psdu_bytes": 267,
+    "trials": 600,
+    "errors": 171,
+    "measured_per": 0.285,
+    "predicted_per": 0.47519086500428,
+    "wilson_lower": 0.22114274302133541,
+    "wilson_upper": 0.35880206296085104,
+    "table_prediction_inside_interval": false,
+    "mean_uncoded_ber": 0.0415094475368206,
+    "effective_sinr": 154.88166189125286,
+    "sinr_min": 74.386064719695185,
+    "sinr_max": 2454.7089156850325,
+    "raw_ber": [
+      0.041610576923076924,
+      0.041822471509971509
+    ],
+    "expected_raw_ber": [
+      0.041509447536820586,
+      0.041509447536820586
+    ],
+    "raw_bit_errors": [
+      46737,
+      46975
+    ],
+    "raw_bit_count": [
+      1.1232E+6,
+      1.1232E+6
+    ],
+    "clean_packet_errors": false,
+    "pair": 24
+  },
+  {
+    "id": "per_mcs8_ldpc0_nss4_flat",
+    "mcs": 8,
+    "ldpc": false,
+    "nss": 4,
+    "apep_bytes": 256,
+    "psdu_bytes": 357,
+    "trials": 600,
+    "errors": 394,
+    "measured_per": 0.65666666666666662,
+    "predicted_per": 0.49558950836350468,
+    "wilson_lower": 0.58074300770545362,
+    "wilson_upper": 0.7253437228191546,
+    "table_prediction_inside_interval": false,
+    "mean_uncoded_ber": 0.040344434955110385,
+    "effective_sinr": 158.48931924611176,
+    "sinr_min": 158.48931924611142,
+    "sinr_max": 158.48931924611142,
+    "raw_ber": [
+      0.04024483618233618,
+      0.040515491452991451,
+      0.040567129629629627,
+      0.040756766381766382
+    ],
+    "expected_raw_ber": [
+      0.040344434955110482,
+      0.040344434955110482,
+      0.040344434955110482,
+      0.040344434955110482
+    ],
+    "raw_bit_errors": [
+      45203,
+      45507,
+      45565,
+      45778
+    ],
+    "raw_bit_count": [
+      1.1232E+6,
+      1.1232E+6,
+      1.1232E+6,
+      1.1232E+6
+    ],
+    "clean_packet_errors": false,
+    "pair": 0
+  },
+  {
+    "id": "per_mcs0_ldpc1_nss1_flat",
+    "mcs": 0,
+    "ldpc": true,
+    "nss": 1,
+    "apep_bytes": 256,
+    "psdu_bytes": 257,
+    "trials": 600,
+    "errors": 556,
+    "measured_per": 0.92666666666666664,
+    "predicted_per": 0.51545673925411639,
+    "wilson_lower": 0.87594542243785212,
+    "wilson_upper": 0.95765248196959163,
+    "table_prediction_inside_interval": false,
+    "mean_uncoded_ber": 0.11168248658163335,
+    "effective_sinr": 0.74131024130091916,
+    "sinr_min": 0.74131024130091761,
+    "sinr_max": 0.74131024130091761,
+    "raw_ber": 0.11137662234884457,
+    "expected_raw_ber": 0.11168248658163366,
+    "raw_bit_errors": 281471,
+    "raw_bit_count": 2.5272E+6,
+    "clean_packet_errors": false,
+    "pair": 0
+  },
+  {
+    "id": "per_mcs0_ldpc1_nss2_flat",
+    "mcs": 0,
+    "ldpc": true,
+    "nss": 2,
+    "apep_bytes": 256,
+    "psdu_bytes": 261,
+    "trials": 600,
+    "errors": 494,
+    "measured_per": 0.82333333333333336,
+    "predicted_per": 0.520890249019003,
+    "wilson_lower": 0.75737524069806672,
+    "wilson_upper": 0.87433567123569933,
+    "table_prediction_inside_interval": false,
+    "mean_uncoded_ber": 0.11168248658163335,
+    "effective_sinr": 0.74131024130091916,
+    "sinr_min": 0.74131024130091761,
+    "sinr_max": 0.74131024130091761,
+    "raw_ber": [
+      0.11225356125356126,
+      0.11150498575498576
+    ],
+    "expected_raw_ber": [
+      0.11168248658163366,
+      0.11168248658163366
+    ],
+    "raw_bit_errors": [
+      157604,
+      156553
+    ],
+    "raw_bit_count": [
+      1.404E+6,
+      1.404E+6
+    ],
+    "clean_packet_errors": false,
+    "pair": 0
+  },
+  {
+    "id": "per_mcs0_ldpc1_nss2_unequal_streams",
+    "mcs": 0,
+    "ldpc": true,
+    "nss": 2,
+    "apep_bytes": 256,
+    "psdu_bytes": 261,
+    "trials": 600,
+    "errors": 5,
+    "measured_per": 0.0083333333333333332,
+    "predicted_per": 0.520890249019003,
+    "wilson_lower": 0.0018039875910214366,
+    "wilson_upper": 0.037604677251963231,
+    "table_prediction_inside_interval": false,
+    "mean_uncoded_ber": 0.11168248658163965,
+    "effective_sinr": 0.74131024130087875,
+    "sinr_min": 0.28946925026604431,
+    "sinr_max": 11.748975549395295,
+    "raw_ber": [
+      0.22318447293447294,
+      0
+    ],
+    "expected_raw_ber": [
+      0.22336434792895812,
+      6.2523432150786121E-7
+    ],
+    "raw_bit_errors": [
+      313351,
+      0
+    ],
+    "raw_bit_count": [
+      1.404E+6,
+      1.404E+6
+    ],
+    "clean_packet_errors": false,
+    "pair": 29
+  },
+  {
+    "id": "per_mcs0_ldpc1_nss2_frequency_selective",
+    "mcs": 0,
+    "ldpc": true,
+    "nss": 2,
+    "apep_bytes": 256,
+    "psdu_bytes": 261,
+    "trials": 600,
+    "errors": 3,
+    "measured_per": 0.005,
+    "predicted_per": 0.520890249019003,
+    "wilson_lower": 0.00075994632505881413,
+    "wilson_upper": 0.03213623488974271,
+    "table_prediction_inside_interval": false,
+    "mean_uncoded_ber": 0.11168248658163965,
+    "effective_sinr": 0.74131024130087875,
+    "sinr_min": 0.28946925026604431,
+    "sinr_max": 11.748975549395295,
+    "raw_ber": [
+      0.11183048433048433,
+      0.11172649572649572
+    ],
+    "expected_raw_ber": [
+      0.11168248658163953,
+      0.11168248658163953
+    ],
+    "raw_bit_errors": [
+      157010,
+      156864
+    ],
+    "raw_bit_count": [
+      1.404E+6,
+      1.404E+6
+    ],
+    "clean_packet_errors": false,
+    "pair": 29
+  },
+  {
+    "id": "per_mcs0_ldpc1_nss4_flat",
+    "mcs": 0,
+    "ldpc": true,
+    "nss": 4,
+    "apep_bytes": 256,
+    "psdu_bytes": 262,
+    "trials": 600,
+    "errors": 361,
+    "measured_per": 0.60166666666666668,
+    "predicted_per": 0.52223907938880954,
+    "wilson_lower": 0.52482816460539816,
+    "wilson_upper": 0.673802586054188,
+    "table_prediction_inside_interval": false,
+    "mean_uncoded_ber": 0.11168248658163335,
+    "effective_sinr": 0.74131024130091916,
+    "sinr_min": 0.74131024130091761,
+    "sinr_max": 0.74131024130091761,
+    "raw_ber": [
+      0.11145014245014245,
+      0.11183333333333334,
+      0.11175925925925925,
+      0.11192022792022792
+    ],
+    "expected_raw_ber": [
+      0.11168248658163366,
+      0.11168248658163366,
+      0.11168248658163366,
+      0.11168248658163366
+    ],
+    "raw_bit_errors": [
+      78238,
+      78507,
+      78455,
+      78568
+    ],
+    "raw_bit_count": [
+      702000,
+      702000,
+      702000,
+      702000
+    ],
+    "clean_packet_errors": false,
+    "pair": 0
+  },
+  {
+    "id": "per_mcs10_ldpc1_nss1_flat",
+    "mcs": 10,
+    "ldpc": true,
+    "nss": 1,
+    "apep_bytes": 256,
+    "psdu_bytes": 273,
+    "trials": 600,
+    "errors": 0,
+    "measured_per": 0,
+    "predicted_per": 0.48079558670392453,
+    "wilson_lower": 0,
+    "wilson_upper": 0.023127455772526787,
+    "table_prediction_inside_interval": false,
+    "mean_uncoded_ber": 0.055562305497294344,
+    "effective_sinr": 389.04514499428109,
+    "sinr_min": 389.04514499428046,
+    "sinr_max": 389.04514499428046,
+    "raw_ber": 0.055245370370370368,
+    "expected_raw_ber": 0.055562305497294372,
+    "raw_bit_errors": 155129,
+    "raw_bit_count": 2.808E+6,
+    "clean_packet_errors": false,
+    "pair": 0
+  },
+  {
+    "id": "per_mcs10_ldpc1_nss2_flat",
+    "mcs": 10,
+    "ldpc": true,
+    "nss": 2,
+    "apep_bytes": 256,
+    "psdu_bytes": 335,
+    "trials": 600,
+    "errors": 275,
+    "measured_per": 0.45833333333333331,
+    "predicted_per": 0.49688944821351722,
+    "wilson_lower": 0.38351676407571406,
+    "wilson_upper": 0.53507719057199643,
+    "table_prediction_inside_interval": true,
+    "mean_uncoded_ber": 0.054457793692392287,
+    "effective_sinr": 398.10717055349807,
+    "sinr_min": 398.10717055349733,
+    "sinr_max": 398.10717055349733,
+    "raw_ber": [
+      0.054377492877492876,
+      0.054533475783475782
+    ],
+    "expected_raw_ber": [
+      0.054457793692392432,
+      0.054457793692392432
+    ],
+    "raw_bit_errors": [
+      76346,
+      76565
+    ],
+    "raw_bit_count": [
+      1.404E+6,
+      1.404E+6
+    ],
+    "clean_packet_errors": false,
+    "pair": 0
+  },
+  {
+    "id": "per_mcs10_ldpc1_nss2_unequal_streams",
+    "mcs": 10,
+    "ldpc": true,
+    "nss": 2,
+    "apep_bytes": 256,
+    "psdu_bytes": 335,
+    "trials": 600,
+    "errors": 18,
+    "measured_per": 0.03,
+    "predicted_per": 0.49688944821351722,
+    "wilson_lower": 0.012742270459388562,
+    "wilson_upper": 0.068997537966786621,
+    "table_prediction_inside_interval": false,
+    "mean_uncoded_ber": 0.054457793692392356,
+    "effective_sinr": 398.10717055349744,
+    "sinr_min": 145.44584903779702,
+    "sinr_max": 6309.573444801933,
+    "raw_ber": [
+      0.10878276353276353,
+      2.8490028490028488E-6
+    ],
+    "expected_raw_ber": [
+      0.10891230092157428,
+      3.286463210382753E-6
+    ],
+    "raw_bit_errors": [
+      152731,
+      4
+    ],
+    "raw_bit_count": [
+      1.404E+6,
+      1.404E+6
+    ],
+    "clean_packet_errors": false,
+    "pair": 34
+  },
+  {
+    "id": "per_mcs10_ldpc1_nss2_frequency_selective",
+    "mcs": 10,
+    "ldpc": true,
+    "nss": 2,
+    "apep_bytes": 256,
+    "psdu_bytes": 335,
+    "trials": 600,
+    "errors": 330,
+    "measured_per": 0.55,
+    "predicted_per": 0.49688944821351722,
+    "wilson_lower": 0.47317736985892728,
+    "wilson_upper": 0.62450988456382017,
+    "table_prediction_inside_interval": true,
+    "mean_uncoded_ber": 0.054457793692392356,
+    "effective_sinr": 398.10717055349744,
+    "sinr_min": 145.44584903779702,
+    "sinr_max": 6309.573444801933,
+    "raw_ber": [
+      0.054301282051282054,
+      0.054157407407407404
+    ],
+    "expected_raw_ber": [
+      0.05445779369239246,
+      0.05445779369239246
+    ],
+    "raw_bit_errors": [
+      76239,
+      76037
+    ],
+    "raw_bit_count": [
+      1.404E+6,
+      1.404E+6
+    ],
+    "clean_packet_errors": false,
+    "pair": 34
+  },
+  {
+    "id": "per_mcs10_ldpc1_nss4_flat",
+    "mcs": 10,
+    "ldpc": true,
+    "nss": 4,
+    "apep_bytes": 256,
+    "psdu_bytes": 448,
+    "trials": 600,
+    "errors": 3,
+    "measured_per": 0.005,
+    "predicted_per": 0.4354828608532284,
+    "wilson_lower": 0.00075994632505881413,
+    "wilson_upper": 0.03213623488974271,
+    "table_prediction_inside_interval": false,
+    "mean_uncoded_ber": 0.0533585468513623,
+    "effective_sinr": 407.38027780411392,
+    "sinr_min": 407.380277804113,
+    "sinr_max": 407.380277804113,
+    "raw_ber": [
+      0.053225071225071224,
+      0.053382478632478629,
+      0.0530462962962963,
+      0.053353276353276351
+    ],
+    "expected_raw_ber": [
+      0.053358546851362508,
+      0.053358546851362508,
+      0.053358546851362508,
+      0.053358546851362508
+    ],
+    "raw_bit_errors": [
+      74728,
+      74949,
+      74477,
+      74908
+    ],
+    "raw_bit_count": [
+      1.404E+6,
+      1.404E+6,
+      1.404E+6,
+      1.404E+6
+    ],
+    "clean_packet_errors": false,
+    "pair": 0
+  },
+  {
+    "id": "per_mcs10_ldpc1_nss4_unequal_streams",
+    "mcs": 10,
+    "ldpc": true,
+    "nss": 4,
+    "apep_bytes": 256,
+    "psdu_bytes": 448,
+    "trials": 600,
+    "errors": 0,
+    "measured_per": 0,
+    "predicted_per": 0.4354828608532284,
+    "wilson_lower": 0,
+    "wilson_upper": 0.023127455772526787,
+    "table_prediction_inside_interval": false,
+    "mean_uncoded_ber": 0.053358546851362383,
+    "effective_sinr": 407.38027780411346,
+    "sinr_min": 150.701593255535,
+    "sinr_max": 6456.5422903465587,
+    "raw_ber": [
+      0.10602492877492878,
+      0.1071923076923077,
+      2.8490028490028488E-6,
+      2.8490028490028488E-6
+    ],
+    "expected_raw_ber": [
+      0.10671447208441888,
+      0.10671447208441888,
+      2.6216183060622977E-6,
+      2.6216183060622977E-6
+    ],
+    "raw_bit_errors": [
+      148859,
+      150498,
+      4,
+      4
+    ],
+    "raw_bit_count": [
+      1.404E+6,
+      1.404E+6,
+      1.404E+6,
+      1.404E+6
+    ],
+    "clean_packet_errors": false,
+    "pair": 37
+  },
+  {
+    "id": "per_length32_nss2_flat",
+    "mcs": 0,
+    "ldpc": false,
+    "nss": 2,
+    "apep_bytes": 32,
+    "psdu_bytes": 34,
+    "trials": 600,
+    "errors": 314,
+    "measured_per": 0.52333333333333332,
+    "predicted_per": 0.49778416932321412,
+    "wilson_lower": 0.4468360496313577,
+    "wilson_upper": 0.59875133576592443,
+    "table_prediction_inside_interval": true,
+    "mean_uncoded_ber": 0.11168248658163335,
+    "effective_sinr": 0.74131024130091916,
+    "sinr_min": 0.74131024130091761,
+    "sinr_max": 0.74131024130091761,
+    "raw_ber": [
+      0.11298789173789174,
+      0.11188390313390313
+    ],
+    "expected_raw_ber": [
+      0.11168248658163366,
+      0.11168248658163366
+    ],
+    "raw_bit_errors": [
+      31727,
+      31417
+    ],
+    "raw_bit_count": [
+      280800,
+      280800
+    ],
+    "clean_packet_errors": false,
+    "pair": 0
+  },
+  {
+    "id": "per_length32_nss2_unequal_streams",
+    "mcs": 0,
+    "ldpc": false,
+    "nss": 2,
+    "apep_bytes": 32,
+    "psdu_bytes": 34,
+    "trials": 600,
+    "errors": 0,
+    "measured_per": 0,
+    "predicted_per": 0.49778416932321412,
+    "wilson_lower": 0,
+    "wilson_upper": 0.023127455772526787,
+    "table_prediction_inside_interval": false,
+    "mean_uncoded_ber": 0.11168248658163965,
+    "effective_sinr": 0.74131024130087875,
+    "sinr_min": 0.28946925026604431,
+    "sinr_max": 11.748975549395295,
+    "raw_ber": [
+      0.22204415954415954,
+      0
+    ],
+    "expected_raw_ber": [
+      0.22336434792895812,
+      6.2523432150786121E-7
+    ],
+    "raw_bit_errors": [
+      62350,
+      0
+    ],
+    "raw_bit_count": [
+      280800,
+      280800
+    ],
+    "clean_packet_errors": false,
+    "pair": 39
+  },
+  {
+    "id": "per_length1200_nss2_flat",
+    "mcs": 0,
+    "ldpc": false,
+    "nss": 2,
+    "apep_bytes": 1200,
+    "psdu_bytes": 1204,
+    "trials": 600,
+    "errors": 338,
+    "measured_per": 0.56333333333333335,
+    "predicted_per": 0.53796970703313762,
+    "wilson_lower": 0.486428269652326,
+    "wilson_upper": 0.63730891928315392,
+    "table_prediction_inside_interval": true,
+    "mean_uncoded_ber": 0.0739267824486964,
+    "effective_sinr": 1.0471285480509023,
+    "sinr_min": 1.0471285480508998,
+    "sinr_max": 1.0471285480508998,
+    "raw_ber": [
+      0.073833604666938,
+      0.073886175552842215
+    ],
+    "expected_raw_ber": [
+      0.073926782448696632,
+      0.073926782448696632
+    ],
+    "raw_bit_errors": [
+      435382,
+      435692
+    ],
+    "raw_bit_count": [
+      5.8968E+6,
+      5.8968E+6
+    ],
+    "clean_packet_errors": false,
+    "pair": 0
+  },
+  {
+    "id": "per_length1200_nss2_unequal_streams",
+    "mcs": 0,
+    "ldpc": false,
+    "nss": 2,
+    "apep_bytes": 1200,
+    "psdu_bytes": 1204,
+    "trials": 600,
+    "errors": 0,
+    "measured_per": 0,
+    "predicted_per": 0.53796970703313762,
+    "wilson_lower": 0,
+    "wilson_upper": 0.023127455772526787,
+    "table_prediction_inside_interval": false,
+    "mean_uncoded_ber": 0.073926782448696507,
+    "effective_sinr": 1.0471285480509012,
+    "sinr_min": 0.54672713103235082,
+    "sinr_max": 16.59586907437561,
+    "raw_ber": [
+      0.1477669244335911,
+      0
+    ],
+    "expected_raw_ber": [
+      0.14785356072216449,
+      4.1752286954868689E-9
+    ],
+    "raw_bit_errors": [
+      871352,
+      0
+    ],
+    "raw_bit_count": [
+      5.8968E+6,
+      5.8968E+6
+    ],
+    "clean_packet_errors": false,
+    "pair": 41
+  }
+]

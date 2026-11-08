@@ -1,0 +1,6 @@
+{
+  "command": "build/utils/ns3.40-test-runner-default --suite=he-effective-sinr-mapping --verbose",
+  "exit_code": 0,
+  "suite": "he-effective-sinr-mapping",
+  "passed_cases": 5
+}

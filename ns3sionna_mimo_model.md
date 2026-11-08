@@ -1105,16 +1105,16 @@ Post-MMSE-SINRs mit gleicher Gewichtung:
 \(\beta_m>0\) hat wie \(\gamma\) lineare SINR-Einheiten und ist
 MCS-abhängig. SetEesmBeta erwartet den linearen Wert; SetEesmBetaDb ist die
 dB-Komfortfunktion. Zur Vermeidung numerischen Unterlaufs wird mit
-\(\gamma_\min=\min_{k,s}\gamma_s[k]\) äquivalent gerechnet:
+\(\gamma_{\min}=\min_{k,s}\gamma_s[k]\) äquivalent gerechnet:
 
 \[
   \gamma_{\mathrm{EESM},m}
   =
-  \gamma_\min
+  \gamma_{\min}
   -\beta_m \ln\left(
     \frac{1}{N_\mathrm{sc}N_s}
     \sum_{k,s}
-    \exp\left(-\frac{\gamma_s[k]-\gamma_\min}{\beta_m}\right)
+    \exp\left(-\frac{\gamma_s[k]-\gamma_{\min}}{\beta_m}\right)
   \right).
 \]
 

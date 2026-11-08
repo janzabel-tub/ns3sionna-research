@@ -1,0 +1,3 @@
+[Warning: Unable to locate a personal folder for $documents/MATLAB.] 
+MATLAB MU-MIMO validation PASSED: 233 cases, 2266 rows, 14340 comparisons
+Max SINR absolute error 8.44693e-11; max scaled error 0.00026143 (limit 1)

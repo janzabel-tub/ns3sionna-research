@@ -1,0 +1,12 @@
+{
+  "status": "passed",
+  "expected_validation_outcome": "failure",
+  "observed_exit_code": 1,
+  "mutation": "native.cases[0].rows[0][5] += 1.0",
+  "detected_case": "ul_near_far_zf",
+  "artifacts_sha256": {
+    "negative_control.log": "2b7e6bb2de4d90cac4ff1f6ed267b21336de3c2c4d92a5f1274578693ea18ec9",
+    "negative_control_exporter.py": "afd8ff643669b3d4d9bf9be29f5860baee6cf154ac324082ddca833855923494",
+    "negative_control_provenance.json": "f808a6426190464279a65605cc7e15ef82fb581d9fe101117605056f2608d4ef"
+  }
+}

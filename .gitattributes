@@ -14,3 +14,6 @@
 
 # New fields retain the legacy Protobuf source line endings.
 *.proto whitespace=cr-at-eol
+
+# Preserve the recorded raw digest of this MATLAB CSV.
+/data/he_error_matlab_2026_10_28/per_summary.csv -text

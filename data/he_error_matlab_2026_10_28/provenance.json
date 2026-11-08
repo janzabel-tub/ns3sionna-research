@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "command": [
+    "/usr/local/MATLAB/R2026a/bin/matlab",
+    "-batch",
+    "addpath('/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/contrib/sionna/tools'); validate_he_error_matlab('/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/build/contrib/sionna/examples/ns3.40-ns3_he_error_reference_export-default','/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/build/contrib/sionna/examples/ns3.40-ns3_wifi_mimo_awgn_curve-default','/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/contrib/sionna/data/he_error_matlab_2026_10_28',600);"
+  ],
+  "matlab_exit_code": 0,
+  "source_sha256": {
+    "tools/validate_he_error_matlab.py": "543a789c193ce1f608de4e23dbc3198d93a1c323b0482cd57d7c11d098469238",
+    "tools/validate_mumimo_matlab.py": "fbc2c730545b80eac5cf4615457d91fba352aadbbe45051f283793bbda1f1d0d",
+    "tools/validate_he_error_matlab.m": "0eb03b15828b4901ddf0ae2acd57002c7a0bf97befebec91ff82c95ba3568363",
+    "tools/he_gray_ber_reference.m": "bbf5f4ce753635845323f79a66b16ccdb47f4b8ac8b9e9fec38d51a7baf89ad0",
+    "examples/ns3_he_error_reference_export.cc": "230fe5f3262eb587baf37579cb7faf01548202c1e6977150ae516ca3aac004c6",
+    "model/he-effective-sinr-mapping.cc": "c7ccec7a2644b6c196b12a8c1b7d70d0c527e242e5709a1e708b0c8437c84462",
+    "model/he-effective-sinr-mapping.h": "e82724f5d916c61d2bdf024d168e9e6d7c258f4d40a92ddfa8e876d7dc6ab5b2",
+    "model/he-su-mimo-link-abstraction.cc": "37b864a4ab2f04eb6f813a2499138d578745a3832361668376f9fcb3e1686912",
+    "model/he-su-mimo-link-abstraction.h": "b24de91d02bb8abc84010bcf8d20916ba70dac07da01c2d5a86d47ed34579efe",
+    "model/he-dl-mu-mimo-link-abstraction.cc": "f1202742ab69fe64152faa940bad38d98575b7ca69fc368b0b81d184a662e1ee",
+    "model/he-dl-mu-mimo-link-abstraction.h": "b3491b8021188432c3b81cd2fda0f5c8cd7a2dc476993480055b783e7189d89e"
+  },
+  "binary_sha256": {
+    "build/contrib/sionna/examples/ns3.40-ns3_he_error_reference_export-default": "36628f98d7492b06b6e8635e01ea1d13f4613382c2d7ad8e297cc7f86b1d161f",
+    "build/contrib/sionna/examples/ns3.40-ns3_wifi_mimo_awgn_curve-default": "ceb5102d919bf58a161a3040867aa8310ec820ce60720aa5e726f660257dc89c",
+    "build/lib/libns3.40-sionna-default.so": "79fc2aa3a9a43446ec477635e2360116c21fbe416902152518947106e79b80bf",
+    "build/lib/libns3.40-wifi-default.so": "858a7e073eb63dfcd6b945bf77ed89d74217099452eb0804f1dd2de0f5f019a8"
+  },
+  "sources_unchanged_during_run": true,
+  "binaries_unchanged_during_run": true,
+  "artifacts_sha256": {
+    "fixtures.txt": "cd928f4b18d3460e682ab2241ca31b49eaea2c8693936f7c0f8a693a2b35ce96",
+    "per_mcs10_ldpc1_nss4_flat_native_awgn.csv": "a153f8aa42cfe368fc25c7723a89deb7bf72287ba6550347d1712175d59bded5",
+    "per_length1200_nss2_flat_native_awgn.csv": "f3785d1ff6112bec1d8cedea6ba504281a47ce413ba3cce63d38dab08b229e62",
+    "per_mcs0_ldpc0_nss4_flat_native_awgn.csv": "449c8298f2331a0ee8a51680d3307b312c9a961d98c2cfb892d89616ff6fa960",
+    "per_mcs5_ldpc0_nss2_flat_native_awgn.csv": "3e8a012b6c9654621390bcd485b838b58db38332e8a591460fd3f6ad115768e4",
+    "per_mcs8_ldpc0_nss1_flat_native_awgn.csv": "b1d277f1debc3c8504cb1804decf34f6cfc5c79c951a35342df08f157573838b",
+    "per_length32_nss2_flat_native_awgn.csv": "6b27756360f493f3b32ce84aa85789c2ec0dbf13af1487fe751d98535cbc87e8",
+    "native.json": "46519c41c1958176b804ec0fa95dc630cc1d6bae3daa9d4150224ca867e4820e",
+    "per_mcs0_ldpc0_nss1_flat_native_awgn.csv": "eae458d73f91b200ce1045f1553131e71fa2f9f575829845faf091f627b4a69b",
+    "per_mcs8_ldpc0_nss2_flat_native_awgn.csv": "1aa0a468c1c45d830c79ab05fd2710e7e12a12893eb74f0ac1d278c1d2b1ea4e",
+    "per_mcs5_ldpc0_nss1_flat_native_awgn.csv": "8ecafd628b4dda2ad659af43ca56c005a504cd1f06575a9beb178219db2bef66",
+    "mapping_report.json": "0b3478b4ed34478bee0a9c041c2f4482b035a1aa31946580d64f3d6446b4f0ab",
+    "per_mcs5_ldpc0_nss4_flat_native_awgn.csv": "c0bda69d9c9194ef896cfc796dd09123085c9001ff9d30503edd7c3c5f7f7657",
+    "per_mcs10_ldpc1_nss2_flat_native_awgn.csv": "9883a194ecc91f9e718e1f2bde9ba10a769b14f7573a7c052f6ec6cb18ca643c",
+    "packet_measurements.json": "4a34cd6c10b074650e78b574fe9e94a434bfcb9d395f6bb00c540fadffcfcd9b",
+    "per_mcs8_ldpc0_nss4_flat_native_awgn.csv": "4593f49d68c436de5a69baebd2cb078488126abd157b94f5747a0279ebb0c15a",
+    "per_mcs3_ldpc0_nss1_flat_native_awgn.csv": "8a4cca1be9ee59c0c9c3f781634033bc53626f4a8c9dba25201b837e0178c3b8",
+    "per_mcs0_ldpc1_nss2_flat_native_awgn.csv": "5e9f1b833ef41179768169d7471dc31bd63a90b4b7550251d579688b3543c801",
+    "report.json": "29ae04ae1416241d7b9d3134545b1dc97c46ae2b913085ae9dcd6390d96487af",
+    "per_mcs3_ldpc0_nss2_flat_native_awgn.csv": "0f35adee43a04582067d288925e75094d0139448bb161c57137c72cba29b75ca",
+    "per_mcs0_ldpc0_nss2_flat_native_awgn.csv": "2fc57ddb16c4fa346ea715bc62c82202bb2cf09f494f6583bf1339dd3eed7a5a",
+    "per_mcs1_ldpc0_nss1_flat_native_awgn.csv": "1bb005f6e81ecdd7388016686462c3071b83d5434ba571ee4f1e844f28574ec0",
+    "per_mcs0_ldpc1_nss1_flat_native_awgn.csv": "c296de10d5938c9b64b05c455443203c1d8814128a3f0bd8325bc4e7e3563cc6",
+    "matlab.log": "6cfc0b1583c677c3b558db018dd1ec2071ec1476284ee6467a5e8af97180b718",
+    "per_mcs1_ldpc0_nss4_flat_native_awgn.csv": "53d5a7cf4276f06918b2a28469a77d5c6679167c058ce57d14f40c42df547433",
+    "per_mcs0_ldpc1_nss4_flat_native_awgn.csv": "24db2ec8d12727b4037b639f8db096ff3d39d5ea6f49e18f069dc6896504968b",
+    "per_mcs3_ldpc0_nss4_flat_native_awgn.csv": "65d29f3e7e989e21ff1157729086d8b01ae957aaa92de12fc8169db4f948638f",
+    "per_mcs1_ldpc0_nss2_flat_native_awgn.csv": "5b63dd7b02cca019f04381573f4aa1f2edac70090268278f60be01703b8785fa",
+    "per_mcs10_ldpc1_nss1_flat_native_awgn.csv": "2d7e447479c6f05f637ffcb7a7ca21230d5f89a5a824e59bab05f33857d136c6"
+  }
+}

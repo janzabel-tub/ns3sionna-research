@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "command": [
+    "/usr/local/MATLAB/R2026a/bin/matlab",
+    "-batch",
+    "addpath('/home/janzabel/Dokumente/ns3sionna_mimo/ns-allinone-3.40/ns-3.40/contrib/sionna/tools'); validate_mumimo_matlab('/tmp/mumimo-export-corrupt-final-20261028','/tmp/mumimo-matlab-negative-final-20261028');"
+  ],
+  "matlab_exit_code": 1,
+  "source_sha256": {
+    "tools/validate_mumimo_matlab.py": "fbc2c730545b80eac5cf4615457d91fba352aadbbe45051f283793bbda1f1d0d",
+    "tools/validate_mumimo_matlab.m": "45f3c9ae5ae602a2a297826dddfcad209f8184cf5d04f0d592a212090ab2bb32",
+    "examples/ns3_mumimo_reference_export.cc": "8744c62b74076ec37bb09426441fa88ad6a666b9806913d8187a9aad51028745",
+    "model/dl-mu-mimo-link-model.cc": "ba5280cb90bc5dd87275a14b281eb38515430618096e18a459da14e55bbc72f2",
+    "model/dl-mu-mimo-link-model.h": "b6921c2348cb43ab3d95bd5c4a3aa38978e0b9be527ad5aca0b3c53aa0e0ed9c",
+    "model/ul-mu-mimo-link-model.cc": "6bfb825437011682248d7375ac3ead8437a112233c84937697024a1006e53b95",
+    "model/ul-mu-mimo-link-model.h": "b26d29269507d8b317cd1bcb5e48bede6c7544c3093868de7e35ea0f19a66571",
+    "model/mimo-channel-matrix.cc": "5a187e08dd40e86e070696d683869835e52b655811cc8b758dd2615d68276a39",
+    "model/mimo-channel-matrix.h": "42c8370cf5c3d9e84a0e55460f49ddabd43364d13b99e86c9a76af9a42bf5130",
+    "model/mimo-precoding-matrix.cc": "406d29adb90e7043bdb8387745f2656a2d9e0b5964a99b98731b134f2bd7002c",
+    "model/mimo-precoding-matrix.h": "a12a76aaf5ba6b800525fb73acef1fe9aecd15898a7c5f10838a04198dbc85a4"
+  },
+  "sources_unchanged_during_run": true,
+  "binary_sha256": "afd8ff643669b3d4d9bf9be29f5860baee6cf154ac324082ddca833855923494",
+  "binary_unchanged_during_run": true,
+  "artifacts_sha256": {
+    "fixtures.txt": "fca0edb137a347c672d355d2ec616ab6fa4bfc26c9f34ce2a5393752730f3221",
+    "native.json": "33ef8d00ccf9ce7f6b00796dd00633940c8f8eebdca81953d03ba8d268204572",
+    "matlab.log": "2b7e6bb2de4d90cac4ff1f6ed267b21336de3c2c4d92a5f1274578693ea18ec9"
+  },
+  "sionna_library_sha256": "79fc2aa3a9a43446ec477635e2360116c21fbe416902152518947106e79b80bf",
+  "library_unchanged_during_run": true
+}

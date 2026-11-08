@@ -1,0 +1,10 @@
+{
+  "negative_control.json": "7f86c3957db1a786e9e56395f48d36b699535e8dc6cf7775955416eabe4ffb0b",
+  "negative_control.log": "71d1dcc8fed41f574782d0b0b14edcdbfa756f071681ab3106edc60bb2062c58",
+  "negative_control_exporter.py": "4568f3f785c4171b40eece646925483869faed5fbb137ba7ac211f05b696ba69",
+  "native_regression_summary.json": "e9ec3de3ef215fc4f2e946a6bf1a9bd61d6d6688f0c7b3cf40be5dc0a049dc55",
+  "per_summary.csv": "17a260a401de9d2ac145dc59eaaecc159fc2718aef12923e23f7bfd82e7ef957",
+  "per_validation.png": "1ddfbe7df16f93ae6beff7204add0cd58e6ad7e8bbbf82e3ac15ee3993722a52",
+  "per_validation.pdf": "06899917d941ff66494943010938b82e1eafd56666657fb8069009a93ad94d42",
+  "plot_provenance.json": "02b3355a44b56d879a337cb7b73368a413f0ac2a8401ba037d2e935847745309"
+}

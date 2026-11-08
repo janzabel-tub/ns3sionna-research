@@ -1,0 +1,7 @@
+{
+  "status": "passed",
+  "expected_validation_outcome": "failure",
+  "observed_exit_code": 1,
+  "mutation": "Replace effective SINR of a two-stream case by the SINR of only its first stream",
+  "detected_case": "streams_mcs0_nss2_p2"
+}

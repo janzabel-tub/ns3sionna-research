@@ -1,0 +1,5021 @@
+{
+  "status": "passed",
+  "case_count": 1002,
+  "scalar_comparisons": 70752,
+  "max_ber_error": 9.9920072216264089E-16,
+  "max_effective_sinr_error": 1.6370904631912708E-11,
+  "max_post_sinr_error": 1.6370904631912708E-11,
+  "ber_reference": "qammod Gray labels and Gaussian decision-region integration",
+  "cases": [
+    {
+      "id": "scalar_mcs0_g0",
+      "mean_ber": 0.5,
+      "effective": 0
+    },
+    {
+      "id": "scalar_mcs0_g1e-08",
+      "mean_ber": 0.49994358104183328,
+      "effective": 1E-8
+    },
+    {
+      "id": "scalar_mcs0_g1.77827941e-08",
+      "mean_ber": 0.49992476411029957,
+      "effective": 1.7782794100389228E-8
+    },
+    {
+      "id": "scalar_mcs0_g3.16227766e-08",
+      "mean_ber": 0.49989967132907942,
+      "effective": 3.1622776601683792E-8
+    },
+    {
+      "id": "scalar_mcs0_g5.62341325e-08",
+      "mean_ber": 0.49986620956816452,
+      "effective": 5.6234132519034912E-8
+    },
+    {
+      "id": "scalar_mcs0_g1e-07",
+      "mean_ber": 0.49982158759433182,
+      "effective": 1E-7
+    },
+    {
+      "id": "scalar_mcs0_g1.77827941e-07",
+      "mean_ber": 0.49976208323944982,
+      "effective": 1.7782794100389227E-7
+    },
+    {
+      "id": "scalar_mcs0_g3.16227766e-07",
+      "mean_ber": 0.49968273291537207,
+      "effective": 3.1622776601683792E-7
+    },
+    {
+      "id": "scalar_mcs0_g5.62341325e-07",
+      "mean_ber": 0.49957691757763745,
+      "effective": 5.62341325190349E-7
+    },
+    {
+      "id": "scalar_mcs0_g1e-06",
+      "mean_ber": 0.49943581060451536,
+      "effective": 1E-6
+    },
+    {
+      "id": "scalar_mcs0_g1.77827941e-06",
+      "mean_ber": 0.49924764154450363,
+      "effective": 1.7782794100389229E-6
+    },
+    {
+      "id": "scalar_mcs0_g3.16227766e-06",
+      "mean_ber": 0.49899671433777465,
+      "effective": 3.1622776601683792E-6
+    },
+    {
+      "id": "scalar_mcs0_g5.62341325e-06",
+      "mean_ber": 0.49866209816442542,
+      "effective": 5.62341325190349E-6
+    },
+    {
+      "id": "scalar_mcs0_g1e-05",
+      "mean_ber": 0.49821588183090976,
+      "effective": 1E-5
+    },
+    {
+      "id": "scalar_mcs0_g1.77827941e-05",
+      "mean_ber": 0.49762084635614567,
+      "effective": 1.7782794100389229E-5
+    },
+    {
+      "id": "scalar_mcs0_g3.16227766e-05",
+      "mean_ber": 0.496827362261865,
+      "effective": 3.1622776601683795E-5
+    },
+    {
+      "id": "scalar_mcs0_g5.62341325e-05",
+      "mean_ber": 0.49576925428757213,
+      "effective": 5.6234132519034907E-5
+    },
+    {
+      "id": "scalar_mcs0_g0.0001",
+      "mean_ber": 0.49435829222207517,
+      "effective": 0.0001
+    },
+    {
+      "id": "scalar_mcs0_g0.000177827941",
+      "mean_ber": 0.49247685692968146,
+      "effective": 0.0001778279410038923
+    },
+    {
+      "id": "scalar_mcs0_g0.000316227766",
+      "mean_ber": 0.489968190258925,
+      "effective": 0.00031622776601683794
+    },
+    {
+      "id": "scalar_mcs0_g0.000562341325",
+      "mean_ber": 0.48662346400564555,
+      "effective": 0.0005623413251903491
+    },
+    {
+      "id": "scalar_mcs0_g0.001",
+      "mean_ber": 0.48216470413516005,
+      "effective": 0.001
+    },
+    {
+      "id": "scalar_mcs0_g0.00177827941",
+      "mean_ber": 0.47622241776435931,
+      "effective": 0.0017782794100389228
+    },
+    {
+      "id": "scalar_mcs0_g0.00316227766",
+      "mean_ber": 0.46830669938073705,
+      "effective": 0.0031622776601683794
+    },
+    {
+      "id": "scalar_mcs0_g0.00562341325",
+      "mean_ber": 0.45777092181323881,
+      "effective": 0.005623413251903491
+    },
+    {
+      "id": "scalar_mcs0_g0.01",
+      "mean_ber": 0.44376854199085758,
+      "effective": 0.01
+    },
+    {
+      "id": "scalar_mcs0_g0.0177827941",
+      "mean_ber": 0.42520770883897052,
+      "effective": 0.017782794100389229
+    },
+    {
+      "id": "scalar_mcs0_g0.0316227766",
+      "mean_ber": 0.40071892729259562,
+      "effective": 0.031622776601683791
+    },
+    {
+      "id": "scalar_mcs0_g0.0562341325",
+      "mean_ber": 0.36867568074243656,
+      "effective": 0.056234132519034905
+    },
+    {
+      "id": "scalar_mcs0_g0.1",
+      "mean_ber": 0.32736042300928853,
+      "effective": 0.1
+    },
+    {
+      "id": "scalar_mcs0_g0.177827941",
+      "mean_ber": 0.27546440116525311,
+      "effective": 0.17782794100389226
+    },
+    {
+      "id": "scalar_mcs0_g0.316227766",
+      "mean_ber": 0.21322801835762034,
+      "effective": 0.31622776601683794
+    },
+    {
+      "id": "scalar_mcs0_g0.562341325",
+      "mean_ber": 0.14445619392505682,
+      "effective": 0.56234132519034907
+    },
+    {
+      "id": "scalar_mcs0_g1",
+      "mean_ber": 0.078649603525142567,
+      "effective": 1
+    },
+    {
+      "id": "scalar_mcs0_g1.77827941",
+      "mean_ber": 0.029655287626036822,
+      "effective": 1.7782794100389228
+    },
+    {
+      "id": "scalar_mcs0_g3.16227766",
+      "mean_ber": 0.00595386714777866,
+      "effective": 3.1622776601683795
+    },
+    {
+      "id": "scalar_mcs0_g5.62341325",
+      "mean_ber": 0.00039879633515916261,
+      "effective": 5.6234132519034912
+    },
+    {
+      "id": "scalar_mcs0_g10",
+      "mean_ber": 3.872108215522037E-6,
+      "effective": 10
+    },
+    {
+      "id": "scalar_mcs0_g17.7827941",
+      "mean_ber": 1.2330284466108094E-9,
+      "effective": 17.782794100389228
+    },
+    {
+      "id": "scalar_mcs0_g31.6227766",
+      "mean_ber": 9.123957362628091E-16,
+      "effective": 31.622776601683793
+    },
+    {
+      "id": "scalar_mcs0_g56.2341325",
+      "mean_ber": 1.4107252094494666E-26,
+      "effective": 56.234132519034908
+    },
+    {
+      "id": "scalar_mcs0_g100",
+      "mean_ber": 1.0442437918812724E-45,
+      "effective": 100
+    },
+    {
+      "id": "scalar_mcs0_g177.827941",
+      "mean_ber": 1.2430509215826502E-79,
+      "effective": 177.82794100389228
+    },
+    {
+      "id": "scalar_mcs0_g316.227766",
+      "mean_ber": 7.3069691846479853E-140,
+      "effective": 316.2277660168379
+    },
+    {
+      "id": "scalar_mcs0_g562.341325",
+      "mean_ber": 7.13305048496119E-247,
+      "effective": 562.341325190349
+    },
+    {
+      "id": "scalar_mcs0_g1000",
+      "mean_ber": 0,
+      "effective": 1000
+    },
+    {
+      "id": "scalar_mcs0_g1778.27941",
+      "mean_ber": 0,
+      "effective": 1778.2794100389228
+    },
+    {
+      "id": "scalar_mcs0_g3162.27766",
+      "mean_ber": 0,
+      "effective": 3162.2776601683795
+    },
+    {
+      "id": "scalar_mcs0_g5623.41325",
+      "mean_ber": 0,
+      "effective": 5623.4132519034911
+    },
+    {
+      "id": "scalar_mcs0_g10000",
+      "mean_ber": 0,
+      "effective": 10000
+    },
+    {
+      "id": "streams_mcs0_nss1_p1",
+      "mean_ber": 0.0071529392177148233,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs0_nss1_p2",
+      "mean_ber": 0,
+      "effective": 1000
+    },
+    {
+      "id": "streams_mcs0_nss1_p3",
+      "mean_ber": 0.19027816353838062,
+      "effective": 0.38445199240864669
+    },
+    {
+      "id": "streams_mcs0_nss1_p4",
+      "mean_ber": 0.056048875146059406,
+      "effective": 1.262197616978892
+    },
+    {
+      "id": "streams_mcs0_nss1_p5",
+      "mean_ber": 0.12158119709487847,
+      "effective": 0.68108315375116024
+    },
+    {
+      "id": "streams_mcs0_nss1_p6",
+      "mean_ber": 1.2698142947354301E-10,
+      "effective": 20
+    },
+    {
+      "id": "streams_mcs0_nss2_p1",
+      "mean_ber": 0.007152939217714825,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs0_nss2_p2",
+      "mean_ber": 0.24108235206758002,
+      "effective": 0.24698161567028512
+    },
+    {
+      "id": "streams_mcs0_nss2_p3",
+      "mean_ber": 0.19027816353838062,
+      "effective": 0.38445199240864669
+    },
+    {
+      "id": "streams_mcs0_nss2_p4",
+      "mean_ber": 0.1879011427602493,
+      "effective": 0.39219432615034489
+    },
+    {
+      "id": "streams_mcs0_nss2_p5",
+      "mean_ber": 0.3519088410462925,
+      "effective": 0.072265405675369349
+    },
+    {
+      "id": "streams_mcs0_nss2_p6",
+      "mean_ber": 0.25000000006349077,
+      "effective": 0.22746821142502549
+    },
+    {
+      "id": "streams_mcs0_nss3_p1",
+      "mean_ber": 0.007152939217714825,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs0_nss3_p2",
+      "mean_ber": 0.18693810255343427,
+      "effective": 0.39537042105013503
+    },
+    {
+      "id": "streams_mcs0_nss3_p3",
+      "mean_ber": 0.19027816353838062,
+      "effective": 0.38445199240864669
+    },
+    {
+      "id": "streams_mcs0_nss3_p4",
+      "mean_ber": 0.1974439942225367,
+      "effective": 0.36191879409447641
+    },
+    {
+      "id": "streams_mcs0_nss3_p5",
+      "mean_ber": 0.19585077413327623,
+      "effective": 0.36682668181805878
+    },
+    {
+      "id": "streams_mcs0_nss3_p6",
+      "mean_ber": 0.33333333337566035,
+      "effective": 0.092763003129056887
+    },
+    {
+      "id": "streams_mcs0_nss4_p1",
+      "mean_ber": 0.0071529392177148224,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs0_nss4_p2",
+      "mean_ber": 0.202382249813166,
+      "effective": 0.34706301648290672
+    },
+    {
+      "id": "streams_mcs0_nss4_p3",
+      "mean_ber": 0.19027816353838062,
+      "effective": 0.38445199240864669
+    },
+    {
+      "id": "streams_mcs0_nss4_p4",
+      "mean_ber": 0.17205841363904625,
+      "effective": 0.44751690780248632
+    },
+    {
+      "id": "streams_mcs0_nss4_p5",
+      "mean_ber": 0.1499210774341998,
+      "effective": 0.53744802953397153
+    },
+    {
+      "id": "streams_mcs0_nss4_p6",
+      "mean_ber": 0.37500000003174527,
+      "effective": 0.050765522107134843
+    },
+    {
+      "id": "streams_mcs0_nss8_p1",
+      "mean_ber": 0.007152939217714825,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs0_nss8_p2",
+      "mean_ber": 0.18905225769309864,
+      "effective": 0.38842783604412773
+    },
+    {
+      "id": "streams_mcs0_nss8_p3",
+      "mean_ber": 0.19027816353838059,
+      "effective": 0.38445199240864686
+    },
+    {
+      "id": "streams_mcs0_nss8_p4",
+      "mean_ber": 0.16520808824188879,
+      "effective": 0.47363302878193808
+    },
+    {
+      "id": "streams_mcs0_nss8_p5",
+      "mean_ber": 0.13895776922593447,
+      "effective": 0.5886274848455042
+    },
+    {
+      "id": "streams_mcs0_nss8_p6",
+      "mean_ber": 0.43750000001587264,
+      "effective": 0.012373325739923492
+    },
+    {
+      "id": "scalar_mcs1_g0",
+      "mean_ber": 0.5,
+      "effective": 0
+    },
+    {
+      "id": "scalar_mcs1_g1e-08",
+      "mean_ber": 0.49996010577202632,
+      "effective": 1E-8
+    },
+    {
+      "id": "scalar_mcs1_g1.77827941e-08",
+      "mean_ber": 0.49994680019204651,
+      "effective": 1.7782794100389228E-8
+    },
+    {
+      "id": "scalar_mcs1_g3.16227766e-08",
+      "mean_ber": 0.4999290569160707,
+      "effective": 3.1622776601683792E-8
+    },
+    {
+      "id": "scalar_mcs1_g5.62341325e-08",
+      "mean_ber": 0.4999053958775046,
+      "effective": 5.6234132519034912E-8
+    },
+    {
+      "id": "scalar_mcs1_g1e-07",
+      "mean_ber": 0.4998738433760016,
+      "effective": 1E-7
+    },
+    {
+      "id": "scalar_mcs1_g1.77827941e-07",
+      "mean_ber": 0.49983176744027097,
+      "effective": 1.7782794100389227E-7
+    },
+    {
+      "id": "scalar_mcs1_g3.16227766e-07",
+      "mean_ber": 0.49977565828118847,
+      "effective": 3.1622776601683792E-7
+    },
+    {
+      "id": "scalar_mcs1_g5.62341325e-07",
+      "mean_ber": 0.49970083552210787,
+      "effective": 5.62341325190349E-7
+    },
+    {
+      "id": "scalar_mcs1_g1e-06",
+      "mean_ber": 0.49960105778608893,
+      "effective": 1E-6
+    },
+    {
+      "id": "scalar_mcs1_g1.77827941e-06",
+      "mean_ber": 0.49946800207656206,
+      "effective": 1.7782794100389229E-6
+    },
+    {
+      "id": "scalar_mcs1_g3.16227766e-06",
+      "mean_ber": 0.49929056953087086,
+      "effective": 3.1622776601683792E-6
+    },
+    {
+      "id": "scalar_mcs1_g5.62341325e-06",
+      "mean_ber": 0.49905395965284205,
+      "effective": 5.62341325190349E-6
+    },
+    {
+      "id": "scalar_mcs1_g1e-05",
+      "mean_ber": 0.49873843584159722,
+      "effective": 1E-5
+    },
+    {
+      "id": "scalar_mcs1_g1.77827941e-05",
+      "mean_ber": 0.49831767933891069,
+      "effective": 1.7782794100389229E-5
+    },
+    {
+      "id": "scalar_mcs1_g3.16227766e-05",
+      "mean_ber": 0.49775659451743726,
+      "effective": 3.1622776601683795E-5
+    },
+    {
+      "id": "scalar_mcs1_g5.62341325e-05",
+      "mean_ber": 0.49700838297921507,
+      "effective": 5.6234132519034907E-5
+    },
+    {
+      "id": "scalar_mcs1_g0.0001",
+      "mean_ber": 0.4960106436853684,
+      "effective": 0.0001
+    },
+    {
+      "id": "scalar_mcs1_g0.000177827941",
+      "mean_ber": 0.494680176858219,
+      "effective": 0.0001778279410038923
+    },
+    {
+      "id": "scalar_mcs1_g0.000316227766",
+      "mean_ber": 0.49290606545483084,
+      "effective": 0.00031622776601683794
+    },
+    {
+      "id": "scalar_mcs1_g0.000562341325",
+      "mean_ber": 0.49054047425047581,
+      "effective": 0.0005623413251903491
+    },
+    {
+      "id": "scalar_mcs1_g0.001",
+      "mean_ber": 0.48738643968498019,
+      "effective": 0.001
+    },
+    {
+      "id": "scalar_mcs1_g0.00177827941",
+      "mean_ber": 0.48318172827387423,
+      "effective": 0.0017782794100389228
+    },
+    {
+      "id": "scalar_mcs1_g0.00316227766",
+      "mean_ber": 0.47757764517741119,
+      "effective": 0.0031622776601683794
+    },
+    {
+      "id": "scalar_mcs1_g0.00562341325",
+      "mean_ber": 0.4701115645324877,
+      "effective": 0.005623413251903491
+    },
+    {
+      "id": "scalar_mcs1_g0.01",
+      "mean_ber": 0.460172162722971,
+      "effective": 0.01
+    },
+    {
+      "id": "scalar_mcs1_g0.0177827941",
+      "mean_ber": 0.44695744573524965,
+      "effective": 0.017782794100389229
+    },
+    {
+      "id": "scalar_mcs1_g0.0316227766",
+      "mean_ber": 0.42942905166046325,
+      "effective": 0.031622776601683791
+    },
+    {
+      "id": "scalar_mcs1_g0.0562341325",
+      "mean_ber": 0.40627511077053652,
+      "effective": 0.056234132519034905
+    },
+    {
+      "id": "scalar_mcs1_g0.1",
+      "mean_ber": 0.37591481702292462,
+      "effective": 0.1
+    },
+    {
+      "id": "scalar_mcs1_g0.177827941",
+      "mean_ber": 0.33662327848343293,
+      "effective": 0.17782794100389226
+    },
+    {
+      "id": "scalar_mcs1_g0.316227766",
+      "mean_ber": 0.28694174372604853,
+      "effective": 0.31622776601683794
+    },
+    {
+      "id": "scalar_mcs1_g0.562341325",
+      "mean_ber": 0.22665921117064838,
+      "effective": 0.56234132519034907
+    },
+    {
+      "id": "scalar_mcs1_g1",
+      "mean_ber": 0.15865525393145702,
+      "effective": 1
+    },
+    {
+      "id": "scalar_mcs1_g1.77827941",
+      "mean_ber": 0.091180373491151989,
+      "effective": 1.7782794100389228
+    },
+    {
+      "id": "scalar_mcs1_g3.16227766",
+      "mean_ber": 0.037678988147463385,
+      "effective": 3.1622776601683795
+    },
+    {
+      "id": "scalar_mcs1_g5.62341325",
+      "mean_ber": 0.008861051096347855,
+      "effective": 5.6234132519034912
+    },
+    {
+      "id": "scalar_mcs1_g10",
+      "mean_ber": 0.00078270112900127441,
+      "effective": 10
+    },
+    {
+      "id": "scalar_mcs1_g17.7827941",
+      "mean_ber": 1.2380617585204549E-5,
+      "effective": 17.782794100389228
+    },
+    {
+      "id": "scalar_mcs1_g31.6227766",
+      "mean_ber": 9.3610399906850345E-9,
+      "effective": 31.622776601683793
+    },
+    {
+      "id": "scalar_mcs1_g56.2341325",
+      "mean_ber": 3.2167469436173272E-14,
+      "effective": 56.234132519034908
+    },
+    {
+      "id": "scalar_mcs1_g100",
+      "mean_ber": 7.6198530241604975E-24,
+      "effective": 100
+    },
+    {
+      "id": "scalar_mcs1_g177.827941",
+      "mean_ber": 7.22195059837367E-41,
+      "effective": 177.82794100389228
+    },
+    {
+      "id": "scalar_mcs1_g316.227766",
+      "mean_ber": 4.80352986222577E-71,
+      "effective": 316.2277660168379
+    },
+    {
+      "id": "scalar_mcs1_g562.341325",
+      "mean_ber": 1.3009899280640681E-124,
+      "effective": 562.341325190349
+    },
+    {
+      "id": "scalar_mcs1_g1000",
+      "mean_ber": 8.979163924003194E-220,
+      "effective": 1000
+    },
+    {
+      "id": "scalar_mcs1_g1778.27941",
+      "mean_ber": 0,
+      "effective": 1778.2794100389228
+    },
+    {
+      "id": "scalar_mcs1_g3162.27766",
+      "mean_ber": 0,
+      "effective": 3162.2776601683795
+    },
+    {
+      "id": "scalar_mcs1_g5623.41325",
+      "mean_ber": 0,
+      "effective": 5623.4132519034911
+    },
+    {
+      "id": "scalar_mcs1_g10000",
+      "mean_ber": 0,
+      "effective": 10000
+    },
+    {
+      "id": "streams_mcs1_nss1_p1",
+      "mean_ber": 0.041632258331775189,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs1_nss1_p2",
+      "mean_ber": 8.979163924003194E-220,
+      "effective": 1000
+    },
+    {
+      "id": "streams_mcs1_nss1_p3",
+      "mean_ber": 0.21184448207019058,
+      "effective": 0.64006029549578169
+    },
+    {
+      "id": "streams_mcs1_nss1_p4",
+      "mean_ber": 0.14795221122225596,
+      "effective": 1.0925612148200636
+    },
+    {
+      "id": "streams_mcs1_nss1_p5",
+      "mean_ber": 0.26007321762950913,
+      "effective": 0.41360294323096
+    },
+    {
+      "id": "streams_mcs1_nss1_p6",
+      "mean_ber": 3.872108215522037E-6,
+      "effective": 20
+    },
+    {
+      "id": "streams_mcs1_nss2_p1",
+      "mean_ber": 0.041632258331775189,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs1_nss2_p2",
+      "mean_ber": 0.24369321984249012,
+      "effective": 0.48229094827049224
+    },
+    {
+      "id": "streams_mcs1_nss2_p3",
+      "mean_ber": 0.2118444820701906,
+      "effective": 0.64006029549578147
+    },
+    {
+      "id": "streams_mcs1_nss2_p4",
+      "mean_ber": 0.15046792948498938,
+      "effective": 1.0700424437188514
+    },
+    {
+      "id": "streams_mcs1_nss2_p5",
+      "mean_ber": 0.098969951665248315,
+      "effective": 1.6575096373338831
+    },
+    {
+      "id": "streams_mcs1_nss2_p6",
+      "mean_ber": 0.2500019360541077,
+      "effective": 0.45492820451453408
+    },
+    {
+      "id": "streams_mcs1_nss3_p1",
+      "mean_ber": 0.041632258331775189,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs1_nss3_p2",
+      "mean_ber": 0.21534723120547908,
+      "effective": 0.62095004470313708
+    },
+    {
+      "id": "streams_mcs1_nss3_p3",
+      "mean_ber": 0.2118444820701906,
+      "effective": 0.64006029549578147
+    },
+    {
+      "id": "streams_mcs1_nss3_p4",
+      "mean_ber": 0.24445881871054423,
+      "effective": 0.47890739851862379
+    },
+    {
+      "id": "streams_mcs1_nss3_p5",
+      "mean_ber": 0.21161758829985505,
+      "effective": 0.64131455970153661
+    },
+    {
+      "id": "streams_mcs1_nss3_p6",
+      "mean_ber": 0.33333462403607178,
+      "effective": 0.18552294839062838
+    },
+    {
+      "id": "streams_mcs1_nss4_p1",
+      "mean_ber": 0.041632258331775189,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs1_nss4_p2",
+      "mean_ber": 0.21602098945922651,
+      "effective": 0.61732793405483333
+    },
+    {
+      "id": "streams_mcs1_nss4_p3",
+      "mean_ber": 0.21184448207019058,
+      "effective": 0.64006029549578169
+    },
+    {
+      "id": "streams_mcs1_nss4_p4",
+      "mean_ber": 0.13902800541590227,
+      "effective": 1.1765669266117809
+    },
+    {
+      "id": "streams_mcs1_nss4_p5",
+      "mean_ber": 0.22998791075528849,
+      "effective": 0.54595350092449646
+    },
+    {
+      "id": "streams_mcs1_nss4_p6",
+      "mean_ber": 0.37500096802705407,
+      "effective": 0.10152941740035464
+    },
+    {
+      "id": "streams_mcs1_nss8_p1",
+      "mean_ber": 0.041632258331775189,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs1_nss8_p2",
+      "mean_ber": 0.2106308882627092,
+      "effective": 0.6467925211374046
+    },
+    {
+      "id": "streams_mcs1_nss8_p3",
+      "mean_ber": 0.21184448207019058,
+      "effective": 0.64006029549578169
+    },
+    {
+      "id": "streams_mcs1_nss8_p4",
+      "mean_ber": 0.25168156351729148,
+      "effective": 0.44783866885501222
+    },
+    {
+      "id": "streams_mcs1_nss8_p5",
+      "mean_ber": 0.2038528332970431,
+      "effective": 0.685481175382235
+    },
+    {
+      "id": "streams_mcs1_nss8_p6",
+      "mean_ber": 0.43750048401352692,
+      "effective": 0.024746265029824147
+    },
+    {
+      "id": "scalar_mcs2_g0",
+      "mean_ber": 0.5,
+      "effective": 0
+    },
+    {
+      "id": "scalar_mcs2_g1e-08",
+      "mean_ber": 0.49996010577202632,
+      "effective": 1E-8
+    },
+    {
+      "id": "scalar_mcs2_g1.77827941e-08",
+      "mean_ber": 0.49994680019204651,
+      "effective": 1.7782794100389228E-8
+    },
+    {
+      "id": "scalar_mcs2_g3.16227766e-08",
+      "mean_ber": 0.4999290569160707,
+      "effective": 3.1622776601683792E-8
+    },
+    {
+      "id": "scalar_mcs2_g5.62341325e-08",
+      "mean_ber": 0.4999053958775046,
+      "effective": 5.6234132519034912E-8
+    },
+    {
+      "id": "scalar_mcs2_g1e-07",
+      "mean_ber": 0.4998738433760016,
+      "effective": 1E-7
+    },
+    {
+      "id": "scalar_mcs2_g1.77827941e-07",
+      "mean_ber": 0.49983176744027097,
+      "effective": 1.7782794100389227E-7
+    },
+    {
+      "id": "scalar_mcs2_g3.16227766e-07",
+      "mean_ber": 0.49977565828118847,
+      "effective": 3.1622776601683792E-7
+    },
+    {
+      "id": "scalar_mcs2_g5.62341325e-07",
+      "mean_ber": 0.49970083552210787,
+      "effective": 5.62341325190349E-7
+    },
+    {
+      "id": "scalar_mcs2_g1e-06",
+      "mean_ber": 0.49960105778608893,
+      "effective": 1E-6
+    },
+    {
+      "id": "scalar_mcs2_g1.77827941e-06",
+      "mean_ber": 0.49946800207656206,
+      "effective": 1.7782794100389229E-6
+    },
+    {
+      "id": "scalar_mcs2_g3.16227766e-06",
+      "mean_ber": 0.49929056953087086,
+      "effective": 3.1622776601683792E-6
+    },
+    {
+      "id": "scalar_mcs2_g5.62341325e-06",
+      "mean_ber": 0.49905395965284205,
+      "effective": 5.62341325190349E-6
+    },
+    {
+      "id": "scalar_mcs2_g1e-05",
+      "mean_ber": 0.49873843584159722,
+      "effective": 1E-5
+    },
+    {
+      "id": "scalar_mcs2_g1.77827941e-05",
+      "mean_ber": 0.49831767933891069,
+      "effective": 1.7782794100389229E-5
+    },
+    {
+      "id": "scalar_mcs2_g3.16227766e-05",
+      "mean_ber": 0.49775659451743726,
+      "effective": 3.1622776601683795E-5
+    },
+    {
+      "id": "scalar_mcs2_g5.62341325e-05",
+      "mean_ber": 0.49700838297921507,
+      "effective": 5.6234132519034907E-5
+    },
+    {
+      "id": "scalar_mcs2_g0.0001",
+      "mean_ber": 0.4960106436853684,
+      "effective": 0.0001
+    },
+    {
+      "id": "scalar_mcs2_g0.000177827941",
+      "mean_ber": 0.494680176858219,
+      "effective": 0.0001778279410038923
+    },
+    {
+      "id": "scalar_mcs2_g0.000316227766",
+      "mean_ber": 0.49290606545483084,
+      "effective": 0.00031622776601683794
+    },
+    {
+      "id": "scalar_mcs2_g0.000562341325",
+      "mean_ber": 0.49054047425047581,
+      "effective": 0.0005623413251903491
+    },
+    {
+      "id": "scalar_mcs2_g0.001",
+      "mean_ber": 0.48738643968498019,
+      "effective": 0.001
+    },
+    {
+      "id": "scalar_mcs2_g0.00177827941",
+      "mean_ber": 0.48318172827387423,
+      "effective": 0.0017782794100389228
+    },
+    {
+      "id": "scalar_mcs2_g0.00316227766",
+      "mean_ber": 0.47757764517741119,
+      "effective": 0.0031622776601683794
+    },
+    {
+      "id": "scalar_mcs2_g0.00562341325",
+      "mean_ber": 0.4701115645324877,
+      "effective": 0.005623413251903491
+    },
+    {
+      "id": "scalar_mcs2_g0.01",
+      "mean_ber": 0.460172162722971,
+      "effective": 0.01
+    },
+    {
+      "id": "scalar_mcs2_g0.0177827941",
+      "mean_ber": 0.44695744573524965,
+      "effective": 0.017782794100389229
+    },
+    {
+      "id": "scalar_mcs2_g0.0316227766",
+      "mean_ber": 0.42942905166046325,
+      "effective": 0.031622776601683791
+    },
+    {
+      "id": "scalar_mcs2_g0.0562341325",
+      "mean_ber": 0.40627511077053652,
+      "effective": 0.056234132519034905
+    },
+    {
+      "id": "scalar_mcs2_g0.1",
+      "mean_ber": 0.37591481702292462,
+      "effective": 0.1
+    },
+    {
+      "id": "scalar_mcs2_g0.177827941",
+      "mean_ber": 0.33662327848343293,
+      "effective": 0.17782794100389226
+    },
+    {
+      "id": "scalar_mcs2_g0.316227766",
+      "mean_ber": 0.28694174372604853,
+      "effective": 0.31622776601683794
+    },
+    {
+      "id": "scalar_mcs2_g0.562341325",
+      "mean_ber": 0.22665921117064838,
+      "effective": 0.56234132519034907
+    },
+    {
+      "id": "scalar_mcs2_g1",
+      "mean_ber": 0.15865525393145702,
+      "effective": 1
+    },
+    {
+      "id": "scalar_mcs2_g1.77827941",
+      "mean_ber": 0.091180373491151989,
+      "effective": 1.7782794100389228
+    },
+    {
+      "id": "scalar_mcs2_g3.16227766",
+      "mean_ber": 0.037678988147463385,
+      "effective": 3.1622776601683795
+    },
+    {
+      "id": "scalar_mcs2_g5.62341325",
+      "mean_ber": 0.008861051096347855,
+      "effective": 5.6234132519034912
+    },
+    {
+      "id": "scalar_mcs2_g10",
+      "mean_ber": 0.00078270112900127441,
+      "effective": 10
+    },
+    {
+      "id": "scalar_mcs2_g17.7827941",
+      "mean_ber": 1.2380617585204549E-5,
+      "effective": 17.782794100389228
+    },
+    {
+      "id": "scalar_mcs2_g31.6227766",
+      "mean_ber": 9.3610399906850345E-9,
+      "effective": 31.622776601683793
+    },
+    {
+      "id": "scalar_mcs2_g56.2341325",
+      "mean_ber": 3.2167469436173272E-14,
+      "effective": 56.234132519034908
+    },
+    {
+      "id": "scalar_mcs2_g100",
+      "mean_ber": 7.6198530241604975E-24,
+      "effective": 100
+    },
+    {
+      "id": "scalar_mcs2_g177.827941",
+      "mean_ber": 7.22195059837367E-41,
+      "effective": 177.82794100389228
+    },
+    {
+      "id": "scalar_mcs2_g316.227766",
+      "mean_ber": 4.80352986222577E-71,
+      "effective": 316.2277660168379
+    },
+    {
+      "id": "scalar_mcs2_g562.341325",
+      "mean_ber": 1.3009899280640681E-124,
+      "effective": 562.341325190349
+    },
+    {
+      "id": "scalar_mcs2_g1000",
+      "mean_ber": 8.979163924003194E-220,
+      "effective": 1000
+    },
+    {
+      "id": "scalar_mcs2_g1778.27941",
+      "mean_ber": 0,
+      "effective": 1778.2794100389228
+    },
+    {
+      "id": "scalar_mcs2_g3162.27766",
+      "mean_ber": 0,
+      "effective": 3162.2776601683795
+    },
+    {
+      "id": "scalar_mcs2_g5623.41325",
+      "mean_ber": 0,
+      "effective": 5623.4132519034911
+    },
+    {
+      "id": "scalar_mcs2_g10000",
+      "mean_ber": 0,
+      "effective": 10000
+    },
+    {
+      "id": "streams_mcs2_nss1_p1",
+      "mean_ber": 0.041632258331775189,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs2_nss1_p2",
+      "mean_ber": 8.979163924003194E-220,
+      "effective": 1000
+    },
+    {
+      "id": "streams_mcs2_nss1_p3",
+      "mean_ber": 0.21184448207019058,
+      "effective": 0.64006029549578169
+    },
+    {
+      "id": "streams_mcs2_nss1_p4",
+      "mean_ber": 0.31837085786831693,
+      "effective": 0.22302884849674262
+    },
+    {
+      "id": "streams_mcs2_nss1_p5",
+      "mean_ber": 0.097237878889062046,
+      "effective": 1.6833813356694329
+    },
+    {
+      "id": "streams_mcs2_nss1_p6",
+      "mean_ber": 3.872108215522037E-6,
+      "effective": 20
+    },
+    {
+      "id": "streams_mcs2_nss2_p1",
+      "mean_ber": 0.041632258331775189,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs2_nss2_p2",
+      "mean_ber": 0.24369321984249012,
+      "effective": 0.48229094827049224
+    },
+    {
+      "id": "streams_mcs2_nss2_p3",
+      "mean_ber": 0.2118444820701906,
+      "effective": 0.64006029549578147
+    },
+    {
+      "id": "streams_mcs2_nss2_p4",
+      "mean_ber": 0.24369653570979624,
+      "effective": 0.48227625579841621
+    },
+    {
+      "id": "streams_mcs2_nss2_p5",
+      "mean_ber": 0.08813558069195,
+      "effective": 1.8287846723904655
+    },
+    {
+      "id": "streams_mcs2_nss2_p6",
+      "mean_ber": 0.2500019360541077,
+      "effective": 0.45492820451453408
+    },
+    {
+      "id": "streams_mcs2_nss3_p1",
+      "mean_ber": 0.041632258331775189,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs2_nss3_p2",
+      "mean_ber": 0.21534723120547908,
+      "effective": 0.62095004470313708
+    },
+    {
+      "id": "streams_mcs2_nss3_p3",
+      "mean_ber": 0.2118444820701906,
+      "effective": 0.64006029549578147
+    },
+    {
+      "id": "streams_mcs2_nss3_p4",
+      "mean_ber": 0.19854306943125741,
+      "effective": 0.71713242728804816
+    },
+    {
+      "id": "streams_mcs2_nss3_p5",
+      "mean_ber": 0.19363451285131306,
+      "effective": 0.74749960939042648
+    },
+    {
+      "id": "streams_mcs2_nss3_p6",
+      "mean_ber": 0.33333462403607178,
+      "effective": 0.18552294839062838
+    },
+    {
+      "id": "streams_mcs2_nss4_p1",
+      "mean_ber": 0.041632258331775189,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs2_nss4_p2",
+      "mean_ber": 0.21602098945922651,
+      "effective": 0.61732793405483333
+    },
+    {
+      "id": "streams_mcs2_nss4_p3",
+      "mean_ber": 0.21184448207019058,
+      "effective": 0.64006029549578169
+    },
+    {
+      "id": "streams_mcs2_nss4_p4",
+      "mean_ber": 0.23008754846288082,
+      "effective": 0.54546874323339911
+    },
+    {
+      "id": "streams_mcs2_nss4_p5",
+      "mean_ber": 0.20668205392482042,
+      "effective": 0.66910417202107686
+    },
+    {
+      "id": "streams_mcs2_nss4_p6",
+      "mean_ber": 0.37500096802705407,
+      "effective": 0.10152941740035464
+    },
+    {
+      "id": "streams_mcs2_nss8_p1",
+      "mean_ber": 0.041632258331775189,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs2_nss8_p2",
+      "mean_ber": 0.2106308882627092,
+      "effective": 0.6467925211374046
+    },
+    {
+      "id": "streams_mcs2_nss8_p3",
+      "mean_ber": 0.21184448207019058,
+      "effective": 0.64006029549578169
+    },
+    {
+      "id": "streams_mcs2_nss8_p4",
+      "mean_ber": 0.275494242486621,
+      "effective": 0.35554931112520732
+    },
+    {
+      "id": "streams_mcs2_nss8_p5",
+      "mean_ber": 0.16195790055986783,
+      "effective": 0.97306967940877642
+    },
+    {
+      "id": "streams_mcs2_nss8_p6",
+      "mean_ber": 0.43750048401352692,
+      "effective": 0.024746265029824147
+    },
+    {
+      "id": "scalar_mcs3_g0",
+      "mean_ber": 0.5,
+      "effective": 0
+    },
+    {
+      "id": "scalar_mcs3_g1e-08",
+      "mean_ber": 0.49998215875873742,
+      "effective": 1E-8
+    },
+    {
+      "id": "scalar_mcs3_g1.77827941e-08",
+      "mean_ber": 0.499976208322295,
+      "effective": 1.7782794100389228E-8
+    },
+    {
+      "id": "scalar_mcs3_g3.16227766e-08",
+      "mean_ber": 0.49996827328762433,
+      "effective": 3.1622776601683792E-8
+    },
+    {
+      "id": "scalar_mcs3_g5.62341325e-08",
+      "mean_ber": 0.49995769174848503,
+      "effective": 5.6234132519034912E-8
+    },
+    {
+      "id": "scalar_mcs3_g1e-07",
+      "mean_ber": 0.49994358103844816,
+      "effective": 1E-7
+    },
+    {
+      "id": "scalar_mcs3_g1.77827941e-07",
+      "mean_ber": 0.49992476410227216,
+      "effective": 1.7782794100389227E-7
+    },
+    {
+      "id": "scalar_mcs3_g3.16227766e-07",
+      "mean_ber": 0.49989967131004343,
+      "effective": 3.1622776601683792E-7
+    },
+    {
+      "id": "scalar_mcs3_g5.62341325e-07",
+      "mean_ber": 0.499866209523023,
+      "effective": 5.62341325190349E-7
+    },
+    {
+      "id": "scalar_mcs3_g1e-06",
+      "mean_ber": 0.49982158748728439,
+      "effective": 1E-6
+    },
+    {
+      "id": "scalar_mcs3_g1.77827941e-06",
+      "mean_ber": 0.49976208298560088,
+      "effective": 1.7782794100389229E-6
+    },
+    {
+      "id": "scalar_mcs3_g3.16227766e-06",
+      "mean_ber": 0.49968273231340204,
+      "effective": 3.1622776601683792E-6
+    },
+    {
+      "id": "scalar_mcs3_g5.62341325e-06",
+      "mean_ber": 0.49957691615014566,
+      "effective": 5.62341325190349E-6
+    },
+    {
+      "id": "scalar_mcs3_g1e-05",
+      "mean_ber": 0.49943580721941505,
+      "effective": 1E-5
+    },
+    {
+      "id": "scalar_mcs3_g1.77827941e-05",
+      "mean_ber": 0.49924763351723461,
+      "effective": 1.7782794100389229E-5
+    },
+    {
+      "id": "scalar_mcs3_g3.16227766e-05",
+      "mean_ber": 0.4989966953024097,
+      "effective": 3.1622776601683795E-5
+    },
+    {
+      "id": "scalar_mcs3_g5.62341325e-05",
+      "mean_ber": 0.49866205302568362,
+      "effective": 5.6234132519034907E-5
+    },
+    {
+      "id": "scalar_mcs3_g0.0001",
+      "mean_ber": 0.49821577479523727,
+      "effective": 0.0001
+    },
+    {
+      "id": "scalar_mcs3_g0.000177827941",
+      "mean_ber": 0.49762059255629437,
+      "effective": 0.0001778279410038923
+    },
+    {
+      "id": "scalar_mcs3_g0.000316227766",
+      "mean_ber": 0.49682676049918545,
+      "effective": 0.00031622776601683794
+    },
+    {
+      "id": "scalar_mcs3_g0.000562341325",
+      "mean_ber": 0.49576782766961092,
+      "effective": 0.0005623413251903491
+    },
+    {
+      "id": "scalar_mcs3_g0.001",
+      "mean_ber": 0.49435491080574961,
+      "effective": 0.001
+    },
+    {
+      "id": "scalar_mcs3_g0.00177827941",
+      "mean_ber": 0.49246884518757145,
+      "effective": 0.0017782794100389228
+    },
+    {
+      "id": "scalar_mcs3_g0.00316227766",
+      "mean_ber": 0.48994922030970589,
+      "effective": 0.0031622776601683794
+    },
+    {
+      "id": "scalar_mcs3_g0.00562341325",
+      "mean_ber": 0.4865786006645107,
+      "effective": 0.005623413251903491
+    },
+    {
+      "id": "scalar_mcs3_g0.01",
+      "mean_ber": 0.48205882641715786,
+      "effective": 0.01
+    },
+    {
+      "id": "scalar_mcs3_g0.0177827941",
+      "mean_ber": 0.47597347562123321,
+      "effective": 0.017782794100389229
+    },
+    {
+      "id": "scalar_mcs3_g0.0316227766",
+      "mean_ber": 0.467725233472171,
+      "effective": 0.031622776601683791
+    },
+    {
+      "id": "scalar_mcs3_g0.0562341325",
+      "mean_ber": 0.45642851156771441,
+      "effective": 0.056234132519034905
+    },
+    {
+      "id": "scalar_mcs3_g0.1",
+      "mean_ber": 0.44073220135499208,
+      "effective": 0.1
+    },
+    {
+      "id": "scalar_mcs3_g0.177827941",
+      "mean_ber": 0.41858031004246493,
+      "effective": 0.17782794100389226
+    },
+    {
+      "id": "scalar_mcs3_g0.316227766",
+      "mean_ber": 0.38710785931541941,
+      "effective": 0.31622776601683794
+    },
+    {
+      "id": "scalar_mcs3_g0.562341325",
+      "mean_ber": 0.34340264479246385,
+      "effective": 0.56234132519034907
+    },
+    {
+      "id": "scalar_mcs3_g1",
+      "mean_ber": 0.28728002614203285,
+      "effective": 1
+    },
+    {
+      "id": "scalar_mcs3_g1.77827941",
+      "mean_ber": 0.22463956070489363,
+      "effective": 1.7782794100389228
+    },
+    {
+      "id": "scalar_mcs3_g3.16227766",
+      "mean_ber": 0.16417262916453548,
+      "effective": 3.1622776601683795
+    },
+    {
+      "id": "scalar_mcs3_g5.62341325",
+      "mean_ber": 0.10870837741402516,
+      "effective": 5.6234132519034912
+    },
+    {
+      "id": "scalar_mcs3_g10",
+      "mean_ber": 0.058992725267914395,
+      "effective": 10
+    },
+    {
+      "id": "scalar_mcs3_g17.7827941",
+      "mean_ber": 0.022241469555968549,
+      "effective": 17.782794100389228
+    },
+    {
+      "id": "scalar_mcs3_g31.6227766",
+      "mean_ber": 0.0044654003608453341,
+      "effective": 31.622776601683793
+    },
+    {
+      "id": "scalar_mcs3_g56.2341325",
+      "mean_ber": 0.00029909725136937216,
+      "effective": 56.234132519034908
+    },
+    {
+      "id": "scalar_mcs3_g100",
+      "mean_ber": 2.90408116164153E-6,
+      "effective": 100
+    },
+    {
+      "id": "scalar_mcs3_g177.827941",
+      "mean_ber": 9.2477133495810946E-10,
+      "effective": 177.82794100389228
+    },
+    {
+      "id": "scalar_mcs3_g316.227766",
+      "mean_ber": 6.84296802197109E-16,
+      "effective": 316.2277660168379
+    },
+    {
+      "id": "scalar_mcs3_g562.341325",
+      "mean_ber": 1.0580439070871094E-26,
+      "effective": 562.341325190349
+    },
+    {
+      "id": "scalar_mcs3_g1000",
+      "mean_ber": 7.8318284391096366E-46,
+      "effective": 1000
+    },
+    {
+      "id": "scalar_mcs3_g1778.27941",
+      "mean_ber": 9.322881911869729E-80,
+      "effective": 1778.2794100389228
+    },
+    {
+      "id": "scalar_mcs3_g3162.27766",
+      "mean_ber": 5.4802268884862192E-140,
+      "effective": 3162.2776601683795
+    },
+    {
+      "id": "scalar_mcs3_g5623.41325",
+      "mean_ber": 5.3497878637205917E-247,
+      "effective": 5623.4132519034911
+    },
+    {
+      "id": "scalar_mcs3_g10000",
+      "mean_ber": 0,
+      "effective": 10000
+    },
+    {
+      "id": "streams_mcs3_nss1_p1",
+      "mean_ber": 0.16948750877087035,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs3_nss1_p2",
+      "mean_ber": 7.8318284391096366E-46,
+      "effective": 1000
+    },
+    {
+      "id": "streams_mcs3_nss1_p3",
+      "mean_ber": 0.25191737058128688,
+      "effective": 1.3864068967712009
+    },
+    {
+      "id": "streams_mcs3_nss1_p4",
+      "mean_ber": 0.084448449713204643,
+      "effective": 7.3605193638126947
+    },
+    {
+      "id": "streams_mcs3_nss1_p5",
+      "mean_ber": 0.26073611921183532,
+      "effective": 1.2791606904019237
+    },
+    {
+      "id": "streams_mcs3_nss1_p6",
+      "mean_ber": 0.017062599454428229,
+      "effective": 20
+    },
+    {
+      "id": "streams_mcs3_nss2_p1",
+      "mean_ber": 0.16948750877087043,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs3_nss2_p2",
+      "mean_ber": 0.24717745540287478,
+      "effective": 1.4475843990138124
+    },
+    {
+      "id": "streams_mcs3_nss2_p3",
+      "mean_ber": 0.25191737058128688,
+      "effective": 1.3864068967712009
+    },
+    {
+      "id": "streams_mcs3_nss2_p4",
+      "mean_ber": 0.21257219040386124,
+      "effective": 1.98770072645438
+    },
+    {
+      "id": "streams_mcs3_nss2_p5",
+      "mean_ber": 0.14746980164388745,
+      "effective": 3.7423710573810309
+    },
+    {
+      "id": "streams_mcs3_nss2_p6",
+      "mean_ber": 0.25853129972721423,
+      "effective": 1.3052109033627377
+    },
+    {
+      "id": "streams_mcs3_nss3_p1",
+      "mean_ber": 0.16948750877087043,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs3_nss3_p2",
+      "mean_ber": 0.2605449789825941,
+      "effective": 1.2813996420691545
+    },
+    {
+      "id": "streams_mcs3_nss3_p3",
+      "mean_ber": 0.25191737058128688,
+      "effective": 1.3864068967712009
+    },
+    {
+      "id": "streams_mcs3_nss3_p4",
+      "mean_ber": 0.25917514453101476,
+      "effective": 1.2975528582836153
+    },
+    {
+      "id": "streams_mcs3_nss3_p5",
+      "mean_ber": 0.31530130556073982,
+      "effective": 0.76052416639758491
+    },
+    {
+      "id": "streams_mcs3_nss3_p6",
+      "mean_ber": 0.3390208664848095,
+      "effective": 0.59092222353667423
+    },
+    {
+      "id": "streams_mcs3_nss4_p1",
+      "mean_ber": 0.1694875087708704,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs3_nss4_p2",
+      "mean_ber": 0.24851995935716389,
+      "effective": 1.4299923392833589
+    },
+    {
+      "id": "streams_mcs3_nss4_p3",
+      "mean_ber": 0.25191737058128683,
+      "effective": 1.3864068967712022
+    },
+    {
+      "id": "streams_mcs3_nss4_p4",
+      "mean_ber": 0.26932753655342373,
+      "effective": 1.1821551610982755
+    },
+    {
+      "id": "streams_mcs3_nss4_p5",
+      "mean_ber": 0.27353459798873719,
+      "effective": 1.1371065890308227
+    },
+    {
+      "id": "streams_mcs3_nss4_p6",
+      "mean_ber": 0.37926564986360711,
+      "effective": 0.35558862636132649
+    },
+    {
+      "id": "streams_mcs3_nss8_p1",
+      "mean_ber": 0.16948750877087043,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs3_nss8_p2",
+      "mean_ber": 0.25160507918345959,
+      "effective": 1.3903584943192016
+    },
+    {
+      "id": "streams_mcs3_nss8_p3",
+      "mean_ber": 0.25191737058128688,
+      "effective": 1.3864068967712009
+    },
+    {
+      "id": "streams_mcs3_nss8_p4",
+      "mean_ber": 0.22956749564944748,
+      "effective": 1.6997658859980791
+    },
+    {
+      "id": "streams_mcs3_nss8_p5",
+      "mean_ber": 0.26672457844182423,
+      "effective": 1.2108144432738437
+    },
+    {
+      "id": "streams_mcs3_nss8_p6",
+      "mean_ber": 0.4396328249318035,
+      "effective": 0.10344215310716123
+    },
+    {
+      "id": "scalar_mcs4_g0",
+      "mean_ber": 0.5,
+      "effective": 0
+    },
+    {
+      "id": "scalar_mcs4_g1e-08",
+      "mean_ber": 0.49998215875873742,
+      "effective": 1E-8
+    },
+    {
+      "id": "scalar_mcs4_g1.77827941e-08",
+      "mean_ber": 0.499976208322295,
+      "effective": 1.7782794100389228E-8
+    },
+    {
+      "id": "scalar_mcs4_g3.16227766e-08",
+      "mean_ber": 0.49996827328762433,
+      "effective": 3.1622776601683792E-8
+    },
+    {
+      "id": "scalar_mcs4_g5.62341325e-08",
+      "mean_ber": 0.49995769174848503,
+      "effective": 5.6234132519034912E-8
+    },
+    {
+      "id": "scalar_mcs4_g1e-07",
+      "mean_ber": 0.49994358103844816,
+      "effective": 1E-7
+    },
+    {
+      "id": "scalar_mcs4_g1.77827941e-07",
+      "mean_ber": 0.49992476410227216,
+      "effective": 1.7782794100389227E-7
+    },
+    {
+      "id": "scalar_mcs4_g3.16227766e-07",
+      "mean_ber": 0.49989967131004343,
+      "effective": 3.1622776601683792E-7
+    },
+    {
+      "id": "scalar_mcs4_g5.62341325e-07",
+      "mean_ber": 0.499866209523023,
+      "effective": 5.62341325190349E-7
+    },
+    {
+      "id": "scalar_mcs4_g1e-06",
+      "mean_ber": 0.49982158748728439,
+      "effective": 1E-6
+    },
+    {
+      "id": "scalar_mcs4_g1.77827941e-06",
+      "mean_ber": 0.49976208298560088,
+      "effective": 1.7782794100389229E-6
+    },
+    {
+      "id": "scalar_mcs4_g3.16227766e-06",
+      "mean_ber": 0.49968273231340204,
+      "effective": 3.1622776601683792E-6
+    },
+    {
+      "id": "scalar_mcs4_g5.62341325e-06",
+      "mean_ber": 0.49957691615014566,
+      "effective": 5.62341325190349E-6
+    },
+    {
+      "id": "scalar_mcs4_g1e-05",
+      "mean_ber": 0.49943580721941505,
+      "effective": 1E-5
+    },
+    {
+      "id": "scalar_mcs4_g1.77827941e-05",
+      "mean_ber": 0.49924763351723461,
+      "effective": 1.7782794100389229E-5
+    },
+    {
+      "id": "scalar_mcs4_g3.16227766e-05",
+      "mean_ber": 0.4989966953024097,
+      "effective": 3.1622776601683795E-5
+    },
+    {
+      "id": "scalar_mcs4_g5.62341325e-05",
+      "mean_ber": 0.49866205302568362,
+      "effective": 5.6234132519034907E-5
+    },
+    {
+      "id": "scalar_mcs4_g0.0001",
+      "mean_ber": 0.49821577479523727,
+      "effective": 0.0001
+    },
+    {
+      "id": "scalar_mcs4_g0.000177827941",
+      "mean_ber": 0.49762059255629437,
+      "effective": 0.0001778279410038923
+    },
+    {
+      "id": "scalar_mcs4_g0.000316227766",
+      "mean_ber": 0.49682676049918545,
+      "effective": 0.00031622776601683794
+    },
+    {
+      "id": "scalar_mcs4_g0.000562341325",
+      "mean_ber": 0.49576782766961092,
+      "effective": 0.0005623413251903491
+    },
+    {
+      "id": "scalar_mcs4_g0.001",
+      "mean_ber": 0.49435491080574961,
+      "effective": 0.001
+    },
+    {
+      "id": "scalar_mcs4_g0.00177827941",
+      "mean_ber": 0.49246884518757145,
+      "effective": 0.0017782794100389228
+    },
+    {
+      "id": "scalar_mcs4_g0.00316227766",
+      "mean_ber": 0.48994922030970589,
+      "effective": 0.0031622776601683794
+    },
+    {
+      "id": "scalar_mcs4_g0.00562341325",
+      "mean_ber": 0.4865786006645107,
+      "effective": 0.005623413251903491
+    },
+    {
+      "id": "scalar_mcs4_g0.01",
+      "mean_ber": 0.48205882641715786,
+      "effective": 0.01
+    },
+    {
+      "id": "scalar_mcs4_g0.0177827941",
+      "mean_ber": 0.47597347562123321,
+      "effective": 0.017782794100389229
+    },
+    {
+      "id": "scalar_mcs4_g0.0316227766",
+      "mean_ber": 0.467725233472171,
+      "effective": 0.031622776601683791
+    },
+    {
+      "id": "scalar_mcs4_g0.0562341325",
+      "mean_ber": 0.45642851156771441,
+      "effective": 0.056234132519034905
+    },
+    {
+      "id": "scalar_mcs4_g0.1",
+      "mean_ber": 0.44073220135499208,
+      "effective": 0.1
+    },
+    {
+      "id": "scalar_mcs4_g0.177827941",
+      "mean_ber": 0.41858031004246493,
+      "effective": 0.17782794100389226
+    },
+    {
+      "id": "scalar_mcs4_g0.316227766",
+      "mean_ber": 0.38710785931541941,
+      "effective": 0.31622776601683794
+    },
+    {
+      "id": "scalar_mcs4_g0.562341325",
+      "mean_ber": 0.34340264479246385,
+      "effective": 0.56234132519034907
+    },
+    {
+      "id": "scalar_mcs4_g1",
+      "mean_ber": 0.28728002614203285,
+      "effective": 1
+    },
+    {
+      "id": "scalar_mcs4_g1.77827941",
+      "mean_ber": 0.22463956070489363,
+      "effective": 1.7782794100389228
+    },
+    {
+      "id": "scalar_mcs4_g3.16227766",
+      "mean_ber": 0.16417262916453548,
+      "effective": 3.1622776601683795
+    },
+    {
+      "id": "scalar_mcs4_g5.62341325",
+      "mean_ber": 0.10870837741402516,
+      "effective": 5.6234132519034912
+    },
+    {
+      "id": "scalar_mcs4_g10",
+      "mean_ber": 0.058992725267914395,
+      "effective": 10
+    },
+    {
+      "id": "scalar_mcs4_g17.7827941",
+      "mean_ber": 0.022241469555968549,
+      "effective": 17.782794100389228
+    },
+    {
+      "id": "scalar_mcs4_g31.6227766",
+      "mean_ber": 0.0044654003608453341,
+      "effective": 31.622776601683793
+    },
+    {
+      "id": "scalar_mcs4_g56.2341325",
+      "mean_ber": 0.00029909725136937216,
+      "effective": 56.234132519034908
+    },
+    {
+      "id": "scalar_mcs4_g100",
+      "mean_ber": 2.90408116164153E-6,
+      "effective": 100
+    },
+    {
+      "id": "scalar_mcs4_g177.827941",
+      "mean_ber": 9.2477133495810946E-10,
+      "effective": 177.82794100389228
+    },
+    {
+      "id": "scalar_mcs4_g316.227766",
+      "mean_ber": 6.84296802197109E-16,
+      "effective": 316.2277660168379
+    },
+    {
+      "id": "scalar_mcs4_g562.341325",
+      "mean_ber": 1.0580439070871094E-26,
+      "effective": 562.341325190349
+    },
+    {
+      "id": "scalar_mcs4_g1000",
+      "mean_ber": 7.8318284391096366E-46,
+      "effective": 1000
+    },
+    {
+      "id": "scalar_mcs4_g1778.27941",
+      "mean_ber": 9.322881911869729E-80,
+      "effective": 1778.2794100389228
+    },
+    {
+      "id": "scalar_mcs4_g3162.27766",
+      "mean_ber": 5.4802268884862192E-140,
+      "effective": 3162.2776601683795
+    },
+    {
+      "id": "scalar_mcs4_g5623.41325",
+      "mean_ber": 5.3497878637205917E-247,
+      "effective": 5623.4132519034911
+    },
+    {
+      "id": "scalar_mcs4_g10000",
+      "mean_ber": 0,
+      "effective": 10000
+    },
+    {
+      "id": "streams_mcs4_nss1_p1",
+      "mean_ber": 0.16948750877087035,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs4_nss1_p2",
+      "mean_ber": 7.8318284391096366E-46,
+      "effective": 1000
+    },
+    {
+      "id": "streams_mcs4_nss1_p3",
+      "mean_ber": 0.25191737058128688,
+      "effective": 1.3864068967712009
+    },
+    {
+      "id": "streams_mcs4_nss1_p4",
+      "mean_ber": 0.14801342939823631,
+      "effective": 3.7216607918083433
+    },
+    {
+      "id": "streams_mcs4_nss1_p5",
+      "mean_ber": 0.14599338596065409,
+      "effective": 3.7992862933727385
+    },
+    {
+      "id": "streams_mcs4_nss1_p6",
+      "mean_ber": 0.017062599454428229,
+      "effective": 20
+    },
+    {
+      "id": "streams_mcs4_nss2_p1",
+      "mean_ber": 0.16948750877087043,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs4_nss2_p2",
+      "mean_ber": 0.24717745540287478,
+      "effective": 1.4475843990138124
+    },
+    {
+      "id": "streams_mcs4_nss2_p3",
+      "mean_ber": 0.25191737058128688,
+      "effective": 1.3864068967712009
+    },
+    {
+      "id": "streams_mcs4_nss2_p4",
+      "mean_ber": 0.26035009413280774,
+      "effective": 1.283686217916076
+    },
+    {
+      "id": "streams_mcs4_nss2_p5",
+      "mean_ber": 0.24229909316842688,
+      "effective": 1.5133469980626919
+    },
+    {
+      "id": "streams_mcs4_nss2_p6",
+      "mean_ber": 0.25853129972721423,
+      "effective": 1.3052109033627377
+    },
+    {
+      "id": "streams_mcs4_nss3_p1",
+      "mean_ber": 0.16948750877087043,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs4_nss3_p2",
+      "mean_ber": 0.2605449789825941,
+      "effective": 1.2813996420691545
+    },
+    {
+      "id": "streams_mcs4_nss3_p3",
+      "mean_ber": 0.25191737058128688,
+      "effective": 1.3864068967712009
+    },
+    {
+      "id": "streams_mcs4_nss3_p4",
+      "mean_ber": 0.22978327328521489,
+      "effective": 1.6964137807808461
+    },
+    {
+      "id": "streams_mcs4_nss3_p5",
+      "mean_ber": 0.24155627500005705,
+      "effective": 1.5236212461395722
+    },
+    {
+      "id": "streams_mcs4_nss3_p6",
+      "mean_ber": 0.3390208664848095,
+      "effective": 0.59092222353667423
+    },
+    {
+      "id": "streams_mcs4_nss4_p1",
+      "mean_ber": 0.1694875087708704,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs4_nss4_p2",
+      "mean_ber": 0.24851995935716389,
+      "effective": 1.4299923392833589
+    },
+    {
+      "id": "streams_mcs4_nss4_p3",
+      "mean_ber": 0.25191737058128683,
+      "effective": 1.3864068967712022
+    },
+    {
+      "id": "streams_mcs4_nss4_p4",
+      "mean_ber": 0.21362452766019863,
+      "effective": 1.9683952036585772
+    },
+    {
+      "id": "streams_mcs4_nss4_p5",
+      "mean_ber": 0.2488222026085,
+      "effective": 1.4260609951562397
+    },
+    {
+      "id": "streams_mcs4_nss4_p6",
+      "mean_ber": 0.37926564986360711,
+      "effective": 0.35558862636132649
+    },
+    {
+      "id": "streams_mcs4_nss8_p1",
+      "mean_ber": 0.16948750877087043,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs4_nss8_p2",
+      "mean_ber": 0.25160507918345959,
+      "effective": 1.3903584943192016
+    },
+    {
+      "id": "streams_mcs4_nss8_p3",
+      "mean_ber": 0.25191737058128688,
+      "effective": 1.3864068967712009
+    },
+    {
+      "id": "streams_mcs4_nss8_p4",
+      "mean_ber": 0.26998689151057464,
+      "effective": 1.1749924243466188
+    },
+    {
+      "id": "streams_mcs4_nss8_p5",
+      "mean_ber": 0.28929243809782251,
+      "effective": 0.98112114022627062
+    },
+    {
+      "id": "streams_mcs4_nss8_p6",
+      "mean_ber": 0.4396328249318035,
+      "effective": 0.10344215310716123
+    },
+    {
+      "id": "scalar_mcs5_g0",
+      "mean_ber": 0.5,
+      "effective": 0
+    },
+    {
+      "id": "scalar_mcs5_g1e-08",
+      "mean_ber": 0.49998839248755073,
+      "effective": 1E-8
+    },
+    {
+      "id": "scalar_mcs5_g1.77827941e-08",
+      "mean_ber": 0.49998452113328956,
+      "effective": 1.7782794100389228E-8
+    },
+    {
+      "id": "scalar_mcs5_g3.16227766e-08",
+      "mean_ber": 0.49997935859929427,
+      "effective": 3.1622776601683792E-8
+    },
+    {
+      "id": "scalar_mcs5_g5.62341325e-08",
+      "mean_ber": 0.49997247424929059,
+      "effective": 5.6234132519034912E-8
+    },
+    {
+      "id": "scalar_mcs5_g1e-07",
+      "mean_ber": 0.49996329382035781,
+      "effective": 1E-7
+    },
+    {
+      "id": "scalar_mcs5_g1.77827941e-07",
+      "mean_ber": 0.49995105152006342,
+      "effective": 1.7782794100389227E-7
+    },
+    {
+      "id": "scalar_mcs5_g3.16227766e-07",
+      "mean_ber": 0.49993472614655188,
+      "effective": 3.1622776601683792E-7
+    },
+    {
+      "id": "scalar_mcs5_g5.62341325e-07",
+      "mean_ber": 0.499912955902335,
+      "effective": 5.62341325190349E-7
+    },
+    {
+      "id": "scalar_mcs5_g1e-06",
+      "mean_ber": 0.49988392479433713,
+      "effective": 1E-6
+    },
+    {
+      "id": "scalar_mcs5_g1.77827941e-06",
+      "mean_ber": 0.49984521114041297,
+      "effective": 1.7782794100389229E-6
+    },
+    {
+      "id": "scalar_mcs5_g3.16227766e-06",
+      "mean_ber": 0.49979358553649478,
+      "effective": 3.1622776601683792E-6
+    },
+    {
+      "id": "scalar_mcs5_g5.62341325e-06",
+      "mean_ber": 0.49972474141050038,
+      "effective": 5.62341325190349E-6
+    },
+    {
+      "id": "scalar_mcs5_g1e-05",
+      "mean_ber": 0.49963293563680883,
+      "effective": 1E-5
+    },
+    {
+      "id": "scalar_mcs5_g1.77827941e-05",
+      "mean_ber": 0.49951050911394,
+      "effective": 1.7782794100389229E-5
+    },
+    {
+      "id": "scalar_mcs5_g3.16227766e-05",
+      "mean_ber": 0.49934724703200722,
+      "effective": 3.1622776601683795E-5
+    },
+    {
+      "id": "scalar_mcs5_g5.62341325e-05",
+      "mean_ber": 0.49912952479744249,
+      "effective": 5.6234132519034907E-5
+    },
+    {
+      "id": "scalar_mcs5_g0.0001",
+      "mean_ber": 0.49883916678660184,
+      "effective": 0.0001
+    },
+    {
+      "id": "scalar_mcs5_g0.000177827941",
+      "mean_ber": 0.49845191897491947,
+      "effective": 0.0001778279410038923
+    },
+    {
+      "id": "scalar_mcs5_g0.000316227766",
+      "mean_ber": 0.497935399143789,
+      "effective": 0.00031622776601683794
+    },
+    {
+      "id": "scalar_mcs5_g0.000562341325",
+      "mean_ber": 0.49724633265740775,
+      "effective": 0.0005623413251903491
+    },
+    {
+      "id": "scalar_mcs5_g0.001",
+      "mean_ber": 0.4963267936352998,
+      "effective": 0.001
+    },
+    {
+      "id": "scalar_mcs5_g0.00177827941",
+      "mean_ber": 0.49509902145407175,
+      "effective": 0.0017782794100389228
+    },
+    {
+      "id": "scalar_mcs5_g0.00316227766",
+      "mean_ber": 0.49345810843332166,
+      "effective": 0.0031622776601683794
+    },
+    {
+      "id": "scalar_mcs5_g0.00562341325",
+      "mean_ber": 0.49126132331756267,
+      "effective": 0.005623413251903491
+    },
+    {
+      "id": "scalar_mcs5_g0.01",
+      "mean_ber": 0.48831177561516287,
+      "effective": 0.01
+    },
+    {
+      "id": "scalar_mcs5_g0.0177827941",
+      "mean_ber": 0.48433204955888781,
+      "effective": 0.017782794100389229
+    },
+    {
+      "id": "scalar_mcs5_g0.0316227766",
+      "mean_ber": 0.4789197540255814,
+      "effective": 0.031622776601683791
+    },
+    {
+      "id": "scalar_mcs5_g0.0562341325",
+      "mean_ber": 0.47147225795023973,
+      "effective": 0.056234132519034905
+    },
+    {
+      "id": "scalar_mcs5_g0.1",
+      "mean_ber": 0.4610698096690673,
+      "effective": 0.1
+    },
+    {
+      "id": "scalar_mcs5_g0.177827941",
+      "mean_ber": 0.44634536321567891,
+      "effective": 0.17782794100389226
+    },
+    {
+      "id": "scalar_mcs5_g0.316227766",
+      "mean_ber": 0.42550902303137955,
+      "effective": 0.31622776601683794
+    },
+    {
+      "id": "scalar_mcs5_g0.562341325",
+      "mean_ber": 0.396882240111228,
+      "effective": 0.56234132519034907
+    },
+    {
+      "id": "scalar_mcs5_g1",
+      "mean_ber": 0.35986269696117196,
+      "effective": 1
+    },
+    {
+      "id": "scalar_mcs5_g1.77827941",
+      "mean_ber": 0.31484820944282266,
+      "effective": 1.7782794100389228
+    },
+    {
+      "id": "scalar_mcs5_g3.16227766",
+      "mean_ber": 0.26250554790029873,
+      "effective": 3.1622776601683795
+    },
+    {
+      "id": "scalar_mcs5_g5.62341325",
+      "mean_ber": 0.20614405510446174,
+      "effective": 5.6234132519034912
+    },
+    {
+      "id": "scalar_mcs5_g10",
+      "mean_ber": 0.1525464332754716,
+      "effective": 10
+    },
+    {
+      "id": "scalar_mcs5_g17.7827941",
+      "mean_ber": 0.10570093028948152,
+      "effective": 17.782794100389228
+    },
+    {
+      "id": "scalar_mcs5_g31.6227766",
+      "mean_ber": 0.064158732654277489,
+      "effective": 31.622776601683793
+    },
+    {
+      "id": "scalar_mcs5_g56.2341325",
+      "mean_ber": 0.029678829854941798,
+      "effective": 56.234132519034908
+    },
+    {
+      "id": "scalar_mcs5_g100",
+      "mean_ber": 0.0084864301059202289,
+      "effective": 100
+    },
+    {
+      "id": "scalar_mcs5_g177.827941",
+      "mean_ber": 0.0010542267887452418,
+      "effective": 177.82794100389228
+    },
+    {
+      "id": "scalar_mcs5_g316.227766",
+      "mean_ber": 3.0400924009309178E-5,
+      "effective": 316.2277660168379
+    },
+    {
+      "id": "scalar_mcs5_g562.341325",
+      "mean_ber": 6.6558941333114942E-8,
+      "effective": 562.341325190349
+    },
+    {
+      "id": "scalar_mcs5_g1000",
+      "mean_ber": 1.5097568082887983E-12,
+      "effective": 1000
+    },
+    {
+      "id": "scalar_mcs5_g1778.27941",
+      "mean_ber": 1.0231253669603542E-20,
+      "effective": 1778.2794100389228
+    },
+    {
+      "id": "scalar_mcs5_g3162.27766",
+      "mean_ber": 3.7675363571511723E-35,
+      "effective": 3162.2776601683795
+    },
+    {
+      "id": "scalar_mcs5_g5623.41325",
+      "mean_ber": 1.0076217536764407E-60,
+      "effective": 5623.4132519034911
+    },
+    {
+      "id": "scalar_mcs5_g10000",
+      "mean_ber": 4.2032106491676979E-106,
+      "effective": 10000
+    },
+    {
+      "id": "streams_mcs5_nss1_p1",
+      "mean_ber": 0.26754673183943894,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs5_nss1_p2",
+      "mean_ber": 1.5097568082887985E-12,
+      "effective": 1000
+    },
+    {
+      "id": "streams_mcs5_nss1_p3",
+      "mean_ber": 0.28094341989480048,
+      "effective": 2.6021676485149881
+    },
+    {
+      "id": "streams_mcs5_nss1_p4",
+      "mean_ber": 0.27810901842874008,
+      "effective": 2.6825109997936436
+    },
+    {
+      "id": "streams_mcs5_nss1_p5",
+      "mean_ber": 0.46233490942479638,
+      "effective": 0.0941460997404298
+    },
+    {
+      "id": "streams_mcs5_nss1_p6",
+      "mean_ber": 0.09684523272373731,
+      "effective": 20
+    },
+    {
+      "id": "streams_mcs5_nss2_p1",
+      "mean_ber": 0.267546731839439,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs5_nss2_p2",
+      "mean_ber": 0.24816339681840488,
+      "effective": 3.6665615243515628
+    },
+    {
+      "id": "streams_mcs5_nss2_p3",
+      "mean_ber": 0.28094341989480048,
+      "effective": 2.6021676485149881
+    },
+    {
+      "id": "streams_mcs5_nss2_p4",
+      "mean_ber": 0.32892519496485356,
+      "effective": 1.5007223268698184
+    },
+    {
+      "id": "streams_mcs5_nss2_p5",
+      "mean_ber": 0.37759898555626353,
+      "effective": 0.7711192488479709
+    },
+    {
+      "id": "streams_mcs5_nss2_p6",
+      "mean_ber": 0.29842261636186862,
+      "effective": 2.147699998031297
+    },
+    {
+      "id": "streams_mcs5_nss3_p1",
+      "mean_ber": 0.267546731839439,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs5_nss3_p2",
+      "mean_ber": 0.28539649686599389,
+      "effective": 2.4798443630750953
+    },
+    {
+      "id": "streams_mcs5_nss3_p3",
+      "mean_ber": 0.28094341989480048,
+      "effective": 2.6021676485149881
+    },
+    {
+      "id": "streams_mcs5_nss3_p4",
+      "mean_ber": 0.28581968993046525,
+      "effective": 2.4684614693424289
+    },
+    {
+      "id": "streams_mcs5_nss3_p5",
+      "mean_ber": 0.29855416420833358,
+      "effective": 2.1445306846200953
+    },
+    {
+      "id": "streams_mcs5_nss3_p6",
+      "mean_ber": 0.36561507757457906,
+      "effective": 0.92154937579666918
+    },
+    {
+      "id": "streams_mcs5_nss4_p1",
+      "mean_ber": 0.26754673183943906,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs5_nss4_p2",
+      "mean_ber": 0.27748575914533713,
+      "effective": 2.7004438646497868
+    },
+    {
+      "id": "streams_mcs5_nss4_p3",
+      "mean_ber": 0.28094341989480048,
+      "effective": 2.6021676485149881
+    },
+    {
+      "id": "streams_mcs5_nss4_p4",
+      "mean_ber": 0.25891978286223344,
+      "effective": 3.2822435033593056
+    },
+    {
+      "id": "streams_mcs5_nss4_p5",
+      "mean_ber": 0.27586278151023325,
+      "effective": 2.7475993402066048
+    },
+    {
+      "id": "streams_mcs5_nss4_p6",
+      "mean_ber": 0.39921130818093431,
+      "effective": 0.53964232015985658
+    },
+    {
+      "id": "streams_mcs5_nss8_p1",
+      "mean_ber": 0.267546731839439,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs5_nss8_p2",
+      "mean_ber": 0.28222902415624251,
+      "effective": 2.5663698307812433
+    },
+    {
+      "id": "streams_mcs5_nss8_p3",
+      "mean_ber": 0.28094341989480048,
+      "effective": 2.6021676485149881
+    },
+    {
+      "id": "streams_mcs5_nss8_p4",
+      "mean_ber": 0.32750300349019612,
+      "effective": 1.5272422131061121
+    },
+    {
+      "id": "streams_mcs5_nss8_p5",
+      "mean_ber": 0.29645426062522651,
+      "effective": 2.1955498932758157
+    },
+    {
+      "id": "streams_mcs5_nss8_p6",
+      "mean_ber": 0.44960565409046716,
+      "effective": 0.15911959263426245
+    },
+    {
+      "id": "scalar_mcs6_g0",
+      "mean_ber": 0.5,
+      "effective": 0
+    },
+    {
+      "id": "scalar_mcs6_g1e-08",
+      "mean_ber": 0.49998839248755073,
+      "effective": 1E-8
+    },
+    {
+      "id": "scalar_mcs6_g1.77827941e-08",
+      "mean_ber": 0.49998452113328956,
+      "effective": 1.7782794100389228E-8
+    },
+    {
+      "id": "scalar_mcs6_g3.16227766e-08",
+      "mean_ber": 0.49997935859929427,
+      "effective": 3.1622776601683792E-8
+    },
+    {
+      "id": "scalar_mcs6_g5.62341325e-08",
+      "mean_ber": 0.49997247424929059,
+      "effective": 5.6234132519034912E-8
+    },
+    {
+      "id": "scalar_mcs6_g1e-07",
+      "mean_ber": 0.49996329382035781,
+      "effective": 1E-7
+    },
+    {
+      "id": "scalar_mcs6_g1.77827941e-07",
+      "mean_ber": 0.49995105152006342,
+      "effective": 1.7782794100389227E-7
+    },
+    {
+      "id": "scalar_mcs6_g3.16227766e-07",
+      "mean_ber": 0.49993472614655188,
+      "effective": 3.1622776601683792E-7
+    },
+    {
+      "id": "scalar_mcs6_g5.62341325e-07",
+      "mean_ber": 0.499912955902335,
+      "effective": 5.62341325190349E-7
+    },
+    {
+      "id": "scalar_mcs6_g1e-06",
+      "mean_ber": 0.49988392479433713,
+      "effective": 1E-6
+    },
+    {
+      "id": "scalar_mcs6_g1.77827941e-06",
+      "mean_ber": 0.49984521114041297,
+      "effective": 1.7782794100389229E-6
+    },
+    {
+      "id": "scalar_mcs6_g3.16227766e-06",
+      "mean_ber": 0.49979358553649478,
+      "effective": 3.1622776601683792E-6
+    },
+    {
+      "id": "scalar_mcs6_g5.62341325e-06",
+      "mean_ber": 0.49972474141050038,
+      "effective": 5.62341325190349E-6
+    },
+    {
+      "id": "scalar_mcs6_g1e-05",
+      "mean_ber": 0.49963293563680883,
+      "effective": 1E-5
+    },
+    {
+      "id": "scalar_mcs6_g1.77827941e-05",
+      "mean_ber": 0.49951050911394,
+      "effective": 1.7782794100389229E-5
+    },
+    {
+      "id": "scalar_mcs6_g3.16227766e-05",
+      "mean_ber": 0.49934724703200722,
+      "effective": 3.1622776601683795E-5
+    },
+    {
+      "id": "scalar_mcs6_g5.62341325e-05",
+      "mean_ber": 0.49912952479744249,
+      "effective": 5.6234132519034907E-5
+    },
+    {
+      "id": "scalar_mcs6_g0.0001",
+      "mean_ber": 0.49883916678660184,
+      "effective": 0.0001
+    },
+    {
+      "id": "scalar_mcs6_g0.000177827941",
+      "mean_ber": 0.49845191897491947,
+      "effective": 0.0001778279410038923
+    },
+    {
+      "id": "scalar_mcs6_g0.000316227766",
+      "mean_ber": 0.497935399143789,
+      "effective": 0.00031622776601683794
+    },
+    {
+      "id": "scalar_mcs6_g0.000562341325",
+      "mean_ber": 0.49724633265740775,
+      "effective": 0.0005623413251903491
+    },
+    {
+      "id": "scalar_mcs6_g0.001",
+      "mean_ber": 0.4963267936352998,
+      "effective": 0.001
+    },
+    {
+      "id": "scalar_mcs6_g0.00177827941",
+      "mean_ber": 0.49509902145407175,
+      "effective": 0.0017782794100389228
+    },
+    {
+      "id": "scalar_mcs6_g0.00316227766",
+      "mean_ber": 0.49345810843332166,
+      "effective": 0.0031622776601683794
+    },
+    {
+      "id": "scalar_mcs6_g0.00562341325",
+      "mean_ber": 0.49126132331756267,
+      "effective": 0.005623413251903491
+    },
+    {
+      "id": "scalar_mcs6_g0.01",
+      "mean_ber": 0.48831177561516287,
+      "effective": 0.01
+    },
+    {
+      "id": "scalar_mcs6_g0.0177827941",
+      "mean_ber": 0.48433204955888781,
+      "effective": 0.017782794100389229
+    },
+    {
+      "id": "scalar_mcs6_g0.0316227766",
+      "mean_ber": 0.4789197540255814,
+      "effective": 0.031622776601683791
+    },
+    {
+      "id": "scalar_mcs6_g0.0562341325",
+      "mean_ber": 0.47147225795023973,
+      "effective": 0.056234132519034905
+    },
+    {
+      "id": "scalar_mcs6_g0.1",
+      "mean_ber": 0.4610698096690673,
+      "effective": 0.1
+    },
+    {
+      "id": "scalar_mcs6_g0.177827941",
+      "mean_ber": 0.44634536321567891,
+      "effective": 0.17782794100389226
+    },
+    {
+      "id": "scalar_mcs6_g0.316227766",
+      "mean_ber": 0.42550902303137955,
+      "effective": 0.31622776601683794
+    },
+    {
+      "id": "scalar_mcs6_g0.562341325",
+      "mean_ber": 0.396882240111228,
+      "effective": 0.56234132519034907
+    },
+    {
+      "id": "scalar_mcs6_g1",
+      "mean_ber": 0.35986269696117196,
+      "effective": 1
+    },
+    {
+      "id": "scalar_mcs6_g1.77827941",
+      "mean_ber": 0.31484820944282266,
+      "effective": 1.7782794100389228
+    },
+    {
+      "id": "scalar_mcs6_g3.16227766",
+      "mean_ber": 0.26250554790029873,
+      "effective": 3.1622776601683795
+    },
+    {
+      "id": "scalar_mcs6_g5.62341325",
+      "mean_ber": 0.20614405510446174,
+      "effective": 5.6234132519034912
+    },
+    {
+      "id": "scalar_mcs6_g10",
+      "mean_ber": 0.1525464332754716,
+      "effective": 10
+    },
+    {
+      "id": "scalar_mcs6_g17.7827941",
+      "mean_ber": 0.10570093028948152,
+      "effective": 17.782794100389228
+    },
+    {
+      "id": "scalar_mcs6_g31.6227766",
+      "mean_ber": 0.064158732654277489,
+      "effective": 31.622776601683793
+    },
+    {
+      "id": "scalar_mcs6_g56.2341325",
+      "mean_ber": 0.029678829854941798,
+      "effective": 56.234132519034908
+    },
+    {
+      "id": "scalar_mcs6_g100",
+      "mean_ber": 0.0084864301059202289,
+      "effective": 100
+    },
+    {
+      "id": "scalar_mcs6_g177.827941",
+      "mean_ber": 0.0010542267887452418,
+      "effective": 177.82794100389228
+    },
+    {
+      "id": "scalar_mcs6_g316.227766",
+      "mean_ber": 3.0400924009309178E-5,
+      "effective": 316.2277660168379
+    },
+    {
+      "id": "scalar_mcs6_g562.341325",
+      "mean_ber": 6.6558941333114942E-8,
+      "effective": 562.341325190349
+    },
+    {
+      "id": "scalar_mcs6_g1000",
+      "mean_ber": 1.5097568082887983E-12,
+      "effective": 1000
+    },
+    {
+      "id": "scalar_mcs6_g1778.27941",
+      "mean_ber": 1.0231253669603542E-20,
+      "effective": 1778.2794100389228
+    },
+    {
+      "id": "scalar_mcs6_g3162.27766",
+      "mean_ber": 3.7675363571511723E-35,
+      "effective": 3162.2776601683795
+    },
+    {
+      "id": "scalar_mcs6_g5623.41325",
+      "mean_ber": 1.0076217536764407E-60,
+      "effective": 5623.4132519034911
+    },
+    {
+      "id": "scalar_mcs6_g10000",
+      "mean_ber": 4.2032106491676979E-106,
+      "effective": 10000
+    },
+    {
+      "id": "streams_mcs6_nss1_p1",
+      "mean_ber": 0.26754673183943894,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs6_nss1_p2",
+      "mean_ber": 1.5097568082887985E-12,
+      "effective": 1000
+    },
+    {
+      "id": "streams_mcs6_nss1_p3",
+      "mean_ber": 0.28094341989480048,
+      "effective": 2.6021676485149881
+    },
+    {
+      "id": "streams_mcs6_nss1_p4",
+      "mean_ber": 0.28374006154573123,
+      "effective": 2.5247987989290022
+    },
+    {
+      "id": "streams_mcs6_nss1_p5",
+      "mean_ber": 0.35361056612689157,
+      "effective": 1.0901592845266279
+    },
+    {
+      "id": "streams_mcs6_nss1_p6",
+      "mean_ber": 0.09684523272373731,
+      "effective": 20
+    },
+    {
+      "id": "streams_mcs6_nss2_p1",
+      "mean_ber": 0.267546731839439,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs6_nss2_p2",
+      "mean_ber": 0.24816339681840488,
+      "effective": 3.6665615243515628
+    },
+    {
+      "id": "streams_mcs6_nss2_p3",
+      "mean_ber": 0.28094341989480048,
+      "effective": 2.6021676485149881
+    },
+    {
+      "id": "streams_mcs6_nss2_p4",
+      "mean_ber": 0.31948279482124803,
+      "effective": 1.6831273361587398
+    },
+    {
+      "id": "streams_mcs6_nss2_p5",
+      "mean_ber": 0.29449054052465218,
+      "effective": 2.2440948152988085
+    },
+    {
+      "id": "streams_mcs6_nss2_p6",
+      "mean_ber": 0.29842261636186862,
+      "effective": 2.147699998031297
+    },
+    {
+      "id": "streams_mcs6_nss3_p1",
+      "mean_ber": 0.267546731839439,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs6_nss3_p2",
+      "mean_ber": 0.28539649686599389,
+      "effective": 2.4798443630750953
+    },
+    {
+      "id": "streams_mcs6_nss3_p3",
+      "mean_ber": 0.28094341989480048,
+      "effective": 2.6021676485149881
+    },
+    {
+      "id": "streams_mcs6_nss3_p4",
+      "mean_ber": 0.19974095130747677,
+      "effective": 6.0062215484064829
+    },
+    {
+      "id": "streams_mcs6_nss3_p5",
+      "mean_ber": 0.30533123987434146,
+      "effective": 1.9859755838872157
+    },
+    {
+      "id": "streams_mcs6_nss3_p6",
+      "mean_ber": 0.36561507757457906,
+      "effective": 0.92154937579666918
+    },
+    {
+      "id": "streams_mcs6_nss4_p1",
+      "mean_ber": 0.26754673183943906,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs6_nss4_p2",
+      "mean_ber": 0.27748575914533713,
+      "effective": 2.7004438646497868
+    },
+    {
+      "id": "streams_mcs6_nss4_p3",
+      "mean_ber": 0.28094341989480048,
+      "effective": 2.6021676485149881
+    },
+    {
+      "id": "streams_mcs6_nss4_p4",
+      "mean_ber": 0.25565839800345508,
+      "effective": 3.3947886854951461
+    },
+    {
+      "id": "streams_mcs6_nss4_p5",
+      "mean_ber": 0.31009320294101061,
+      "effective": 1.8799331853019596
+    },
+    {
+      "id": "streams_mcs6_nss4_p6",
+      "mean_ber": 0.39921130818093431,
+      "effective": 0.53964232015985658
+    },
+    {
+      "id": "streams_mcs6_nss8_p1",
+      "mean_ber": 0.267546731839439,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs6_nss8_p2",
+      "mean_ber": 0.28222902415624251,
+      "effective": 2.5663698307812433
+    },
+    {
+      "id": "streams_mcs6_nss8_p3",
+      "mean_ber": 0.28094341989480048,
+      "effective": 2.6021676485149881
+    },
+    {
+      "id": "streams_mcs6_nss8_p4",
+      "mean_ber": 0.26562674070437381,
+      "effective": 3.0609484396234388
+    },
+    {
+      "id": "streams_mcs6_nss8_p5",
+      "mean_ber": 0.30449744752639457,
+      "effective": 2.0049914409182739
+    },
+    {
+      "id": "streams_mcs6_nss8_p6",
+      "mean_ber": 0.44960565409046716,
+      "effective": 0.15911959263426245
+    },
+    {
+      "id": "scalar_mcs7_g0",
+      "mean_ber": 0.5,
+      "effective": 0
+    },
+    {
+      "id": "scalar_mcs7_g1e-08",
+      "mean_ber": 0.49998839248755073,
+      "effective": 1E-8
+    },
+    {
+      "id": "scalar_mcs7_g1.77827941e-08",
+      "mean_ber": 0.49998452113328956,
+      "effective": 1.7782794100389228E-8
+    },
+    {
+      "id": "scalar_mcs7_g3.16227766e-08",
+      "mean_ber": 0.49997935859929427,
+      "effective": 3.1622776601683792E-8
+    },
+    {
+      "id": "scalar_mcs7_g5.62341325e-08",
+      "mean_ber": 0.49997247424929059,
+      "effective": 5.6234132519034912E-8
+    },
+    {
+      "id": "scalar_mcs7_g1e-07",
+      "mean_ber": 0.49996329382035781,
+      "effective": 1E-7
+    },
+    {
+      "id": "scalar_mcs7_g1.77827941e-07",
+      "mean_ber": 0.49995105152006342,
+      "effective": 1.7782794100389227E-7
+    },
+    {
+      "id": "scalar_mcs7_g3.16227766e-07",
+      "mean_ber": 0.49993472614655188,
+      "effective": 3.1622776601683792E-7
+    },
+    {
+      "id": "scalar_mcs7_g5.62341325e-07",
+      "mean_ber": 0.499912955902335,
+      "effective": 5.62341325190349E-7
+    },
+    {
+      "id": "scalar_mcs7_g1e-06",
+      "mean_ber": 0.49988392479433713,
+      "effective": 1E-6
+    },
+    {
+      "id": "scalar_mcs7_g1.77827941e-06",
+      "mean_ber": 0.49984521114041297,
+      "effective": 1.7782794100389229E-6
+    },
+    {
+      "id": "scalar_mcs7_g3.16227766e-06",
+      "mean_ber": 0.49979358553649478,
+      "effective": 3.1622776601683792E-6
+    },
+    {
+      "id": "scalar_mcs7_g5.62341325e-06",
+      "mean_ber": 0.49972474141050038,
+      "effective": 5.62341325190349E-6
+    },
+    {
+      "id": "scalar_mcs7_g1e-05",
+      "mean_ber": 0.49963293563680883,
+      "effective": 1E-5
+    },
+    {
+      "id": "scalar_mcs7_g1.77827941e-05",
+      "mean_ber": 0.49951050911394,
+      "effective": 1.7782794100389229E-5
+    },
+    {
+      "id": "scalar_mcs7_g3.16227766e-05",
+      "mean_ber": 0.49934724703200722,
+      "effective": 3.1622776601683795E-5
+    },
+    {
+      "id": "scalar_mcs7_g5.62341325e-05",
+      "mean_ber": 0.49912952479744249,
+      "effective": 5.6234132519034907E-5
+    },
+    {
+      "id": "scalar_mcs7_g0.0001",
+      "mean_ber": 0.49883916678660184,
+      "effective": 0.0001
+    },
+    {
+      "id": "scalar_mcs7_g0.000177827941",
+      "mean_ber": 0.49845191897491947,
+      "effective": 0.0001778279410038923
+    },
+    {
+      "id": "scalar_mcs7_g0.000316227766",
+      "mean_ber": 0.497935399143789,
+      "effective": 0.00031622776601683794
+    },
+    {
+      "id": "scalar_mcs7_g0.000562341325",
+      "mean_ber": 0.49724633265740775,
+      "effective": 0.0005623413251903491
+    },
+    {
+      "id": "scalar_mcs7_g0.001",
+      "mean_ber": 0.4963267936352998,
+      "effective": 0.001
+    },
+    {
+      "id": "scalar_mcs7_g0.00177827941",
+      "mean_ber": 0.49509902145407175,
+      "effective": 0.0017782794100389228
+    },
+    {
+      "id": "scalar_mcs7_g0.00316227766",
+      "mean_ber": 0.49345810843332166,
+      "effective": 0.0031622776601683794
+    },
+    {
+      "id": "scalar_mcs7_g0.00562341325",
+      "mean_ber": 0.49126132331756267,
+      "effective": 0.005623413251903491
+    },
+    {
+      "id": "scalar_mcs7_g0.01",
+      "mean_ber": 0.48831177561516287,
+      "effective": 0.01
+    },
+    {
+      "id": "scalar_mcs7_g0.0177827941",
+      "mean_ber": 0.48433204955888781,
+      "effective": 0.017782794100389229
+    },
+    {
+      "id": "scalar_mcs7_g0.0316227766",
+      "mean_ber": 0.4789197540255814,
+      "effective": 0.031622776601683791
+    },
+    {
+      "id": "scalar_mcs7_g0.0562341325",
+      "mean_ber": 0.47147225795023973,
+      "effective": 0.056234132519034905
+    },
+    {
+      "id": "scalar_mcs7_g0.1",
+      "mean_ber": 0.4610698096690673,
+      "effective": 0.1
+    },
+    {
+      "id": "scalar_mcs7_g0.177827941",
+      "mean_ber": 0.44634536321567891,
+      "effective": 0.17782794100389226
+    },
+    {
+      "id": "scalar_mcs7_g0.316227766",
+      "mean_ber": 0.42550902303137955,
+      "effective": 0.31622776601683794
+    },
+    {
+      "id": "scalar_mcs7_g0.562341325",
+      "mean_ber": 0.396882240111228,
+      "effective": 0.56234132519034907
+    },
+    {
+      "id": "scalar_mcs7_g1",
+      "mean_ber": 0.35986269696117196,
+      "effective": 1
+    },
+    {
+      "id": "scalar_mcs7_g1.77827941",
+      "mean_ber": 0.31484820944282266,
+      "effective": 1.7782794100389228
+    },
+    {
+      "id": "scalar_mcs7_g3.16227766",
+      "mean_ber": 0.26250554790029873,
+      "effective": 3.1622776601683795
+    },
+    {
+      "id": "scalar_mcs7_g5.62341325",
+      "mean_ber": 0.20614405510446174,
+      "effective": 5.6234132519034912
+    },
+    {
+      "id": "scalar_mcs7_g10",
+      "mean_ber": 0.1525464332754716,
+      "effective": 10
+    },
+    {
+      "id": "scalar_mcs7_g17.7827941",
+      "mean_ber": 0.10570093028948152,
+      "effective": 17.782794100389228
+    },
+    {
+      "id": "scalar_mcs7_g31.6227766",
+      "mean_ber": 0.064158732654277489,
+      "effective": 31.622776601683793
+    },
+    {
+      "id": "scalar_mcs7_g56.2341325",
+      "mean_ber": 0.029678829854941798,
+      "effective": 56.234132519034908
+    },
+    {
+      "id": "scalar_mcs7_g100",
+      "mean_ber": 0.0084864301059202289,
+      "effective": 100
+    },
+    {
+      "id": "scalar_mcs7_g177.827941",
+      "mean_ber": 0.0010542267887452418,
+      "effective": 177.82794100389228
+    },
+    {
+      "id": "scalar_mcs7_g316.227766",
+      "mean_ber": 3.0400924009309178E-5,
+      "effective": 316.2277660168379
+    },
+    {
+      "id": "scalar_mcs7_g562.341325",
+      "mean_ber": 6.6558941333114942E-8,
+      "effective": 562.341325190349
+    },
+    {
+      "id": "scalar_mcs7_g1000",
+      "mean_ber": 1.5097568082887983E-12,
+      "effective": 1000
+    },
+    {
+      "id": "scalar_mcs7_g1778.27941",
+      "mean_ber": 1.0231253669603542E-20,
+      "effective": 1778.2794100389228
+    },
+    {
+      "id": "scalar_mcs7_g3162.27766",
+      "mean_ber": 3.7675363571511723E-35,
+      "effective": 3162.2776601683795
+    },
+    {
+      "id": "scalar_mcs7_g5623.41325",
+      "mean_ber": 1.0076217536764407E-60,
+      "effective": 5623.4132519034911
+    },
+    {
+      "id": "scalar_mcs7_g10000",
+      "mean_ber": 4.2032106491676979E-106,
+      "effective": 10000
+    },
+    {
+      "id": "streams_mcs7_nss1_p1",
+      "mean_ber": 0.26754673183943894,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs7_nss1_p2",
+      "mean_ber": 1.5097568082887985E-12,
+      "effective": 1000
+    },
+    {
+      "id": "streams_mcs7_nss1_p3",
+      "mean_ber": 0.28094341989480048,
+      "effective": 2.6021676485149881
+    },
+    {
+      "id": "streams_mcs7_nss1_p4",
+      "mean_ber": 0.38599877701364527,
+      "effective": 0.67542326310651291
+    },
+    {
+      "id": "streams_mcs7_nss1_p5",
+      "mean_ber": 0.32402249709860231,
+      "effective": 1.593554930638041
+    },
+    {
+      "id": "streams_mcs7_nss1_p6",
+      "mean_ber": 0.09684523272373731,
+      "effective": 20
+    },
+    {
+      "id": "streams_mcs7_nss2_p1",
+      "mean_ber": 0.267546731839439,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs7_nss2_p2",
+      "mean_ber": 0.24816339681840488,
+      "effective": 3.6665615243515628
+    },
+    {
+      "id": "streams_mcs7_nss2_p3",
+      "mean_ber": 0.28094341989480048,
+      "effective": 2.6021676485149881
+    },
+    {
+      "id": "streams_mcs7_nss2_p4",
+      "mean_ber": 0.29497008193441848,
+      "effective": 2.232164920929633
+    },
+    {
+      "id": "streams_mcs7_nss2_p5",
+      "mean_ber": 0.19903103978070788,
+      "effective": 6.0504196557239318
+    },
+    {
+      "id": "streams_mcs7_nss2_p6",
+      "mean_ber": 0.29842261636186862,
+      "effective": 2.147699998031297
+    },
+    {
+      "id": "streams_mcs7_nss3_p1",
+      "mean_ber": 0.267546731839439,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs7_nss3_p2",
+      "mean_ber": 0.28539649686599389,
+      "effective": 2.4798443630750953
+    },
+    {
+      "id": "streams_mcs7_nss3_p3",
+      "mean_ber": 0.28094341989480048,
+      "effective": 2.6021676485149881
+    },
+    {
+      "id": "streams_mcs7_nss3_p4",
+      "mean_ber": 0.36065666574941319,
+      "effective": 0.98891990894312509
+    },
+    {
+      "id": "streams_mcs7_nss3_p5",
+      "mean_ber": 0.2740677057141786,
+      "effective": 2.800536803255826
+    },
+    {
+      "id": "streams_mcs7_nss3_p6",
+      "mean_ber": 0.36561507757457906,
+      "effective": 0.92154937579666918
+    },
+    {
+      "id": "streams_mcs7_nss4_p1",
+      "mean_ber": 0.26754673183943906,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs7_nss4_p2",
+      "mean_ber": 0.27748575914533713,
+      "effective": 2.7004438646497868
+    },
+    {
+      "id": "streams_mcs7_nss4_p3",
+      "mean_ber": 0.28094341989480048,
+      "effective": 2.6021676485149881
+    },
+    {
+      "id": "streams_mcs7_nss4_p4",
+      "mean_ber": 0.29803527872071955,
+      "effective": 2.1570526060222135
+    },
+    {
+      "id": "streams_mcs7_nss4_p5",
+      "mean_ber": 0.288741943546678,
+      "effective": 2.3909776892547305
+    },
+    {
+      "id": "streams_mcs7_nss4_p6",
+      "mean_ber": 0.39921130818093431,
+      "effective": 0.53964232015985658
+    },
+    {
+      "id": "streams_mcs7_nss8_p1",
+      "mean_ber": 0.267546731839439,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs7_nss8_p2",
+      "mean_ber": 0.28222902415624251,
+      "effective": 2.5663698307812433
+    },
+    {
+      "id": "streams_mcs7_nss8_p3",
+      "mean_ber": 0.28094341989480048,
+      "effective": 2.6021676485149881
+    },
+    {
+      "id": "streams_mcs7_nss8_p4",
+      "mean_ber": 0.26287591282638934,
+      "effective": 3.1501055264122755
+    },
+    {
+      "id": "streams_mcs7_nss8_p5",
+      "mean_ber": 0.23589817550906375,
+      "effective": 4.1548664441651866
+    },
+    {
+      "id": "streams_mcs7_nss8_p6",
+      "mean_ber": 0.44960565409046716,
+      "effective": 0.15911959263426245
+    },
+    {
+      "id": "scalar_mcs8_g0",
+      "mean_ber": 0.5,
+      "effective": 0
+    },
+    {
+      "id": "scalar_mcs8_g1e-08",
+      "mean_ber": 0.49999134572678305,
+      "effective": 1E-8
+    },
+    {
+      "id": "scalar_mcs8_g1.77827941e-08",
+      "mean_ber": 0.49998845934111891,
+      "effective": 1.7782794100389228E-8
+    },
+    {
+      "id": "scalar_mcs8_g3.16227766e-08",
+      "mean_ber": 0.49998461028388347,
+      "effective": 3.1622776601683792E-8
+    },
+    {
+      "id": "scalar_mcs8_g5.62341325e-08",
+      "mean_ber": 0.49997947748335003,
+      "effective": 5.6234132519034912E-8
+    },
+    {
+      "id": "scalar_mcs8_g1e-07",
+      "mean_ber": 0.49997263278332,
+      "effective": 1E-7
+    },
+    {
+      "id": "scalar_mcs8_g1.77827941e-07",
+      "mean_ber": 0.49996350522791927,
+      "effective": 1.7782794100389227E-7
+    },
+    {
+      "id": "scalar_mcs8_g3.16227766e-07",
+      "mean_ber": 0.49995133343428921,
+      "effective": 3.1622776601683792E-7
+    },
+    {
+      "id": "scalar_mcs8_g5.62341325e-07",
+      "mean_ber": 0.49993510207978792,
+      "effective": 5.62341325190349E-7
+    },
+    {
+      "id": "scalar_mcs8_g1e-06",
+      "mean_ber": 0.4999134572044957,
+      "effective": 1E-6
+    },
+    {
+      "id": "scalar_mcs8_g1.77827941e-06",
+      "mean_ber": 0.49988459326100076,
+      "effective": 1.7782794100389229E-6
+    },
+    {
+      "id": "scalar_mcs8_g3.16227766e-06",
+      "mean_ber": 0.49984610248268152,
+      "effective": 3.1622776601683792E-6
+    },
+    {
+      "id": "scalar_mcs8_g5.62341325e-06",
+      "mean_ber": 0.49979477398893657,
+      "effective": 5.62341325190349E-6
+    },
+    {
+      "id": "scalar_mcs8_g1e-05",
+      "mean_ber": 0.49972632583043669,
+      "effective": 1E-5
+    },
+    {
+      "id": "scalar_mcs8_g1.77827941e-05",
+      "mean_ber": 0.49963504752995175,
+      "effective": 1.7782794100389229E-5
+    },
+    {
+      "id": "scalar_mcs8_g3.16227766e-05",
+      "mean_ber": 0.49951332308093555,
+      "effective": 3.1622776601683795E-5
+    },
+    {
+      "id": "scalar_mcs8_g5.62341325e-05",
+      "mean_ber": 0.49935099409268069,
+      "effective": 5.6234132519034907E-5
+    },
+    {
+      "id": "scalar_mcs8_g0.0001",
+      "mean_ber": 0.49913450872162518,
+      "effective": 0.0001
+    },
+    {
+      "id": "scalar_mcs8_g0.000177827941",
+      "mean_ber": 0.498845782466422,
+      "effective": 0.0001778279410038923
+    },
+    {
+      "id": "scalar_mcs8_g0.000316227766",
+      "mean_ber": 0.49846066886331597,
+      "effective": 0.00031622776601683794
+    },
+    {
+      "id": "scalar_mcs8_g0.000562341325",
+      "mean_ber": 0.49794689611694321,
+      "effective": 0.0005623413251903491
+    },
+    {
+      "id": "scalar_mcs8_g0.001",
+      "mean_ber": 0.49726125887968109,
+      "effective": 0.001
+    },
+    {
+      "id": "scalar_mcs8_g0.00177827941",
+      "mean_ber": 0.49634574012796218,
+      "effective": 0.0017782794100389228
+    },
+    {
+      "id": "scalar_mcs8_g0.00316227766",
+      "mean_ber": 0.49512202807741784,
+      "effective": 0.0031622776601683794
+    },
+    {
+      "id": "scalar_mcs8_g0.00562341325",
+      "mean_ber": 0.49348348476711923,
+      "effective": 0.005623413251903491
+    },
+    {
+      "id": "scalar_mcs8_g0.01",
+      "mean_ber": 0.49128280880331238,
+      "effective": 0.01
+    },
+    {
+      "id": "scalar_mcs8_g0.0177827941",
+      "mean_ber": 0.48831204841359316,
+      "effective": 0.017782794100389229
+    },
+    {
+      "id": "scalar_mcs8_g0.0316227766",
+      "mean_ber": 0.48426885489276733,
+      "effective": 0.031622776601683791
+    },
+    {
+      "id": "scalar_mcs8_g0.0562341325",
+      "mean_ber": 0.47869956156122051,
+      "effective": 0.056234132519034905
+    },
+    {
+      "id": "scalar_mcs8_g0.1",
+      "mean_ber": 0.47091211592770427,
+      "effective": 0.1
+    },
+    {
+      "id": "scalar_mcs8_g0.177827941",
+      "mean_ber": 0.45988384726589238,
+      "effective": 0.17782794100389226
+    },
+    {
+      "id": "scalar_mcs8_g0.316227766",
+      "mean_ber": 0.44429486137547625,
+      "effective": 0.31622776601683794
+    },
+    {
+      "id": "scalar_mcs8_g0.562341325",
+      "mean_ber": 0.42294200607565136,
+      "effective": 0.56234132519034907
+    },
+    {
+      "id": "scalar_mcs8_g1",
+      "mean_ber": 0.39544634258546685,
+      "effective": 1
+    },
+    {
+      "id": "scalar_mcs8_g1.77827941",
+      "mean_ber": 0.36222062396060661,
+      "effective": 1.7782794100389228
+    },
+    {
+      "id": "scalar_mcs8_g3.16227766",
+      "mean_ber": 0.32388826685683247,
+      "effective": 3.1622776601683795
+    },
+    {
+      "id": "scalar_mcs8_g5.62341325",
+      "mean_ber": 0.28185413054627984,
+      "effective": 5.6234132519034912
+    },
+    {
+      "id": "scalar_mcs8_g10",
+      "mean_ber": 0.2366741500065325,
+      "effective": 10
+    },
+    {
+      "id": "scalar_mcs8_g17.7827941",
+      "mean_ber": 0.18857668736667,
+      "effective": 17.782794100389228
+    },
+    {
+      "id": "scalar_mcs8_g31.6227766",
+      "mean_ber": 0.14168798562297286,
+      "effective": 31.622776601683793
+    },
+    {
+      "id": "scalar_mcs8_g56.2341325",
+      "mean_ber": 0.10071179154506193,
+      "effective": 56.234132519034908
+    },
+    {
+      "id": "scalar_mcs8_g100",
+      "mean_ber": 0.065422946546522254,
+      "effective": 100
+    },
+    {
+      "id": "scalar_mcs8_g177.827941",
+      "mean_ber": 0.034705407306999995,
+      "effective": 177.82794100389228
+    },
+    {
+      "id": "scalar_mcs8_g316.227766",
+      "mean_ber": 0.012598561048982604,
+      "effective": 316.2277660168379
+    },
+    {
+      "id": "scalar_mcs8_g562.341325",
+      "mean_ber": 0.0023690400425912138,
+      "effective": 562.341325190349
+    },
+    {
+      "id": "scalar_mcs8_g1000",
+      "mean_ber": 0.00014147910893752287,
+      "effective": 1000
+    },
+    {
+      "id": "scalar_mcs8_g1778.27941",
+      "mean_ber": 1.1218012097725932E-6,
+      "effective": 1778.2794100389228
+    },
+    {
+      "id": "scalar_mcs8_g3162.27766",
+      "mean_ber": 2.4945782726169503E-10,
+      "effective": 3162.2776601683795
+    },
+    {
+      "id": "scalar_mcs8_g5623.41325",
+      "mean_ber": 9.7553584248309442E-17,
+      "effective": 5623.4132519034911
+    },
+    {
+      "id": "scalar_mcs8_g10000",
+      "mean_ber": 4.855236813499449E-28,
+      "effective": 10000
+    },
+    {
+      "id": "streams_mcs8_nss1_p1",
+      "mean_ber": 0.32757601025547495,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs8_nss1_p2",
+      "mean_ber": 0.00014147910893752284,
+      "effective": 1000
+    },
+    {
+      "id": "streams_mcs8_nss1_p3",
+      "mean_ber": 0.30816301455116529,
+      "effective": 3.941181637898699
+    },
+    {
+      "id": "streams_mcs8_nss1_p4",
+      "mean_ber": 0.26314706319596087,
+      "effective": 7.1758848973664753
+    },
+    {
+      "id": "streams_mcs8_nss1_p5",
+      "mean_ber": 0.34612224021050181,
+      "effective": 2.2839377210129035
+    },
+    {
+      "id": "streams_mcs8_nss1_p6",
+      "mean_ber": 0.1787140436598405,
+      "effective": 20
+    },
+    {
+      "id": "streams_mcs8_nss2_p1",
+      "mean_ber": 0.32757601025547511,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs8_nss2_p2",
+      "mean_ber": 0.24870136899430936,
+      "effective": 8.6164989062589274
+    },
+    {
+      "id": "streams_mcs8_nss2_p3",
+      "mean_ber": 0.30816301455116524,
+      "effective": 3.9411816378987004
+    },
+    {
+      "id": "streams_mcs8_nss2_p4",
+      "mean_ber": 0.33099672447487538,
+      "effective": 2.855751406827685
+    },
+    {
+      "id": "streams_mcs8_nss2_p5",
+      "mean_ber": 0.32616230189279033,
+      "effective": 3.061362427687039
+    },
+    {
+      "id": "streams_mcs8_nss2_p6",
+      "mean_ber": 0.33935702182992022,
+      "effective": 2.5270294652180945
+    },
+    {
+      "id": "streams_mcs8_nss3_p1",
+      "mean_ber": 0.32757601025547511,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs8_nss3_p2",
+      "mean_ber": 0.297616360191362,
+      "effective": 4.5528348491762385
+    },
+    {
+      "id": "streams_mcs8_nss3_p3",
+      "mean_ber": 0.30816301455116524,
+      "effective": 3.9411816378987004
+    },
+    {
+      "id": "streams_mcs8_nss3_p4",
+      "mean_ber": 0.29682925426764883,
+      "effective": 4.6016710402624987
+    },
+    {
+      "id": "streams_mcs8_nss3_p5",
+      "mean_ber": 0.42007776049978862,
+      "effective": 0.60098026450453634
+    },
+    {
+      "id": "streams_mcs8_nss3_p6",
+      "mean_ber": 0.39290468121994687,
+      "effective": 1.048836825214132
+    },
+    {
+      "id": "streams_mcs8_nss4_p1",
+      "mean_ber": 0.32757601025547517,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs8_nss4_p2",
+      "mean_ber": 0.30124725098071359,
+      "effective": 4.3334349485906243
+    },
+    {
+      "id": "streams_mcs8_nss4_p3",
+      "mean_ber": 0.30816301455116524,
+      "effective": 3.9411816378987004
+    },
+    {
+      "id": "streams_mcs8_nss4_p4",
+      "mean_ber": 0.31717556152612353,
+      "effective": 3.4767885437974595
+    },
+    {
+      "id": "streams_mcs8_nss4_p5",
+      "mean_ber": 0.39207454317354368,
+      "effective": 1.0651321422109827
+    },
+    {
+      "id": "streams_mcs8_nss4_p6",
+      "mean_ber": 0.41967851091496033,
+      "effective": 0.60648226319369047
+    },
+    {
+      "id": "streams_mcs8_nss8_p1",
+      "mean_ber": 0.32757601025547511,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs8_nss8_p2",
+      "mean_ber": 0.30907035093483787,
+      "effective": 3.8921065701022162
+    },
+    {
+      "id": "streams_mcs8_nss8_p3",
+      "mean_ber": 0.30816301455116524,
+      "effective": 3.9411816378987004
+    },
+    {
+      "id": "streams_mcs8_nss8_p4",
+      "mean_ber": 0.305653210691601,
+      "effective": 4.0797649451317657
+    },
+    {
+      "id": "streams_mcs8_nss8_p5",
+      "mean_ber": 0.3338178252950727,
+      "effective": 2.7411466478030211
+    },
+    {
+      "id": "streams_mcs8_nss8_p6",
+      "mean_ber": 0.45983925545748011,
+      "effective": 0.17817716739320819
+    },
+    {
+      "id": "scalar_mcs9_g0",
+      "mean_ber": 0.5,
+      "effective": 0
+    },
+    {
+      "id": "scalar_mcs9_g1e-08",
+      "mean_ber": 0.49999134572678305,
+      "effective": 1E-8
+    },
+    {
+      "id": "scalar_mcs9_g1.77827941e-08",
+      "mean_ber": 0.49998845934111891,
+      "effective": 1.7782794100389228E-8
+    },
+    {
+      "id": "scalar_mcs9_g3.16227766e-08",
+      "mean_ber": 0.49998461028388347,
+      "effective": 3.1622776601683792E-8
+    },
+    {
+      "id": "scalar_mcs9_g5.62341325e-08",
+      "mean_ber": 0.49997947748335003,
+      "effective": 5.6234132519034912E-8
+    },
+    {
+      "id": "scalar_mcs9_g1e-07",
+      "mean_ber": 0.49997263278332,
+      "effective": 1E-7
+    },
+    {
+      "id": "scalar_mcs9_g1.77827941e-07",
+      "mean_ber": 0.49996350522791927,
+      "effective": 1.7782794100389227E-7
+    },
+    {
+      "id": "scalar_mcs9_g3.16227766e-07",
+      "mean_ber": 0.49995133343428921,
+      "effective": 3.1622776601683792E-7
+    },
+    {
+      "id": "scalar_mcs9_g5.62341325e-07",
+      "mean_ber": 0.49993510207978792,
+      "effective": 5.62341325190349E-7
+    },
+    {
+      "id": "scalar_mcs9_g1e-06",
+      "mean_ber": 0.4999134572044957,
+      "effective": 1E-6
+    },
+    {
+      "id": "scalar_mcs9_g1.77827941e-06",
+      "mean_ber": 0.49988459326100076,
+      "effective": 1.7782794100389229E-6
+    },
+    {
+      "id": "scalar_mcs9_g3.16227766e-06",
+      "mean_ber": 0.49984610248268152,
+      "effective": 3.1622776601683792E-6
+    },
+    {
+      "id": "scalar_mcs9_g5.62341325e-06",
+      "mean_ber": 0.49979477398893657,
+      "effective": 5.62341325190349E-6
+    },
+    {
+      "id": "scalar_mcs9_g1e-05",
+      "mean_ber": 0.49972632583043669,
+      "effective": 1E-5
+    },
+    {
+      "id": "scalar_mcs9_g1.77827941e-05",
+      "mean_ber": 0.49963504752995175,
+      "effective": 1.7782794100389229E-5
+    },
+    {
+      "id": "scalar_mcs9_g3.16227766e-05",
+      "mean_ber": 0.49951332308093555,
+      "effective": 3.1622776601683795E-5
+    },
+    {
+      "id": "scalar_mcs9_g5.62341325e-05",
+      "mean_ber": 0.49935099409268069,
+      "effective": 5.6234132519034907E-5
+    },
+    {
+      "id": "scalar_mcs9_g0.0001",
+      "mean_ber": 0.49913450872162518,
+      "effective": 0.0001
+    },
+    {
+      "id": "scalar_mcs9_g0.000177827941",
+      "mean_ber": 0.498845782466422,
+      "effective": 0.0001778279410038923
+    },
+    {
+      "id": "scalar_mcs9_g0.000316227766",
+      "mean_ber": 0.49846066886331597,
+      "effective": 0.00031622776601683794
+    },
+    {
+      "id": "scalar_mcs9_g0.000562341325",
+      "mean_ber": 0.49794689611694321,
+      "effective": 0.0005623413251903491
+    },
+    {
+      "id": "scalar_mcs9_g0.001",
+      "mean_ber": 0.49726125887968109,
+      "effective": 0.001
+    },
+    {
+      "id": "scalar_mcs9_g0.00177827941",
+      "mean_ber": 0.49634574012796218,
+      "effective": 0.0017782794100389228
+    },
+    {
+      "id": "scalar_mcs9_g0.00316227766",
+      "mean_ber": 0.49512202807741784,
+      "effective": 0.0031622776601683794
+    },
+    {
+      "id": "scalar_mcs9_g0.00562341325",
+      "mean_ber": 0.49348348476711923,
+      "effective": 0.005623413251903491
+    },
+    {
+      "id": "scalar_mcs9_g0.01",
+      "mean_ber": 0.49128280880331238,
+      "effective": 0.01
+    },
+    {
+      "id": "scalar_mcs9_g0.0177827941",
+      "mean_ber": 0.48831204841359316,
+      "effective": 0.017782794100389229
+    },
+    {
+      "id": "scalar_mcs9_g0.0316227766",
+      "mean_ber": 0.48426885489276733,
+      "effective": 0.031622776601683791
+    },
+    {
+      "id": "scalar_mcs9_g0.0562341325",
+      "mean_ber": 0.47869956156122051,
+      "effective": 0.056234132519034905
+    },
+    {
+      "id": "scalar_mcs9_g0.1",
+      "mean_ber": 0.47091211592770427,
+      "effective": 0.1
+    },
+    {
+      "id": "scalar_mcs9_g0.177827941",
+      "mean_ber": 0.45988384726589238,
+      "effective": 0.17782794100389226
+    },
+    {
+      "id": "scalar_mcs9_g0.316227766",
+      "mean_ber": 0.44429486137547625,
+      "effective": 0.31622776601683794
+    },
+    {
+      "id": "scalar_mcs9_g0.562341325",
+      "mean_ber": 0.42294200607565136,
+      "effective": 0.56234132519034907
+    },
+    {
+      "id": "scalar_mcs9_g1",
+      "mean_ber": 0.39544634258546685,
+      "effective": 1
+    },
+    {
+      "id": "scalar_mcs9_g1.77827941",
+      "mean_ber": 0.36222062396060661,
+      "effective": 1.7782794100389228
+    },
+    {
+      "id": "scalar_mcs9_g3.16227766",
+      "mean_ber": 0.32388826685683247,
+      "effective": 3.1622776601683795
+    },
+    {
+      "id": "scalar_mcs9_g5.62341325",
+      "mean_ber": 0.28185413054627984,
+      "effective": 5.6234132519034912
+    },
+    {
+      "id": "scalar_mcs9_g10",
+      "mean_ber": 0.2366741500065325,
+      "effective": 10
+    },
+    {
+      "id": "scalar_mcs9_g17.7827941",
+      "mean_ber": 0.18857668736667,
+      "effective": 17.782794100389228
+    },
+    {
+      "id": "scalar_mcs9_g31.6227766",
+      "mean_ber": 0.14168798562297286,
+      "effective": 31.622776601683793
+    },
+    {
+      "id": "scalar_mcs9_g56.2341325",
+      "mean_ber": 0.10071179154506193,
+      "effective": 56.234132519034908
+    },
+    {
+      "id": "scalar_mcs9_g100",
+      "mean_ber": 0.065422946546522254,
+      "effective": 100
+    },
+    {
+      "id": "scalar_mcs9_g177.827941",
+      "mean_ber": 0.034705407306999995,
+      "effective": 177.82794100389228
+    },
+    {
+      "id": "scalar_mcs9_g316.227766",
+      "mean_ber": 0.012598561048982604,
+      "effective": 316.2277660168379
+    },
+    {
+      "id": "scalar_mcs9_g562.341325",
+      "mean_ber": 0.0023690400425912138,
+      "effective": 562.341325190349
+    },
+    {
+      "id": "scalar_mcs9_g1000",
+      "mean_ber": 0.00014147910893752287,
+      "effective": 1000
+    },
+    {
+      "id": "scalar_mcs9_g1778.27941",
+      "mean_ber": 1.1218012097725932E-6,
+      "effective": 1778.2794100389228
+    },
+    {
+      "id": "scalar_mcs9_g3162.27766",
+      "mean_ber": 2.4945782726169503E-10,
+      "effective": 3162.2776601683795
+    },
+    {
+      "id": "scalar_mcs9_g5623.41325",
+      "mean_ber": 9.7553584248309442E-17,
+      "effective": 5623.4132519034911
+    },
+    {
+      "id": "scalar_mcs9_g10000",
+      "mean_ber": 4.855236813499449E-28,
+      "effective": 10000
+    },
+    {
+      "id": "streams_mcs9_nss1_p1",
+      "mean_ber": 0.32757601025547495,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs9_nss1_p2",
+      "mean_ber": 0.00014147910893752284,
+      "effective": 1000
+    },
+    {
+      "id": "streams_mcs9_nss1_p3",
+      "mean_ber": 0.30816301455116529,
+      "effective": 3.941181637898699
+    },
+    {
+      "id": "streams_mcs9_nss1_p4",
+      "mean_ber": 0.22349811613062892,
+      "effective": 11.735609178790348
+    },
+    {
+      "id": "streams_mcs9_nss1_p5",
+      "mean_ber": 0.15071795004860669,
+      "effective": 28.173936411514632
+    },
+    {
+      "id": "streams_mcs9_nss1_p6",
+      "mean_ber": 0.1787140436598405,
+      "effective": 20
+    },
+    {
+      "id": "streams_mcs9_nss2_p1",
+      "mean_ber": 0.32757601025547511,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs9_nss2_p2",
+      "mean_ber": 0.24870136899430936,
+      "effective": 8.6164989062589274
+    },
+    {
+      "id": "streams_mcs9_nss2_p3",
+      "mean_ber": 0.30816301455116524,
+      "effective": 3.9411816378987004
+    },
+    {
+      "id": "streams_mcs9_nss2_p4",
+      "mean_ber": 0.340419091857783,
+      "effective": 2.4875627258507014
+    },
+    {
+      "id": "streams_mcs9_nss2_p5",
+      "mean_ber": 0.28856497431042827,
+      "effective": 5.1431110072788115
+    },
+    {
+      "id": "streams_mcs9_nss2_p6",
+      "mean_ber": 0.33935702182992022,
+      "effective": 2.5270294652180945
+    },
+    {
+      "id": "streams_mcs9_nss3_p1",
+      "mean_ber": 0.32757601025547511,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs9_nss3_p2",
+      "mean_ber": 0.297616360191362,
+      "effective": 4.5528348491762385
+    },
+    {
+      "id": "streams_mcs9_nss3_p3",
+      "mean_ber": 0.30816301455116524,
+      "effective": 3.9411816378987004
+    },
+    {
+      "id": "streams_mcs9_nss3_p4",
+      "mean_ber": 0.23049827921752913,
+      "effective": 10.782889246732228
+    },
+    {
+      "id": "streams_mcs9_nss3_p5",
+      "mean_ber": 0.34801373174815686,
+      "effective": 2.2193900511894236
+    },
+    {
+      "id": "streams_mcs9_nss3_p6",
+      "mean_ber": 0.39290468121994687,
+      "effective": 1.048836825214132
+    },
+    {
+      "id": "streams_mcs9_nss4_p1",
+      "mean_ber": 0.32757601025547517,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs9_nss4_p2",
+      "mean_ber": 0.30124725098071359,
+      "effective": 4.3334349485906243
+    },
+    {
+      "id": "streams_mcs9_nss4_p3",
+      "mean_ber": 0.30816301455116524,
+      "effective": 3.9411816378987004
+    },
+    {
+      "id": "streams_mcs9_nss4_p4",
+      "mean_ber": 0.33694753105266967,
+      "effective": 2.6184359225788678
+    },
+    {
+      "id": "streams_mcs9_nss4_p5",
+      "mean_ber": 0.395530855443099,
+      "effective": 0.99840310618268935
+    },
+    {
+      "id": "streams_mcs9_nss4_p6",
+      "mean_ber": 0.41967851091496033,
+      "effective": 0.60648226319369047
+    },
+    {
+      "id": "streams_mcs9_nss8_p1",
+      "mean_ber": 0.32757601025547511,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs9_nss8_p2",
+      "mean_ber": 0.30907035093483787,
+      "effective": 3.8921065701022162
+    },
+    {
+      "id": "streams_mcs9_nss8_p3",
+      "mean_ber": 0.30816301455116524,
+      "effective": 3.9411816378987004
+    },
+    {
+      "id": "streams_mcs9_nss8_p4",
+      "mean_ber": 0.29274660709305422,
+      "effective": 4.8624921281181752
+    },
+    {
+      "id": "streams_mcs9_nss8_p5",
+      "mean_ber": 0.39458274377334207,
+      "effective": 1.0164168606429813
+    },
+    {
+      "id": "streams_mcs9_nss8_p6",
+      "mean_ber": 0.45983925545748011,
+      "effective": 0.17817716739320819
+    },
+    {
+      "id": "scalar_mcs10_g0",
+      "mean_ber": 0.5,
+      "effective": 0
+    },
+    {
+      "id": "scalar_mcs10_g1e-08",
+      "mean_ber": 0.49999308674051984,
+      "effective": 1E-8
+    },
+    {
+      "id": "scalar_mcs10_g1.77827941e-08",
+      "mean_ber": 0.49999078102026273,
+      "effective": 1.7782794100389228E-8
+    },
+    {
+      "id": "scalar_mcs10_g3.16227766e-08",
+      "mean_ber": 0.4999877062928112,
+      "effective": 3.1622776601683792E-8
+    },
+    {
+      "id": "scalar_mcs10_g5.62341325e-08",
+      "mean_ber": 0.49998360607768094,
+      "effective": 5.6234132519034912E-8
+    },
+    {
+      "id": "scalar_mcs10_g1e-07",
+      "mean_ber": 0.49997813835251514,
+      "effective": 1E-7
+    },
+    {
+      "id": "scalar_mcs10_g1.77827941e-07",
+      "mean_ber": 0.49997084702284161,
+      "effective": 1.7782794100389227E-7
+    },
+    {
+      "id": "scalar_mcs10_g3.16227766e-07",
+      "mean_ber": 0.49996112387612646,
+      "effective": 3.1622776601683792E-7
+    },
+    {
+      "id": "scalar_mcs10_g5.62341325e-07",
+      "mean_ber": 0.49994815784608004,
+      "effective": 5.62341325190349E-7
+    },
+    {
+      "id": "scalar_mcs10_g1e-06",
+      "mean_ber": 0.49993086735404796,
+      "effective": 1E-6
+    },
+    {
+      "id": "scalar_mcs10_g1.77827941e-06",
+      "mean_ber": 0.49990781008134072,
+      "effective": 1.7782794100389229E-6
+    },
+    {
+      "id": "scalar_mcs10_g3.16227766e-06",
+      "mean_ber": 0.49987706264048859,
+      "effective": 3.1622776601683792E-6
+    },
+    {
+      "id": "scalar_mcs10_g5.62341325e-06",
+      "mean_ber": 0.49983606009475984,
+      "effective": 5.62341325190349E-6
+    },
+    {
+      "id": "scalar_mcs10_g1e-05",
+      "mean_ber": 0.49978138190777088,
+      "effective": 1E-5
+    },
+    {
+      "id": "scalar_mcs10_g1.77827941e-05",
+      "mean_ber": 0.49970846639304617,
+      "effective": 1.7782794100389229E-5
+    },
+    {
+      "id": "scalar_mcs10_g3.16227766e-05",
+      "mean_ber": 0.49961122966639565,
+      "effective": 3.1622776601683795E-5
+    },
+    {
+      "id": "scalar_mcs10_g5.62341325e-05",
+      "mean_ber": 0.49948155689437534,
+      "effective": 5.6234132519034907E-5
+    },
+    {
+      "id": "scalar_mcs10_g0.0001",
+      "mean_ber": 0.499308622402246,
+      "effective": 0.0001
+    },
+    {
+      "id": "scalar_mcs10_g0.000177827941",
+      "mean_ber": 0.4990779795616902,
+      "effective": 0.0001778279410038923
+    },
+    {
+      "id": "scalar_mcs10_g0.000316227766",
+      "mean_ber": 0.498770338939746,
+      "effective": 0.00031622776601683794
+    },
+    {
+      "id": "scalar_mcs10_g0.000562341325",
+      "mean_ber": 0.49835991954694431,
+      "effective": 0.0005623413251903491
+    },
+    {
+      "id": "scalar_mcs10_g0.001",
+      "mean_ber": 0.49781220442982865,
+      "effective": 0.001
+    },
+    {
+      "id": "scalar_mcs10_g0.00177827941",
+      "mean_ber": 0.49708084008260583,
+      "effective": 0.0017782794100389228
+    },
+    {
+      "id": "scalar_mcs10_g0.00316227766",
+      "mean_ber": 0.49610325028383,
+      "effective": 0.0031622776601683794
+    },
+    {
+      "id": "scalar_mcs10_g0.00562341325",
+      "mean_ber": 0.49479420640262595,
+      "effective": 0.005623413251903491
+    },
+    {
+      "id": "scalar_mcs10_g0.01",
+      "mean_ber": 0.49303594116709493,
+      "effective": 0.01
+    },
+    {
+      "id": "scalar_mcs10_g0.0177827941",
+      "mean_ber": 0.490662118361055,
+      "effective": 0.017782794100389229
+    },
+    {
+      "id": "scalar_mcs10_g0.0316227766",
+      "mean_ber": 0.48743075798839069,
+      "effective": 0.031622776601683791
+    },
+    {
+      "id": "scalar_mcs10_g0.0562341325",
+      "mean_ber": 0.48297861395730513,
+      "effective": 0.056234132519034905
+    },
+    {
+      "id": "scalar_mcs10_g0.1",
+      "mean_ber": 0.47675165136964071,
+      "effective": 0.1
+    },
+    {
+      "id": "scalar_mcs10_g0.177827941",
+      "mean_ber": 0.46793232886702468,
+      "effective": 0.17782794100389226
+    },
+    {
+      "id": "scalar_mcs10_g0.316227766",
+      "mean_ber": 0.45546920479346137,
+      "effective": 0.31622776601683794
+    },
+    {
+      "id": "scalar_mcs10_g0.562341325",
+      "mean_ber": 0.43841071749534971,
+      "effective": 0.56234132519034907
+    },
+    {
+      "id": "scalar_mcs10_g1",
+      "mean_ber": 0.41646889959844791,
+      "effective": 1
+    },
+    {
+      "id": "scalar_mcs10_g1.77827941",
+      "mean_ber": 0.38999915799146045,
+      "effective": 1.7782794100389228
+    },
+    {
+      "id": "scalar_mcs10_g3.16227766",
+      "mean_ber": 0.35954672795193365,
+      "effective": 3.1622776601683795
+    },
+    {
+      "id": "scalar_mcs10_g5.62341325",
+      "mean_ber": 0.3263106096539371,
+      "effective": 5.6234132519034912
+    },
+    {
+      "id": "scalar_mcs10_g10",
+      "mean_ber": 0.29093740365065068,
+      "effective": 10
+    },
+    {
+      "id": "scalar_mcs10_g17.7827941",
+      "mean_ber": 0.25352137241158884,
+      "effective": 17.782794100389228
+    },
+    {
+      "id": "scalar_mcs10_g31.6227766",
+      "mean_ber": 0.21482058210720006,
+      "effective": 31.622776601683793
+    },
+    {
+      "id": "scalar_mcs10_g56.2341325",
+      "mean_ber": 0.17424820942382416,
+      "effective": 56.234132519034908
+    },
+    {
+      "id": "scalar_mcs10_g100",
+      "mean_ber": 0.13345708803464867,
+      "effective": 100
+    },
+    {
+      "id": "scalar_mcs10_g177.827941",
+      "mean_ber": 0.096777923447548611,
+      "effective": 177.82794100389228
+    },
+    {
+      "id": "scalar_mcs10_g316.227766",
+      "mean_ber": 0.065737755799546521,
+      "effective": 316.2277660168379
+    },
+    {
+      "id": "scalar_mcs10_g562.341325",
+      "mean_ber": 0.038594093189409685,
+      "effective": 562.341325190349
+    },
+    {
+      "id": "scalar_mcs10_g1000",
+      "mean_ber": 0.0168195296203346,
+      "effective": 1000
+    },
+    {
+      "id": "scalar_mcs10_g1778.27941",
+      "mean_ber": 0.0043388745292950049,
+      "effective": 1778.2794100389228
+    },
+    {
+      "id": "scalar_mcs10_g3162.27766",
+      "mean_ber": 0.00045044499025415178,
+      "effective": 3162.2776601683795
+    },
+    {
+      "id": "scalar_mcs10_g5623.41325",
+      "mean_ber": 9.4710615740111211E-6,
+      "effective": 5623.4132519034911
+    },
+    {
+      "id": "scalar_mcs10_g10000",
+      "mean_ber": 1.1854554082459017E-8,
+      "effective": 10000
+    },
+    {
+      "id": "streams_mcs10_nss1_p1",
+      "mean_ber": 0.36247169539252838,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs10_nss1_p2",
+      "mean_ber": 0.0168195296203346,
+      "effective": 1000
+    },
+    {
+      "id": "streams_mcs10_nss1_p3",
+      "mean_ber": 0.33218324541009231,
+      "effective": 5.0925237258443774
+    },
+    {
+      "id": "streams_mcs10_nss1_p4",
+      "mean_ber": 0.39942197393010254,
+      "effective": 1.463967578456101
+    },
+    {
+      "id": "streams_mcs10_nss1_p5",
+      "mean_ber": 0.38196083793848451,
+      "effective": 2.0843198989004472
+    },
+    {
+      "id": "streams_mcs10_nss1_p6",
+      "mean_ber": 0.24572855871875654,
+      "effective": 20
+    },
+    {
+      "id": "streams_mcs10_nss2_p1",
+      "mean_ber": 0.36247169539252855,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs10_nss2_p2",
+      "mean_ber": 0.25731586702508163,
+      "effective": 16.790046265900425
+    },
+    {
+      "id": "streams_mcs10_nss2_p3",
+      "mean_ber": 0.33218324541009231,
+      "effective": 5.0925237258443774
+    },
+    {
+      "id": "streams_mcs10_nss2_p4",
+      "mean_ber": 0.3368460095254196,
+      "effective": 4.7035791644392
+    },
+    {
+      "id": "streams_mcs10_nss2_p5",
+      "mean_ber": 0.389676598027064,
+      "effective": 1.7898579142753568
+    },
+    {
+      "id": "streams_mcs10_nss2_p6",
+      "mean_ber": 0.37286427935937816,
+      "effective": 2.4783839481981857
+    },
+    {
+      "id": "streams_mcs10_nss3_p1",
+      "mean_ber": 0.36247169539252855,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs10_nss3_p2",
+      "mean_ber": 0.31036687788287032,
+      "effective": 7.3231899916212777
+    },
+    {
+      "id": "streams_mcs10_nss3_p3",
+      "mean_ber": 0.33218324541009231,
+      "effective": 5.0925237258443774
+    },
+    {
+      "id": "streams_mcs10_nss3_p4",
+      "mean_ber": 0.31327740385159664,
+      "effective": 6.9824747083509
+    },
+    {
+      "id": "streams_mcs10_nss3_p5",
+      "mean_ber": 0.368261786850871,
+      "effective": 2.6993001840984356
+    },
+    {
+      "id": "streams_mcs10_nss3_p6",
+      "mean_ber": 0.41524285290625212,
+      "effective": 1.0293527714995392
+    },
+    {
+      "id": "streams_mcs10_nss4_p1",
+      "mean_ber": 0.3624716953925286,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs10_nss4_p2",
+      "mean_ber": 0.32058019726761378,
+      "effective": 6.188761604761261
+    },
+    {
+      "id": "streams_mcs10_nss4_p3",
+      "mean_ber": 0.33218324541009225,
+      "effective": 5.0925237258443765
+    },
+    {
+      "id": "streams_mcs10_nss4_p4",
+      "mean_ber": 0.29616020864766218,
+      "effective": 9.2065655085011144
+    },
+    {
+      "id": "streams_mcs10_nss4_p5",
+      "mean_ber": 0.3918036422785886,
+      "effective": 1.7145406742497795
+    },
+    {
+      "id": "streams_mcs10_nss4_p6",
+      "mean_ber": 0.43643213967968908,
+      "effective": 0.595684506845467
+    },
+    {
+      "id": "streams_mcs10_nss8_p1",
+      "mean_ber": 0.36247169539252855,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs10_nss8_p2",
+      "mean_ber": 0.33399768972809324,
+      "effective": 4.9378625880920683
+    },
+    {
+      "id": "streams_mcs10_nss8_p3",
+      "mean_ber": 0.33218324541009231,
+      "effective": 5.0925237258443774
+    },
+    {
+      "id": "streams_mcs10_nss8_p4",
+      "mean_ber": 0.38489773468030858,
+      "effective": 1.968181481846939
+    },
+    {
+      "id": "streams_mcs10_nss8_p5",
+      "mean_ber": 0.39061819072665821,
+      "effective": 1.7562167551229404
+    },
+    {
+      "id": "streams_mcs10_nss8_p6",
+      "mean_ber": 0.46821606983984454,
+      "effective": 0.17505870320211775
+    },
+    {
+      "id": "scalar_mcs11_g0",
+      "mean_ber": 0.5,
+      "effective": 0
+    },
+    {
+      "id": "scalar_mcs11_g1e-08",
+      "mean_ber": 0.49999308674051984,
+      "effective": 1E-8
+    },
+    {
+      "id": "scalar_mcs11_g1.77827941e-08",
+      "mean_ber": 0.49999078102026273,
+      "effective": 1.7782794100389228E-8
+    },
+    {
+      "id": "scalar_mcs11_g3.16227766e-08",
+      "mean_ber": 0.4999877062928112,
+      "effective": 3.1622776601683792E-8
+    },
+    {
+      "id": "scalar_mcs11_g5.62341325e-08",
+      "mean_ber": 0.49998360607768094,
+      "effective": 5.6234132519034912E-8
+    },
+    {
+      "id": "scalar_mcs11_g1e-07",
+      "mean_ber": 0.49997813835251514,
+      "effective": 1E-7
+    },
+    {
+      "id": "scalar_mcs11_g1.77827941e-07",
+      "mean_ber": 0.49997084702284161,
+      "effective": 1.7782794100389227E-7
+    },
+    {
+      "id": "scalar_mcs11_g3.16227766e-07",
+      "mean_ber": 0.49996112387612646,
+      "effective": 3.1622776601683792E-7
+    },
+    {
+      "id": "scalar_mcs11_g5.62341325e-07",
+      "mean_ber": 0.49994815784608004,
+      "effective": 5.62341325190349E-7
+    },
+    {
+      "id": "scalar_mcs11_g1e-06",
+      "mean_ber": 0.49993086735404796,
+      "effective": 1E-6
+    },
+    {
+      "id": "scalar_mcs11_g1.77827941e-06",
+      "mean_ber": 0.49990781008134072,
+      "effective": 1.7782794100389229E-6
+    },
+    {
+      "id": "scalar_mcs11_g3.16227766e-06",
+      "mean_ber": 0.49987706264048859,
+      "effective": 3.1622776601683792E-6
+    },
+    {
+      "id": "scalar_mcs11_g5.62341325e-06",
+      "mean_ber": 0.49983606009475984,
+      "effective": 5.62341325190349E-6
+    },
+    {
+      "id": "scalar_mcs11_g1e-05",
+      "mean_ber": 0.49978138190777088,
+      "effective": 1E-5
+    },
+    {
+      "id": "scalar_mcs11_g1.77827941e-05",
+      "mean_ber": 0.49970846639304617,
+      "effective": 1.7782794100389229E-5
+    },
+    {
+      "id": "scalar_mcs11_g3.16227766e-05",
+      "mean_ber": 0.49961122966639565,
+      "effective": 3.1622776601683795E-5
+    },
+    {
+      "id": "scalar_mcs11_g5.62341325e-05",
+      "mean_ber": 0.49948155689437534,
+      "effective": 5.6234132519034907E-5
+    },
+    {
+      "id": "scalar_mcs11_g0.0001",
+      "mean_ber": 0.499308622402246,
+      "effective": 0.0001
+    },
+    {
+      "id": "scalar_mcs11_g0.000177827941",
+      "mean_ber": 0.4990779795616902,
+      "effective": 0.0001778279410038923
+    },
+    {
+      "id": "scalar_mcs11_g0.000316227766",
+      "mean_ber": 0.498770338939746,
+      "effective": 0.00031622776601683794
+    },
+    {
+      "id": "scalar_mcs11_g0.000562341325",
+      "mean_ber": 0.49835991954694431,
+      "effective": 0.0005623413251903491
+    },
+    {
+      "id": "scalar_mcs11_g0.001",
+      "mean_ber": 0.49781220442982865,
+      "effective": 0.001
+    },
+    {
+      "id": "scalar_mcs11_g0.00177827941",
+      "mean_ber": 0.49708084008260583,
+      "effective": 0.0017782794100389228
+    },
+    {
+      "id": "scalar_mcs11_g0.00316227766",
+      "mean_ber": 0.49610325028383,
+      "effective": 0.0031622776601683794
+    },
+    {
+      "id": "scalar_mcs11_g0.00562341325",
+      "mean_ber": 0.49479420640262595,
+      "effective": 0.005623413251903491
+    },
+    {
+      "id": "scalar_mcs11_g0.01",
+      "mean_ber": 0.49303594116709493,
+      "effective": 0.01
+    },
+    {
+      "id": "scalar_mcs11_g0.0177827941",
+      "mean_ber": 0.490662118361055,
+      "effective": 0.017782794100389229
+    },
+    {
+      "id": "scalar_mcs11_g0.0316227766",
+      "mean_ber": 0.48743075798839069,
+      "effective": 0.031622776601683791
+    },
+    {
+      "id": "scalar_mcs11_g0.0562341325",
+      "mean_ber": 0.48297861395730513,
+      "effective": 0.056234132519034905
+    },
+    {
+      "id": "scalar_mcs11_g0.1",
+      "mean_ber": 0.47675165136964071,
+      "effective": 0.1
+    },
+    {
+      "id": "scalar_mcs11_g0.177827941",
+      "mean_ber": 0.46793232886702468,
+      "effective": 0.17782794100389226
+    },
+    {
+      "id": "scalar_mcs11_g0.316227766",
+      "mean_ber": 0.45546920479346137,
+      "effective": 0.31622776601683794
+    },
+    {
+      "id": "scalar_mcs11_g0.562341325",
+      "mean_ber": 0.43841071749534971,
+      "effective": 0.56234132519034907
+    },
+    {
+      "id": "scalar_mcs11_g1",
+      "mean_ber": 0.41646889959844791,
+      "effective": 1
+    },
+    {
+      "id": "scalar_mcs11_g1.77827941",
+      "mean_ber": 0.38999915799146045,
+      "effective": 1.7782794100389228
+    },
+    {
+      "id": "scalar_mcs11_g3.16227766",
+      "mean_ber": 0.35954672795193365,
+      "effective": 3.1622776601683795
+    },
+    {
+      "id": "scalar_mcs11_g5.62341325",
+      "mean_ber": 0.3263106096539371,
+      "effective": 5.6234132519034912
+    },
+    {
+      "id": "scalar_mcs11_g10",
+      "mean_ber": 0.29093740365065068,
+      "effective": 10
+    },
+    {
+      "id": "scalar_mcs11_g17.7827941",
+      "mean_ber": 0.25352137241158884,
+      "effective": 17.782794100389228
+    },
+    {
+      "id": "scalar_mcs11_g31.6227766",
+      "mean_ber": 0.21482058210720006,
+      "effective": 31.622776601683793
+    },
+    {
+      "id": "scalar_mcs11_g56.2341325",
+      "mean_ber": 0.17424820942382416,
+      "effective": 56.234132519034908
+    },
+    {
+      "id": "scalar_mcs11_g100",
+      "mean_ber": 0.13345708803464867,
+      "effective": 100
+    },
+    {
+      "id": "scalar_mcs11_g177.827941",
+      "mean_ber": 0.096777923447548611,
+      "effective": 177.82794100389228
+    },
+    {
+      "id": "scalar_mcs11_g316.227766",
+      "mean_ber": 0.065737755799546521,
+      "effective": 316.2277660168379
+    },
+    {
+      "id": "scalar_mcs11_g562.341325",
+      "mean_ber": 0.038594093189409685,
+      "effective": 562.341325190349
+    },
+    {
+      "id": "scalar_mcs11_g1000",
+      "mean_ber": 0.0168195296203346,
+      "effective": 1000
+    },
+    {
+      "id": "scalar_mcs11_g1778.27941",
+      "mean_ber": 0.0043388745292950049,
+      "effective": 1778.2794100389228
+    },
+    {
+      "id": "scalar_mcs11_g3162.27766",
+      "mean_ber": 0.00045044499025415178,
+      "effective": 3162.2776601683795
+    },
+    {
+      "id": "scalar_mcs11_g5623.41325",
+      "mean_ber": 9.4710615740111211E-6,
+      "effective": 5623.4132519034911
+    },
+    {
+      "id": "scalar_mcs11_g10000",
+      "mean_ber": 1.1854554082459017E-8,
+      "effective": 10000
+    },
+    {
+      "id": "streams_mcs11_nss1_p1",
+      "mean_ber": 0.36247169539252838,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs11_nss1_p2",
+      "mean_ber": 0.0168195296203346,
+      "effective": 1000
+    },
+    {
+      "id": "streams_mcs11_nss1_p3",
+      "mean_ber": 0.33218324541009231,
+      "effective": 5.0925237258443774
+    },
+    {
+      "id": "streams_mcs11_nss1_p4",
+      "mean_ber": 0.3411295591996687,
+      "effective": 4.3700046527566245
+    },
+    {
+      "id": "streams_mcs11_nss1_p5",
+      "mean_ber": 0.27197470398820811,
+      "effective": 13.426719069196638
+    },
+    {
+      "id": "streams_mcs11_nss1_p6",
+      "mean_ber": 0.24572855871875654,
+      "effective": 20
+    },
+    {
+      "id": "streams_mcs11_nss2_p1",
+      "mean_ber": 0.36247169539252855,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs11_nss2_p2",
+      "mean_ber": 0.25731586702508163,
+      "effective": 16.790046265900425
+    },
+    {
+      "id": "streams_mcs11_nss2_p3",
+      "mean_ber": 0.33218324541009231,
+      "effective": 5.0925237258443774
+    },
+    {
+      "id": "streams_mcs11_nss2_p4",
+      "mean_ber": 0.42969722460689413,
+      "effective": 0.717663571315831
+    },
+    {
+      "id": "streams_mcs11_nss2_p5",
+      "mean_ber": 0.39683486288642206,
+      "effective": 1.5458019578891409
+    },
+    {
+      "id": "streams_mcs11_nss2_p6",
+      "mean_ber": 0.37286427935937816,
+      "effective": 2.4783839481981857
+    },
+    {
+      "id": "streams_mcs11_nss3_p1",
+      "mean_ber": 0.36247169539252855,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs11_nss3_p2",
+      "mean_ber": 0.31036687788287032,
+      "effective": 7.3231899916212777
+    },
+    {
+      "id": "streams_mcs11_nss3_p3",
+      "mean_ber": 0.33218324541009231,
+      "effective": 5.0925237258443774
+    },
+    {
+      "id": "streams_mcs11_nss3_p4",
+      "mean_ber": 0.35164449551559213,
+      "effective": 3.6388474901448911
+    },
+    {
+      "id": "streams_mcs11_nss3_p5",
+      "mean_ber": 0.40492644847021292,
+      "effective": 1.3003752666648083
+    },
+    {
+      "id": "streams_mcs11_nss3_p6",
+      "mean_ber": 0.41524285290625212,
+      "effective": 1.0293527714995392
+    },
+    {
+      "id": "streams_mcs11_nss4_p1",
+      "mean_ber": 0.3624716953925286,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs11_nss4_p2",
+      "mean_ber": 0.32058019726761378,
+      "effective": 6.188761604761261
+    },
+    {
+      "id": "streams_mcs11_nss4_p3",
+      "mean_ber": 0.33218324541009225,
+      "effective": 5.0925237258443765
+    },
+    {
+      "id": "streams_mcs11_nss4_p4",
+      "mean_ber": 0.37557614809998563,
+      "effective": 2.3552147133413439
+    },
+    {
+      "id": "streams_mcs11_nss4_p5",
+      "mean_ber": 0.36910574291758719,
+      "effective": 2.6576328609609225
+    },
+    {
+      "id": "streams_mcs11_nss4_p6",
+      "mean_ber": 0.43643213967968908,
+      "effective": 0.595684506845467
+    },
+    {
+      "id": "streams_mcs11_nss8_p1",
+      "mean_ber": 0.36247169539252855,
+      "effective": 3
+    },
+    {
+      "id": "streams_mcs11_nss8_p2",
+      "mean_ber": 0.33399768972809324,
+      "effective": 4.9378625880920683
+    },
+    {
+      "id": "streams_mcs11_nss8_p3",
+      "mean_ber": 0.33218324541009231,
+      "effective": 5.0925237258443774
+    },
+    {
+      "id": "streams_mcs11_nss8_p4",
+      "mean_ber": 0.36938940807191628,
+      "effective": 2.643746860528021
+    },
+    {
+      "id": "streams_mcs11_nss8_p5",
+      "mean_ber": 0.34288668857891946,
+      "effective": 4.2394156662059252
+    },
+    {
+      "id": "streams_mcs11_nss8_p6",
+      "mean_ber": 0.46821606983984454,
+      "effective": 0.17505870320211775
+    },
+    {
+      "id": "per_mcs0_ldpc0_nss1_flat",
+      "mean_ber": 0.085937744966155014,
+      "effective": 0.93325430079699112
+    },
+    {
+      "id": "per_mcs0_ldpc0_nss2_flat",
+      "mean_ber": 0.085937744966155138,
+      "effective": 0.93325430079699112
+    },
+    {
+      "id": "per_mcs0_ldpc0_nss2_unequal_streams",
+      "mean_ber": 0.085937744966155513,
+      "effective": 0.933254300796977
+    },
+    {
+      "id": "per_mcs0_ldpc0_nss2_frequency_selective",
+      "mean_ber": 0.085937744966155291,
+      "effective": 0.93325430079697891
+    },
+    {
+      "id": "per_mcs0_ldpc0_nss4_flat",
+      "mean_ber": 0.085937744966155472,
+      "effective": 0.93325430079699112
+    },
+    {
+      "id": "per_mcs0_ldpc0_nss4_unequal_streams",
+      "mean_ber": 0.085937744966154583,
+      "effective": 0.93325430079699545
+    },
+    {
+      "id": "per_mcs1_ldpc0_nss1_flat",
+      "mean_ber": 0.086192053962784676,
+      "effective": 1.862087136662868
+    },
+    {
+      "id": "per_mcs1_ldpc0_nss2_flat",
+      "mean_ber": 0.086192053962784815,
+      "effective": 1.862087136662868
+    },
+    {
+      "id": "per_mcs1_ldpc0_nss2_unequal_streams",
+      "mean_ber": 0.086192053962784856,
+      "effective": 1.8620871366625664
+    },
+    {
+      "id": "per_mcs1_ldpc0_nss2_frequency_selective",
+      "mean_ber": 0.086192053962784856,
+      "effective": 1.8620871366625664
+    },
+    {
+      "id": "per_mcs1_ldpc0_nss4_flat",
+      "mean_ber": 0.086192053962784509,
+      "effective": 1.862087136662868
+    },
+    {
+      "id": "per_mcs3_ldpc0_nss1_flat",
+      "mean_ber": 0.094019637975046408,
+      "effective": 6.6069344800759593
+    },
+    {
+      "id": "per_mcs3_ldpc0_nss2_flat",
+      "mean_ber": 0.094019637975046408,
+      "effective": 6.6069344800759593
+    },
+    {
+      "id": "per_mcs3_ldpc0_nss2_unequal_streams",
+      "mean_ber": 0.094019637975046491,
+      "effective": 6.6069344800759531
+    },
+    {
+      "id": "per_mcs3_ldpc0_nss2_frequency_selective",
+      "mean_ber": 0.094019637975046283,
+      "effective": 6.60693448007567
+    },
+    {
+      "id": "per_mcs3_ldpc0_nss4_flat",
+      "mean_ber": 0.094019637975045936,
+      "effective": 6.6069344800759593
+    },
+    {
+      "id": "per_mcs3_ldpc0_nss4_unequal_streams",
+      "mean_ber": 0.094019637975045811,
+      "effective": 6.6069344800757035
+    },
+    {
+      "id": "per_mcs5_ldpc0_nss1_flat",
+      "mean_ber": 0.058013881248826643,
+      "effective": 34.673685045253187
+    },
+    {
+      "id": "per_mcs5_ldpc0_nss2_flat",
+      "mean_ber": 0.056506904655943865,
+      "effective": 35.481338923357548
+    },
+    {
+      "id": "per_mcs5_ldpc0_nss2_unequal_streams",
+      "mean_ber": 0.056506904655941124,
+      "effective": 35.481338923359068
+    },
+    {
+      "id": "per_mcs5_ldpc0_nss2_frequency_selective",
+      "mean_ber": 0.056506904655941124,
+      "effective": 35.481338923359068
+    },
+    {
+      "id": "per_mcs5_ldpc0_nss4_flat",
+      "mean_ber": 0.055012538951563342,
+      "effective": 36.307805477010142
+    },
+    {
+      "id": "per_mcs8_ldpc0_nss1_flat",
+      "mean_ber": 0.041509447536822133,
+      "effective": 154.88166189124829
+    },
+    {
+      "id": "per_mcs8_ldpc0_nss2_flat",
+      "mean_ber": 0.04150944753682221,
+      "effective": 154.88166189124829
+    },
+    {
+      "id": "per_mcs8_ldpc0_nss2_unequal_streams",
+      "mean_ber": 0.041509447536820544,
+      "effective": 154.88166189125315
+    },
+    {
+      "id": "per_mcs8_ldpc0_nss2_frequency_selective",
+      "mean_ber": 0.041509447536820544,
+      "effective": 154.88166189125315
+    },
+    {
+      "id": "per_mcs8_ldpc0_nss4_flat",
+      "mean_ber": 0.040344434955110489,
+      "effective": 158.48931924611142
+    },
+    {
+      "id": "per_mcs0_ldpc1_nss1_flat",
+      "mean_ber": 0.11168248658163366,
+      "effective": 0.74131024130091761
+    },
+    {
+      "id": "per_mcs0_ldpc1_nss2_flat",
+      "mean_ber": 0.11168248658163368,
+      "effective": 0.74131024130091761
+    },
+    {
+      "id": "per_mcs0_ldpc1_nss2_unequal_streams",
+      "mean_ber": 0.11168248658163966,
+      "effective": 0.74131024130087586
+    },
+    {
+      "id": "per_mcs0_ldpc1_nss2_frequency_selective",
+      "mean_ber": 0.11168248658163968,
+      "effective": 0.74131024130087586
+    },
+    {
+      "id": "per_mcs0_ldpc1_nss4_flat",
+      "mean_ber": 0.11168248658163302,
+      "effective": 0.74131024130091761
+    },
+    {
+      "id": "per_mcs10_ldpc1_nss1_flat",
+      "mean_ber": 0.055562305497294372,
+      "effective": 389.04514499428046
+    },
+    {
+      "id": "per_mcs10_ldpc1_nss2_flat",
+      "mean_ber": 0.05445779369239228,
+      "effective": 398.10717055349733
+    },
+    {
+      "id": "per_mcs10_ldpc1_nss2_unequal_streams",
+      "mean_ber": 0.054457793692392148,
+      "effective": 398.10717055350244
+    },
+    {
+      "id": "per_mcs10_ldpc1_nss2_frequency_selective",
+      "mean_ber": 0.054457793692392266,
+      "effective": 398.10717055350136
+    },
+    {
+      "id": "per_mcs10_ldpc1_nss4_flat",
+      "mean_ber": 0.0533585468513623,
+      "effective": 407.380277804113
+    },
+    {
+      "id": "per_mcs10_ldpc1_nss4_unequal_streams",
+      "mean_ber": 0.053358546851362362,
+      "effective": 407.38027780411562
+    },
+    {
+      "id": "per_length32_nss2_flat",
+      "mean_ber": 0.11168248658163368,
+      "effective": 0.74131024130091761
+    },
+    {
+      "id": "per_length32_nss2_unequal_streams",
+      "mean_ber": 0.11168248658163966,
+      "effective": 0.74131024130087586
+    },
+    {
+      "id": "per_length1200_nss2_flat",
+      "mean_ber": 0.073926782448696424,
+      "effective": 1.0471285480508998
+    },
+    {
+      "id": "per_length1200_nss2_unequal_streams",
+      "mean_ber": 0.073926782448696757,
+      "effective": 1.0471285480508985
+    }
+  ]
+}
