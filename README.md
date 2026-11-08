@@ -288,46 +288,26 @@ Please use the following bibtex:
 CPU regression CI and provenance
 ===============================
 
-The initial CPU workflow builds the current module against a fixed ns-3.40
-revision with fresh Protobuf bindings, Python 3.12.12 and exact direct/transitive
-versions in `model/ns3sionna/requirements_cpu_ci.lock`. After building the native
-benchmark examples, `test-runner` and `sionna-test`, run `python tools/run_cpu_regressions.py`
-from this module (or pass its path from ns-3). It reuses seven native suites,
-server contracts, calibration/policy checks and the three existing frozen exports.
-Full RT checks remain separate; build/test logs are retained by CI.
+The CPU workflow builds the current module with fresh Protobuf bindings and
+exact Python versions from `model/ns3sionna/requirements_cpu_ci.lock`.
+`tools/run_cpu_regressions.py` reuses native suites and frozen references;
+fresh RT and GPU validation remain separate. New runs add `run.json` with
+hashes, actual backend and explicit execution/validation status. Historical
+measurement hashes remain unchanged.
 
-New tool runs add a versioned `run.json` sidecar (calibration: `<output>.run.json`)
-with portable text/raw binary hashes and explicit execution status. Existing
-exports and historical measurement source hashes are preserved. Disabling the
-propagation cache now returns each new validated reply and releases retained
-snapshots. See [the increment contract and limitations](doc/provenance-cpu-increment.md)
-and [the model validation](ns3sionna_mimo_model.md#719-r1r3-inkrement-portable-provenienz-und-erste-cpu-ci).
-This increment does not complete all of R1/R3.
-
-The following [R3 cache increment](ns3sionna_mimo_model.md#720-zweites-r3-inkrement-cachekorrektheit-und-belegungsstatistik)
-adds validity/direction/atomic-batch regressions, finite zero-lookup statistics,
-current/lifetime-peak storage counters and lazy expiry cleanup across inactive
-links. Future snapshots are retained. Existing IPC exports remain unchanged;
-long-run budgets, copy optimization and hosted CPU validation remain open.
-
-The next [R3 increment](ns3sionna_mimo_model.md#722-viertes-r3-inkrement-cfr-kopierreduktion-und-gettereigentum)
-removes internal CFR copies from scalar/cache lookups, moves decoded storage, and
-reuses each validated MU CFR by explicit user ID. Public matrix/vector results
-remain independent values. To measure matrix, const loss, delay, frequency and
-CSI getters separately for two fixed shapes and three processes per shape, run
-from ns-3 with an empty output directory:
+The cache runner supports `--copy-profile`, `--storage-steps` and
+`--workload-sweep` (cache on/off, rotating 1/16/64-link working sets, depths
+1/4/16). Run in the documented CPU environment from ns-3 with an empty output:
 
 ```shell
-python contrib/sionna/tools/benchmark_cache_ipc.py --copy-profile --output=/tmp/r3-copy-profile
-cd contrib/sionna/tools
-CACHE_IPC_BENCHMARK_RESULTS=/tmp/r3-copy-profile python -m unittest -v test_benchmark_cache_ipc
+./ns3 build -j 2 ns3_sionna_cache_ipc_benchmark sionna-test
+python contrib/sionna/tools/benchmark_cache_ipc.py --workload-sweep --output=/tmp/r3-workload
+CACHE_IPC_WORKLOAD_RESULTS=/tmp/r3-workload python contrib/sionna/tools/run_cpu_regressions.py
 ```
 
-The existing default sweep and frozen exports remain compatible. Profile exports
-check all five getters, exact payloads, 656 hits/2 misses per process and no hidden
-hit RPCs. Performance observations use frozen channels and local process IPC;
-long working-set/look-ahead sweeps, transport timeouts and Live/GPU evidence remain
-open Phase-5 work.
+See the [measurement contract](ns3sionna_mimo_model.md#519-phase-5-messvertrag),
+[validated results and limits](ns3sionna_mimo_model.md#713-phase-5-ergebnisse-und-verbleibende-grenzen)
+and [manifest format](doc/provenance-cpu-increment.md).
 
 ## HE pilot calibration at reception
 

@@ -33,14 +33,33 @@ class TestBackendPolicy(unittest.TestCase):
         # CUDA evaluation or fails explicitly, according to the actual hardware.
         result = subprocess.run([sys.executable, str(Path(backend.__file__)), "probe", "--backend=cuda"],
                                 capture_output=True, text=True, timeout=60)
-        report = json.loads(result.stdout.splitlines()[-1])
+        report = json.loads(result.stdout)
         if result.returncode == 0:
+            self.assertEqual(report["status"], "success")
+            self.assertEqual(report["backend"], "cuda")
             self.assertEqual(report["variant"], backend.VARIANTS["cuda"])
             self.assertEqual(report["evaluation"], [2, 3])
         else:
             self.assertEqual(report["status"], "failed")
             self.assertEqual(report["backend"], "cuda")
             self.assertTrue(report["error"])
+
+    def test_cuda_probe_parses_pretty_success_and_compact_failure(self):
+        reports = (
+            (0, {"status": "success", "backend": "cuda",
+                 "variant": backend.VARIANTS["cuda"], "evaluation": [2.0, 3.0]}, 2),
+            (1, {"status": "failed", "backend": "cuda", "error": "CUDA unavailable"}, None),
+        )
+        for code, report, indent in reports:
+            result = subprocess.CompletedProcess([], code, json.dumps(report, indent=indent) + "\n", "")
+            with self.subTest(status=report["status"]), patch.object(
+                    backend.subprocess, "run", return_value=result):
+                self.test_cuda_probe_on_cpu_host_fails_without_llvm_fallback()
+        result = subprocess.CompletedProcess([], 0, json.dumps({
+            "status": "success", "backend": "cuda", "variant": backend.VARIANTS["cpu"],
+            "evaluation": [2, 3]}, indent=2), "")
+        with patch.object(backend.subprocess, "run", return_value=result), self.assertRaises(AssertionError):
+            self.test_cuda_probe_on_cpu_host_fails_without_llvm_fallback()
 
     def test_existing_variant_cannot_be_reused_as_other_backend(self):
         fake_mi = type("Mitsuba", (), {"variant": staticmethod(lambda: backend.VARIANTS["cpu"])})
@@ -161,6 +180,9 @@ class TestRemoteVerifier(unittest.TestCase):
                 self._check_existing_shell(reuse_build=True, complete=complete,
                                            missing_companions=missing_companions)
 
+    def test_existing_build_reports_native_loader_failure_before_regressions(self):
+        self._check_existing_shell(reuse_build=True, loader_failure=True)
+
     def test_existing_build_requires_source_without_bundle_extraction(self):
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / 'output'
@@ -174,7 +196,8 @@ class TestRemoteVerifier(unittest.TestCase):
                     self.assertIn('--use-existing-build requires --source', result.stderr)
                     self.assertFalse(output.exists())
 
-    def _check_existing_shell(self, *, reuse_build, complete=True, missing_companions=False):
+    def _check_existing_shell(self, *, reuse_build, complete=True, missing_companions=False,
+                              loader_failure=False):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             support, source, fakebin = (root / name for name in ("support", "source", "bin"))
@@ -199,14 +222,18 @@ class TestRemoteVerifier(unittest.TestCase):
                 path.write_bytes(b'existing binding\n')
             built = ('build/utils/ns3.40-test-runner-default',
                      'build/lib/libns3.40-sionna-test-default.so',
+                     'build/lib/libns3.40-sionna-default.so',
                      'build/contrib/sionna/examples/ns3.40-ns3_wifi_sumimo_benchmark-default',
                      'build/contrib/sionna/examples/ns3.40-ns3_sionna_cache_ipc_benchmark-default',
                      'build/contrib/sionna/examples/ns3.40-ns3_sionna_live_benchmark-default')
             for name in built:
                 path = source / name
                 path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_bytes(b'#!/bin/sh\nexit 0\n')
+                path.write_bytes(b'#!/bin/sh\nprintf "%s\\n" "$LD_BIND_NOW" "$LD_LIBRARY_PATH"\nexit 0\n')
                 path.chmod(0o755)
+            if loader_failure:
+                (source / built[0]).write_text(
+                    '#!/bin/sh\necho "undefined symbol: SionnaChannelMatrix" >&2\nexit 127\n')
             if not complete:
                 (source / built[-1]).unlink()
             for name in ("id", "nvidia-smi", "pkg-config", "g++", "cmake", "patch", "protoc"):
@@ -218,9 +245,11 @@ class TestRemoteVerifier(unittest.TestCase):
                                      "--source", str(source), "--output", str(output),
                                      *(['--use-existing-build'] if reuse_build else [])],
                                     env={**os.environ, "R6_PYTHON": sys.executable,
+                                         "LD_LIBRARY_PATH": str(root / "other-checkout/lib"),
                                          "PATH": str(fakebin) + os.pathsep + os.environ["PATH"]},
                                     capture_output=True, text=True, timeout=60)
-            self.assertEqual(result.returncode, 17 if complete else 1, result.stdout + result.stderr)
+            self.assertEqual(result.returncode, 17 if complete and not loader_failure else 1,
+                             result.stdout + result.stderr)
             self.assertIn("no packages will be installed", result.stdout)
             self.assertFalse((output / "venv").exists())
             overlay = json.loads((output / "logs/runner-overlay.json").read_text())
@@ -245,10 +274,22 @@ class TestRemoteVerifier(unittest.TestCase):
                 self.assertFalse(report['build_executed'])
                 self.assertFalse(report['bindings_regenerated'])
                 self.assertFalse(report['clean_build_claimed'])
-                self.assertEqual(report['status'], 'success' if complete else 'failed')
-                if complete:
+                self.assertEqual(report['status'], 'success' if complete and not loader_failure else 'failed')
+                self.assertEqual(report['ld_library_path'].split(os.pathsep),
+                                 [str(source / 'build/lib'), str(root / 'other-checkout/lib')])
+                if loader_failure:
+                    self.assertEqual(report['failures'], ['test-runner:native-loader'])
+                    self.assertEqual(report['loader_checks']['test-runner']['returncode'], 127)
+                    self.assertIn('undefined symbol: SionnaChannelMatrix', result.stdout)
+                    self.assertNotIn('environment reused', (output / 'logs/remote.log').read_text())
+                elif complete:
                     self.assertIn('no configure, build or binding regeneration', result.stdout)
-                    self.assertEqual(len(report['files']), 8)
+                    self.assertEqual(len(report['files']), 9)
+                    self.assertEqual(len(report['loader_checks']), 4)
+                    self.assertTrue(all(check['returncode'] == 0
+                                        for check in report['loader_checks'].values()))
+                    self.assertTrue(all(check['stdout'] == '1\n' + report['ld_library_path'] + '\n'
+                                        for check in report['loader_checks'].values()))
                     for item in report['files'].values():
                         self.assertEqual(item['raw_sha256'], backend.base.sha256(Path(item['path'])))
                 else:

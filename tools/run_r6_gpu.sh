@@ -164,13 +164,17 @@ else
   export PATH="$r6_output/venv/bin:$PATH"
 fi
 cd "$r6_source"
+# Direct native invocations must use this checkout's libraries, even when
+# Conda or another ns-3 checkout already contributes a loader search path.
+export LD_LIBRARY_PATH="$r6_source/build/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 if (( r6_existing_build )); then
   "$r6_python" - "$r6_source" "$r6_output/logs/build-reuse.json" <<'BUILD'
-import hashlib, json, os, pathlib, sys
+import hashlib, json, os, pathlib, subprocess, sys
 source, report = map(pathlib.Path, sys.argv[1:])
 patterns = {
     'test-runner': 'build/utils/*test-runner-*',
     'sionna-test': 'build/lib/libns3.40-sionna-test-*.so',
+    'sionna': 'build/lib/libns3.40-sionna-*.so',
     **{name: f'build/contrib/sionna/examples/ns3.40-{name}-*' for name in (
         'ns3_wifi_sumimo_benchmark', 'ns3_sionna_cache_ipc_benchmark',
         'ns3_sionna_live_benchmark')},
@@ -181,6 +185,8 @@ patterns = {
 files, failures = {}, []
 for name, pattern in patterns.items():
     paths = sorted(path for path in source.glob(pattern) if path.is_file())
+    if name == 'sionna':
+        paths = [path for path in paths if '-sionna-test-' not in path.name]
     executable = name == 'test-runner' or name.startswith('ns3_')
     if len(paths) != 1 or not paths[0].stat().st_size or (
             executable and not os.access(paths[0], os.X_OK)):
@@ -189,12 +195,41 @@ for name, pattern in patterns.items():
     path = paths[0]
     files[name] = {'path': str(path),
                    'raw_sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+loader_checks = {}
+if not failures:
+    # Resolve lazy function references too. This lists tests/prints help only;
+    # no test suite, channel trace, configure or build is started here.
+    for name in ('test-runner', 'ns3_wifi_sumimo_benchmark',
+                 'ns3_sionna_cache_ipc_benchmark', 'ns3_sionna_live_benchmark'):
+        args = [files[name]['path'],
+                '--print-test-name-list' if name == 'test-runner' else '--PrintHelp']
+        try:
+            result = subprocess.run(args, cwd=source, capture_output=True, text=True,
+                                    timeout=60, env={**os.environ, 'LD_BIND_NOW': '1'})
+            check = {'command': args, 'returncode': result.returncode,
+                     'stdout': result.stdout, 'stderr': result.stderr}
+            if result.returncode:
+                failures.append(name + ':native-loader')
+        except (OSError, subprocess.TimeoutExpired) as error:
+            check = {'command': args, 'returncode': None, 'error': str(error)}
+            failures.append(name + ':native-loader')
+        loader_checks[name] = check
 report.write_text(json.dumps({'mode': 'existing', 'source': str(source),
     'configure_executed': False, 'build_executed': False,
     'bindings_regenerated': False, 'clean_build_claimed': False,
-    'files': files, 'failures': failures,
+    'ld_library_path': os.environ.get('LD_LIBRARY_PATH'),
+    'loader_checks': loader_checks, 'files': files, 'failures': failures,
     'status': 'failed' if failures else 'success'}, indent=2) + '\n')
 if failures:
+    if any(name.endswith(':native-loader') for name in failures):
+        for name, check in loader_checks.items():
+            if check['returncode'] != 0:
+                print(name + ': ' + (check.get('stderr') or check.get('error') or
+                                    check.get('stdout') or 'native startup failed'), file=sys.stderr)
+        raise SystemExit('Native loader preflight failed; see ' + str(report) +
+                         '. The selected build/lib is already first in LD_LIBRARY_PATH. '
+                         'Check the recorded loader errors and relink inconsistent targets '
+                         'in this existing build tree. No build was attempted.')
     raise SystemExit('Existing ns-3 build is missing required files, has ambiguous matches, '
                      'or non-executable binaries: ' + ', '.join(failures) +
                      '. No build was attempted; select a checkout with these R6 targets already built.')

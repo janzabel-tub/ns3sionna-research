@@ -66,11 +66,11 @@ def executable() -> Path:
     return candidates[0]
 
 
-def native(binary: Path, **arguments) -> None:
+def native(binary: Path, subprocess_timeout=60, **arguments) -> None:
     command = [str(binary), *(f"--{key}={value}" for key, value in arguments.items())]
     provenance.native_command(command)
     subprocess.run(command,
-                   check=True, cwd=NS3, capture_output=True, text=True, timeout=60)
+                   check=True, cwd=NS3, capture_output=True, text=True, timeout=subprocess_timeout)
 
 
 def export_configuration(binary: Path, output: Path, spacing: float,

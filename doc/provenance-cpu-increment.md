@@ -200,7 +200,7 @@ precedes forecasting and is not transactional. Cache correctness/budget/copy
 measurements below remain historical; live scaling, Doppler and GPU evidence
 remain R4–R6 work. R2 stays closed.
 
-The subsequent [R3 cache increment](../ns3sionna_mimo_model.md#720-zweites-r3-inkrement-cachekorrektheit-und-belegungsstatistik)
+The subsequent [R3 cache increment](../ns3sionna_mimo_model.md#713-phase-5-ergebnisse-und-verbleibende-grenzen)
 implements those correctness regressions, counters and lazy inactive-link cleanup.
 It records new validation separately; the first increment's results above remain historical.
 

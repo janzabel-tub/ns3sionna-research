@@ -9,6 +9,12 @@ All acceptance criteria are written before the first native measurement.
 loss (const overload), delay, frequency and CSI hit timers. cache_hit remains
 the channel-matrix timer. Each case uses three independent native processes;
 the optional mode writes the tabular exports and its predefined policy/run.json.
+
+--workload-sweep checks cache on/off over evolving time and active link windows
+for 1/16/64 working-set links and depths 1/4/16. Three fresh process pairs per
+case export exact occupancy/RPC trajectories and whole-epoch timings. The
+default 128 epochs can be extended with --workload-steps (multiples of 16,
+up to 4096). These synthetic changes test cache correctness, not mobility/RT.
 """
 from __future__ import annotations
 
@@ -22,6 +28,7 @@ import json
 from pathlib import Path
 import platform
 import resource
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -36,6 +43,8 @@ ANTENNAS = ((1, 1), (2, 2), (4, 4), (2, 4), (8, 8))  # (TX, RX)
 LINKS = (1, 16, 64)
 COPY_PROFILE_CASES = ((64, (2, 2), 1), (1024, (8, 8), 16))
 COPY_PROFILE_OPERATIONS = ("cache_hit_loss", "cache_hit_delay", "cache_hit_frequency", "cache_hit_csi")
+WORKLOAD_DEPTHS = (1, 4, 16)
+WORKLOAD_PERIOD_NS = 5000001
 CONTROLS = {"seed_ns3": 42, "run_ns3": 1, "fixture_seed": 42,
     "repetitions": 3, "iterations": 16, "hit_iterations": 128, "miss_iterations": 5,
     "warmup": 3, "transport": "local ipc:// REQ/REP, separate Python process",
@@ -146,7 +155,41 @@ def coefficient_digest(fixture):
     return f"{digest:016x}"
 
 
-def serve(input_path, endpoint, ready_path, stats_path):
+def workload_state(fixture, step, depth):
+    """One epoch, with a rotating bounded active window and time-dependent CFR."""
+    source = fixture.channel_state_response.csi[0]
+    links = len(source.rx_nodes)
+    active = max(1, links // 8)
+    first = (step // depth * active) % links
+    state = base.message_pb2.ChannelStateResponse.ChannelState()
+    state.CopyFrom(source)
+    state.ClearField("rx_nodes")
+    state.start_time = step * WORKLOAD_PERIOD_NS
+    state.end_time = state.start_time + WORKLOAD_PERIOD_NS - 1
+    for original in source.rx_nodes[first:first + active]:
+        radio = state.rx_nodes.add()
+        radio.CopyFrom(original)
+        radio.end_time2 = state.end_time
+        radio.wb_loss += step / 8
+        radio.delay += step
+        real, imag = np.asarray(original.csi_real), np.asarray(original.csi_imag)
+        phases = ((real, imag), (-imag, real), (-real, -imag), (imag, -real))
+        radio.ClearField("csi_real")
+        radio.ClearField("csi_imag")
+        radio.csi_real.extend(phases[step % 4][0])
+        radio.csi_imag.extend(phases[step % 4][1])
+    return state
+
+
+def workload_batch(fixture, step, depth):
+    result = base.message_pb2.Wrapper()
+    start = step // depth * depth
+    for epoch in range(start, start + depth):
+        result.channel_state_response.csi.add().CopyFrom(workload_state(fixture, epoch, depth))
+    return result
+
+
+def serve(input_path, endpoint, ready_path, stats_path, workload_depth=0):
     wire = input_path.read_bytes()
     response = base.message_pb2.Wrapper.FromString(wire)
     context = zmq.Context()
@@ -155,6 +198,7 @@ def serve(input_path, endpoint, ready_path, stats_path):
     socket.bind(endpoint)
     ready_path.write_text("ready\n")
     requests = []
+    last_block, workload_wire = None, None
     try:
         while True:
             if not socket.poll(60000):
@@ -168,6 +212,21 @@ def serve(input_path, endpoint, ready_path, stats_path):
             if request.WhichOneof("msg") != "channel_state_request":
                 raise ValueError("Unexpected frozen-peer request type")
             query = request.channel_state_request
+            if workload_depth:
+                if query.tx_node != 0 or query.time % WORKLOAD_PERIOD_NS:
+                    raise ValueError("Unexpected workload transmitter or timestamp")
+                step = query.time // WORKLOAD_PERIOD_NS
+                block = step // workload_depth
+                active = max(1, len(response.channel_state_response.csi[0].rx_nodes) // 8)
+                first = block * active % len(response.channel_state_response.csi[0].rx_nodes) + 1
+                if not first <= query.rx_node < first + active:
+                    raise ValueError("Unexpected workload active receiver")
+                if block != last_block:
+                    workload_wire = workload_batch(response, step, workload_depth).SerializeToString(deterministic=True)
+                    last_block = block
+                requests.append({"tx_node": query.tx_node, "rx_node": query.rx_node, "time_ns": query.time})
+                socket.send(workload_wire)
+                continue
             if (query.tx_node, query.rx_node) != (0, 1) or (query.time < 0 or query.time % 5000001 != 0):
                 raise ValueError("Unexpected frozen-peer endpoints or timestamp")
             requests.append({"tx_node": query.tx_node, "rx_node": query.rx_node, "time_ns": query.time})
@@ -190,9 +249,100 @@ def serve(input_path, endpoint, ready_path, stats_path):
         context.term()
 
 
-def deterministic_fields(record):
-    return {key: value for key, value in record.items() if not any(
-        token in key for token in ("rss", "heap", "_ns", "seconds"))}
+def deterministic_fields(record, *, include_environment=True):
+    """Compare behavior; historical replay may use different native libraries.
+
+    Keep library versions in same-environment repeat checks and raw records.
+    Cross-environment replay excludes only these two version fields.
+    """
+    return {key: value for key, value in record.items()
+            if (include_environment or key not in ("cpp_protobuf_version", "cpp_zmq_version"))
+            and not any(token in key for token in ("rss", "heap", "_ns", "seconds"))}
+
+
+def workload_plan(steps=128):
+    if not 16 <= steps <= 4096 or steps % 16:
+        raise ValueError("workload steps must be a multiple of 16 in [16, 4096]")
+    return {"schema_version": 1, "subphase": "r3-cache-workload",
+        "anchor": str(ANCHOR.relative_to(base.MODULE)), "anchor_sha256": base.sha256(ANCHOR),
+        "controls": {"steps": steps, "epoch_period_ns": WORKLOAD_PERIOD_NS,
+            "repetitions": 3, "seed_ns3": 42, "run_ns3": 1, "ray_tracing": False,
+            "subcarriers": 64, "tx_antennas": 2, "rx_antennas": 2,
+            "active_links": "max(1, working_set_links // 8); disjoint cyclic windows each depth epochs",
+            "sub_mode_equivalent": "receiver_count * look_ahead; depth=floor(sub_mode/receiver_count)",
+            "channel_evolution": "per epoch exact quarter-turn; loss += epoch/8 dB; delay += epoch ns",
+            "timing": "whole epoch: four public getters per active link plus full coefficient/metadata validation",
+            "memory": "logical payload/capacity per epoch, glibc arena-used+mmap proxy, Linux RSS/HWM; "
+                      "no allocator or RSS acceptance threshold; no RT or evolving mobility history"},
+        "sweep": {"links": LINKS, "look_ahead": WORKLOAD_DEPTHS, "cache_enabled": (True, False)},
+        "acceptance": {"values": "bit-exact CFR/frequencies/loss/delay for every active link each epoch",
+            "budget": "exact active_links * depth snapshots and their CFR/frequency payload; "
+                      "no valid/future eviction; zero retained payload when disabled",
+            "cleanup": "snapshots decrease every epoch; inactive links and capacities empty after final expiry",
+            "rpc": "enabled: one first-link RPC per depth epochs; disabled: four RPCs per active link per epoch",
+            "repeatability": "identical deterministic summaries and trajectory fields in three independent processes",
+            "timings": "exactly steps positive finite epoch samples; median/p95 and process range reported"}}
+
+
+def validate_workload(record, fixture, server, samples, trace, steps, depth, enabled):
+    """Validate exported observations, including exact RPC identities and future occupancy."""
+    links = len(fixture.channel_state_response.csi[0].rx_nodes)
+    active = max(1, links // 8)
+    radio = fixture.channel_state_response.csi[0].rx_nodes[0]
+    payload = len(radio.csi_real) * 16 + len(radio.frequencies) * 4
+    calls = 4 * active * steps
+    misses = steps // depth if enabled else calls
+    expected = {"steps": steps, "look_ahead": depth, "cache_enabled": int(enabled),
+        "links": links, "active_links": active, "getter_calls": calls,
+        "cache_miss_count": misses, "cache_hit_count": calls - misses,
+        "snapshot_budget": active * depth, "payload_budget_bytes": payload * active * depth,
+        "peak_snapshots": active * depth if enabled else 0,
+        "peak_payload_bytes": payload * active * depth if enabled else 0,
+        "final_snapshots": 0, "final_payload_bytes": 0, "final_capacity_bytes": 0}
+    for key, value in expected.items():
+        assert record[key] == value, (key, record[key], value)
+    assert abs(record["cache_hit_ratio"] - (calls - misses) / calls) <= 1e-12
+    assert len(trace) == len(samples) == steps
+    requests = []
+    for step, row in enumerate(trace):
+        first = step // depth * active % links + 1
+        snapshots = active * (depth - step % depth) if enabled else 0
+        wrapped = base.message_pb2.Wrapper()
+        wrapped.channel_state_response.csi.add().CopyFrom(workload_state(fixture, step, depth))
+        required = {"step": step, "time_ns": step * WORKLOAD_PERIOD_NS, "active_first": first,
+            "active_links": active, "links": active if enabled else 0, "snapshots": snapshots,
+            "payload_bytes": snapshots * payload, "peak_snapshots": expected["peak_snapshots"],
+            "peak_payload_bytes": expected["peak_payload_bytes"],
+            "coefficient_digest": coefficient_digest(wrapped)}
+        for key, value in required.items():
+            assert row[key] == value, (step, key, row[key], value)
+        assert row["capacity_bytes"] >= row["payload_bytes"]
+        if not enabled:
+            assert row["capacity_bytes"] == 0
+        assert row["heap_bytes"] > 0 and row["rss_bytes"] > 0
+        sample = samples[step]
+        assert sample["operation"] == "workload_epoch" and sample["iteration"] == step
+        assert np.isfinite(sample["nanoseconds"]) and sample["nanoseconds"] > 0
+        if enabled:
+            if step % depth == 0:
+                requests.append({"tx_node": 0, "rx_node": first, "time_ns": step * WORKLOAD_PERIOD_NS})
+        else:
+            for receiver in range(first, first + active):
+                requests.extend({"tx_node": 0, "rx_node": receiver, "time_ns": step * WORKLOAD_PERIOD_NS}
+                                for _ in range(4))
+    assert server["channel_requests"] == misses and server["close_requests"] == 1
+    assert server["requests"] == requests
+    assert server["peak_rss_bytes"] > 0
+    for key, value in record.items():
+        if isinstance(value, (int, float)):
+            assert np.isfinite(value), key
+            if "heap" in key or "rss" in key:
+                assert value > 0, key
+
+
+def deterministic_trajectory(trace):
+    return [{key: value for key, value in row.items() if key not in ("heap_bytes", "rss_bytes")}
+            for row in trace]
 
 
 def validate_record(record, fixture, server, samples, storage_steps=0, copy_profile=False):
@@ -262,7 +412,7 @@ def python_timings(fixture, wire):
     return samples
 
 
-def measure(binary, fixture, storage_steps=0, copy_profile=False):
+def measure(binary, fixture, storage_steps=0, copy_profile=False, workload=None):
     """One fresh native process and one fresh Python REP peer, both bounded/cleaned."""
     wire = fixture.SerializeToString(deterministic=True)
     with tempfile.TemporaryDirectory(prefix="cache-ipc-") as temporary:
@@ -272,7 +422,8 @@ def measure(binary, fixture, storage_steps=0, copy_profile=False):
         endpoint = "ipc://" + str(path / "peer.sock")
         ready, stats = path / "ready", path / "server.json"
         with (path / "peer.log").open("w+") as log:
-            process = subprocess.Popen([sys.executable, str(Path(__file__)), "--serve",
+            peer_options = [f"--workload-depth={workload['depth']}"] if workload else []
+            process = subprocess.Popen([sys.executable, str(Path(__file__)), "--serve", *peer_options,
                 "--input=" + str(input_path), "--endpoint=" + endpoint,
                 "--ready=" + str(ready), "--stats=" + str(stats)], stdout=log, stderr=log)
             try:
@@ -284,11 +435,15 @@ def measure(binary, fixture, storage_steps=0, copy_profile=False):
                     time.sleep(0.01)
                 started = time.perf_counter()
                 optional = {"copyProfile": 1} if copy_profile else {}
+                if workload:
+                    optional.update(workloadSteps=workload["steps"], lookAhead=workload["depth"],
+                                    cacheEnabled=int(workload["enabled"]), trajectory=path / "trajectory.csv")
                 base.native(binary, input=input_path, output=path / "native.json",
                     timings=path / "timings.csv", endpoint=endpoint,
                     links=len(fixture.channel_state_response.csi[0].rx_nodes),
                     iterations=CONTROLS["iterations"], hitIterations=CONTROLS["hit_iterations"],
                     missIterations=CONTROLS["miss_iterations"], warmup=CONTROLS["warmup"], storageSteps=storage_steps,
+                    subprocess_timeout=60 + workload["steps"] if workload else 60,
                     **optional)
                 native_seconds = time.perf_counter() - started
                 process.wait(timeout=10)
@@ -300,6 +455,23 @@ def measure(binary, fixture, storage_steps=0, copy_profile=False):
                 with (path / "timings.csv").open(newline="") as stream:
                     samples = [{"operation": row["operation"], "iteration": int(row["iteration"]),
                                 "nanoseconds": int(row["nanoseconds"])} for row in csv.DictReader(stream)]
+                if workload:
+                    with (path / "trajectory.csv").open(newline="") as stream:
+                        trace = [{key: value if key == "coefficient_digest" else int(value)
+                                  for key, value in row.items()} for row in csv.DictReader(stream)]
+                    validate_workload(record, fixture, server, samples, trace, **workload)
+            except Exception as error:
+                active_run = base.provenance.ACTIVE_RUN.get()
+                if active_run:
+                    failure = active_run.path.parent / "failed_process"
+                    failure.mkdir(exist_ok=True)
+                    log.flush()
+                    for artifact in path.iterdir():
+                        if artifact.is_file() and artifact.name != "ready":
+                            shutil.copyfile(artifact, failure / artifact.name)
+                log.seek(0)
+                error.add_note("Frozen REP peer log:\n" + log.read())
+                raise
             finally:
                 if process.poll() is None:
                     process.terminate()
@@ -308,8 +480,9 @@ def measure(binary, fixture, storage_steps=0, copy_profile=False):
                     except subprocess.TimeoutExpired:
                         process.kill()
                         process.wait()
-    samples.extend(python_timings(fixture, wire))
-    validate_record(record, fixture, server, samples, storage_steps, copy_profile)
+    if not workload:
+        samples.extend(python_timings(fixture, wire))
+        validate_record(record, fixture, server, samples, storage_steps, copy_profile)
     for operation in sorted({row["operation"] for row in samples}):
         values = [row["nanoseconds"] for row in samples if row["operation"] == operation]
         for statistic, value in (("median", np.median(values)), ("p95", np.percentile(values, 95)),
@@ -318,7 +491,7 @@ def measure(binary, fixture, storage_steps=0, copy_profile=False):
     record.update(native_process_seconds=native_seconds, server_channel_requests=server["channel_requests"],
                   server_close_requests=server["close_requests"], rep_server_peak_rss_bytes=server["peak_rss_bytes"],
                   rep_server_lifetime_peak_rss_bytes=server["lifetime_peak_rss_bytes"])
-    return record, samples, server
+    return (record, samples, server, trace) if workload else (record, samples, server)
 
 
 def plots(output, summaries):
@@ -439,6 +612,55 @@ def run_storage(output, binary, steps):
     return result
 
 
+@base.provenance.benchmark_run(lambda a: workload_plan(a["steps"]), inputs=(ANCHOR,))
+def run_workload(output, binary, steps=128):
+    """Extend the existing IPC runner with bounded evolving cache working sets."""
+    base.provenance.backend_selected("frozen-protobuf-local-zmq")
+    policy = {**workload_plan(steps), "defined_before_measurements_utc": datetime.now(timezone.utc).isoformat()}
+    (output / "plan.json").write_text(json.dumps(policy, indent=2) + "\n")
+    (output / "fixtures").mkdir()
+    fixture_path = output / "fixtures/nsc64_tx2_rx2.pb"
+    fixture_path.write_bytes(template(64, 2, 2).SerializeToString(deterministic=True))
+    single = base.message_pb2.Wrapper.FromString(fixture_path.read_bytes())
+    summaries, timings, requests, trajectories, configurations = [], [], [], [], []
+    for index, (links, depth, enabled) in enumerate(itertools.product(LINKS, WORKLOAD_DEPTHS, (True, False))):
+        case_id = f"case_{index:02d}"
+        fixture = batch(single, links)
+        configuration = {"case_id": case_id, "links": links, "depth": depth, "enabled": enabled,
+            "steps": steps, "template": str(fixture_path.relative_to(output)),
+            "template_sha256": base.sha256(fixture_path),
+            "response_sha256": hashlib.sha256(fixture.SerializeToString(deterministic=True)).hexdigest()}
+        first = None
+        for repetition in range(3):
+            result, samples, server, trace = measure(binary, fixture,
+                workload={"steps": steps, "depth": depth, "enabled": enabled})
+            deterministic = (deterministic_fields(result), deterministic_trajectory(trace))
+            if first is None:
+                first = deterministic
+            else:
+                assert deterministic == first, "Workload deterministic values changed between processes"
+            identity = {"case_id": case_id, "repetition": repetition}
+            summaries.append({**identity, **result})
+            timings.extend({**identity, **row} for row in samples)
+            trajectories.extend({**identity, **row} for row in trace)
+            requests.extend({**identity, "request_index": i, **request}
+                            for i, request in enumerate(server["requests"]))
+        configurations.append(configuration)
+        print(f"{case_id} links={links} depth={depth} cache={enabled} steps={steps} "
+              f"requests={result['cache_miss_count']} peak_payload={result['peak_payload_bytes']} "
+              "validation=passed", flush=True)
+    for filename, rows in (("summary.csv", summaries), ("timings.csv", timings),
+                           ("requests.csv", requests), ("trajectory.csv", trajectories)):
+        base.write_csv(output / filename, rows)
+    manifest = {**policy, "plan_sha256": base.sha256(output / "plan.json"),
+        "configurations": configurations, "validation": {"status": "passed", "cases": len(configurations),
+            "native_processes": len(summaries), "timing_samples": len(timings),
+            "channel_requests": len(requests), "trajectory_rows": len(trajectories),
+            "repeatability": "passed", "bounded_storage": "passed", "expiry": "passed"}}
+    (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    return manifest
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path)
@@ -446,6 +668,12 @@ def main():
     parser.add_argument("--storage-steps", type=int, default=0)
     parser.add_argument("--copy-profile", action="store_true",
         help="Profile five public hit getters for two fixed shapes, three fresh processes each")
+    parser.add_argument("--workload-sweep", action="store_true",
+        help="Sweep cache on/off, evolving active links and look-ahead 1/4/16")
+    parser.add_argument("--workload-steps", type=int, default=128,
+        help="Workload epochs: multiple of 16 in [16, 4096] (default: 128)")
+    parser.add_argument("--workload-depth", type=int, default=0, choices=(0, *WORKLOAD_DEPTHS),
+        help=argparse.SUPPRESS)
     parser.add_argument("--serve", action="store_true")
     parser.add_argument("--input", type=Path)
     parser.add_argument("--endpoint")
@@ -454,11 +682,21 @@ def main():
     args = parser.parse_args()
     if args.copy_profile and (args.storage_steps or args.serve):
         parser.error("--copy-profile cannot be combined with --storage-steps or --serve")
+    if args.workload_sweep and (args.copy_profile or args.storage_steps or args.serve):
+        parser.error("--workload-sweep cannot be combined with --copy-profile, --storage-steps or --serve")
+    if args.workload_depth and not args.serve:
+        parser.error("--workload-depth is only for the internal REP peer")
+    if args.workload_sweep:
+        try:
+            workload_plan(args.workload_steps)
+        except ValueError as error:
+            parser.error(str(error))
     if args.serve:
-        serve(args.input, args.endpoint, args.ready, args.stats)
+        serve(args.input, args.endpoint, args.ready, args.stats, args.workload_depth)
     elif args.output:
         binary = (args.executable or executable()).resolve()
-        manifest = (run_storage(args.output.resolve(), binary, args.storage_steps) if args.storage_steps
+        manifest = (run_workload(args.output.resolve(), binary, args.workload_steps) if args.workload_sweep else
+                    run_storage(args.output.resolve(), binary, args.storage_steps) if args.storage_steps
                     else run(args.output.resolve(), binary, copy_profile=args.copy_profile))
         print(json.dumps(manifest["validation"]))
     else:

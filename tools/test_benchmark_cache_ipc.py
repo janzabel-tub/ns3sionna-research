@@ -4,6 +4,8 @@ Run in the documented Python environment after building the native example.
 CACHE_IPC_BENCHMARK_RESULTS overrides the checked-in reference directory.
 It can also point to a --copy-profile export (six processes, 4446 timing rows,
 162 channel requests); the historical default export remains unchanged.
+CACHE_IPC_WORKLOAD_RESULTS separately enables validation of a local workload
+sweep. Native workload and failure/policy regressions run without an export.
 """
 import copy
 import csv
@@ -17,6 +19,7 @@ import struct
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 import benchmark_cache_ipc as benchmark
@@ -110,6 +113,47 @@ class TestFrozenFixtures(unittest.TestCase):
 
 
 class TestNativeCacheIpc(unittest.TestCase):
+    def test_workload_time_active_links_depth_and_disabled_retention(self):
+        fixture = benchmark.batch(benchmark.template(64, 2, 2), 16)
+        for depth, enabled in itertools.product((1, 4, 16), (True, False)):
+            workload = {"steps": 32, "depth": depth, "enabled": enabled}
+            with self.subTest(**workload):
+                first, samples, server, trace = benchmark.measure(benchmark.executable(), fixture, workload=workload)
+                second, _, _, repeated = benchmark.measure(benchmark.executable(), fixture, workload=workload)
+                self.assertEqual(benchmark.deterministic_fields(first), benchmark.deterministic_fields(second))
+                self.assertEqual(benchmark.deterministic_trajectory(trace), benchmark.deterministic_trajectory(repeated))
+                for key in ("peak_payload_bytes", "cache_miss_count", "final_capacity_bytes"):
+                    changed = copy.deepcopy(first)
+                    changed[key] += 1
+                    with self.subTest(key=key), self.assertRaises(AssertionError):
+                        benchmark.validate_workload(changed, fixture, server, samples, trace, **workload)
+                for key in ("snapshots", "payload_bytes", "active_first", "time_ns", "coefficient_digest"):
+                    changed = copy.deepcopy(trace)
+                    changed[1][key] = "wrong" if key == "coefficient_digest" else changed[1][key] + 1
+                    with self.subTest(key=key), self.assertRaises(AssertionError):
+                        benchmark.validate_workload(first, fixture, server, samples, changed, **workload)
+                changed = copy.deepcopy(server)
+                changed["requests"][0]["rx_node"] += 1
+                with self.assertRaises(AssertionError):
+                    benchmark.validate_workload(first, fixture, changed, samples, trace, **workload)
+                with self.assertRaises(AssertionError):
+                    benchmark.validate_workload(first, fixture, server, samples[:-1], trace, **workload)
+
+    def test_workload_invalid_parameters_rejected_before_transport(self):
+        fixture = benchmark.batch(benchmark.template(64, 2, 2), 16)
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary)
+            (path / "input.pb").write_bytes(fixture.SerializeToString(deterministic=True))
+            for extra in ({"lookAhead": 0}, {"lookAhead": 3}, {"workloadSteps": 17},
+                          {"workloadSteps": 4097}, {"copyProfile": 1}, {"storageSteps": 1},
+                          {"trajectory": path / "input.pb"}):
+                with self.subTest(extra=extra), self.assertRaises(subprocess.CalledProcessError):
+                    benchmark.base.native(benchmark.executable(), **{
+                        "input": path / "input.pb", "output": path / "result.json",
+                        "timings": path / "times.csv", "trajectory": path / "trace.csv", "links": 16,
+                        "endpoint": "ipc://" + str(path / "absent"), "workloadSteps": 32,
+                        "lookAhead": 16, **extra})
+
     def test_optional_copy_profile_all_getters_and_strict_counts(self):
         fixture = benchmark.batch(benchmark.template(64, 2, 2), 1)
         record, samples, server = benchmark.measure(benchmark.executable(), fixture, copy_profile=True)
@@ -274,8 +318,159 @@ class TestCacheIpcExport(unittest.TestCase):
             result, _, _ = benchmark.measure(benchmark.executable(), self.fixture(configuration),
                                            copy_profile=self.copy_profile)
             expected = next(row for row in self.summaries if row["case_id"] == configuration["case_id"])
-            self.assertEqual(benchmark.deterministic_fields(result),
-                             benchmark.deterministic_fields(self.native_record(expected)))
+            self.assertEqual(benchmark.deterministic_fields(result, include_environment=False),
+                             benchmark.deterministic_fields(self.native_record(expected),
+                                                            include_environment=False))
+
+    def test_historical_replay_accepts_library_versions_but_rejects_changed_behavior(self):
+        from unittest.mock import patch
+
+        measure = benchmark.measure
+        observed = []
+
+        def different_environment(*args, **kwargs):
+            result, samples, server = measure(*args, **kwargs)
+            original = result.copy()
+            result["cpp_protobuf_version"] = 6033005 if original["cpp_protobuf_version"] != 6033005 else 3021012
+            result["cpp_zmq_version"] = "different-replay-host"
+            # Same-host repeatability still includes native library identity.
+            self.assertNotEqual(benchmark.deterministic_fields(original),
+                                benchmark.deterministic_fields(result))
+            observed.append(result.copy())
+            return result, samples, server
+
+        with patch.object(benchmark, "measure", side_effect=different_environment):
+            self.test_fresh_process_replay_across_shapes_and_link_counts()
+
+        self.assertEqual(len(observed), 2 if self.copy_profile else 3)
+        # Every remaining deterministic field must still affect acceptance.
+        for key in benchmark.deterministic_fields(observed[0], include_environment=False):
+            result = observed[0].copy()
+            result[key] = "changed" if isinstance(result[key], str) else result[key] + 1
+            with self.subTest(field=key), patch.object(benchmark, "measure",
+                    return_value=(result, {}, [])), self.assertRaises(AssertionError):
+                self.test_fresh_process_replay_across_shapes_and_link_counts()
+
+
+class TestWorkloadPolicy(unittest.TestCase):
+    def test_failed_native_process_keeps_diagnostics_and_cannot_overwrite(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "failed"
+            failure = subprocess.CalledProcessError(2, ["injected-native-failure"],
+                                                   output="native output", stderr="native error")
+            with patch.object(benchmark.base, "native", side_effect=failure):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    benchmark.run_workload(output, benchmark.executable(), 16)
+            run = json.loads((output / "run.json").read_text())
+            self.assertEqual(run["status"], "failed")
+            self.assertIsNotNone(run["finished_utc"])
+            log = (output / run["error_log"]).read_text()
+            self.assertIn("native output", log)
+            self.assertIn("native error", log)
+            self.assertIn("Frozen REP peer log", log)
+            self.assertTrue((output / "failed_process/response.pb").is_file())
+            self.assertTrue((output / "failed_process/peer.log").is_file())
+            previous = (output / "run.json").read_bytes()
+            with self.assertRaises(ValueError):
+                benchmark.run_workload(output, benchmark.executable(), 16)
+            self.assertEqual((output / "run.json").read_bytes(), previous)
+
+    def test_future_timestamps_active_rotation_and_channel_evolution(self):
+        fixture = benchmark.batch(benchmark.template(64, 2, 2), 64)
+        original = fixture.channel_state_response.csi[0]
+        for step, depth in ((0, 16), (17, 16), (127, 16), (17, 4), (17, 1)):
+            reply = benchmark.workload_batch(fixture, step, depth)
+            states = reply.channel_state_response.csi
+            self.assertEqual(len(states), depth)
+            for offset, state in enumerate(states):
+                epoch = step - step % depth + offset
+                self.assertEqual(state.start_time, epoch * 5000001)
+                self.assertEqual(state.end_time, (epoch + 1) * 5000001 - 1)
+                first = epoch // depth * 8 % 64 + 1
+                self.assertEqual([radio.id for radio in state.rx_nodes], list(range(first, first + 8)))
+                for radio in state.rx_nodes:
+                    source = original.rx_nodes[radio.id - 1]
+                    self.assertEqual(radio.wb_loss, source.wb_loss + epoch / 8)
+                    self.assertEqual(radio.delay, source.delay + epoch)
+                    self.assertEqual(radio.end_time2, state.end_time)
+                    self.assertEqual(list(radio.frequencies), list(source.frequencies))
+                    for i, (real, imag) in enumerate(zip(radio.csi_real, radio.csi_imag)):
+                        self.assertEqual(complex(real, imag),
+                            complex(source.csi_real[i], source.csi_imag[i]) * 1j ** (epoch % 4))
+
+    def test_invalid_step_plan_and_nonempty_output_preserve_existing_files(self):
+        for steps in (0, 15, 17, 4097):
+            with self.subTest(steps=steps), self.assertRaises(ValueError):
+                benchmark.workload_plan(steps)
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary)
+            (path / "keep.txt").write_text("existing output")
+            with self.assertRaises(ValueError):
+                benchmark.run_workload(path, None)
+            self.assertEqual((path / "keep.txt").read_text(), "existing output")
+
+
+@unittest.skipUnless(os.environ.get("CACHE_IPC_WORKLOAD_RESULTS"), "optional local workload export")
+class TestWorkloadExport(unittest.TestCase):
+    def test_full_matrix_hashes_transcripts_trajectories_and_process_repeatability(self):
+        output = Path(os.environ["CACHE_IPC_WORKLOAD_RESULTS"])
+        manifest = json.loads((output / "manifest.json").read_text())
+        plan = json.loads((output / "plan.json").read_text())
+        steps = plan["controls"]["steps"]
+        for key, value in json.loads(json.dumps(benchmark.workload_plan(steps))).items():
+            self.assertEqual(plan[key], value)
+            self.assertEqual(manifest[key], value)
+        self.assertEqual(benchmark.base.sha256(output / "plan.json"), manifest["plan_sha256"])
+        run = json.loads((output / "run.json").read_text())
+        self.assertEqual(run["status"], "success")
+        self.assertEqual(run["validation"]["status"], "passed")
+        for name, digest in run["artifacts"].items():
+            self.assertTrue(benchmark.base.provenance.verify_digest(output / name, digest))
+        tables = {}
+        for filename in ("summary", "timings", "requests", "trajectory"):
+            with (output / (filename + ".csv")).open(newline="") as stream:
+                tables[filename] = list(csv.DictReader(stream))
+        cases = manifest["configurations"]
+        self.assertEqual({(case["links"], case["depth"], case["enabled"]) for case in cases},
+            set(itertools.product((1, 16, 64), (1, 4, 16), (True, False))))
+        self.assertEqual(len(cases), 18)
+        self.assertEqual(len(tables["summary"]), 54)
+        self.assertEqual(len(tables["timings"]), 54 * steps)
+        self.assertEqual(len(tables["trajectory"]), 54 * steps)
+        self.assertEqual(len(tables["requests"]), manifest["validation"]["channel_requests"])
+        for case in cases:
+            self.assertEqual(benchmark.base.sha256(output / case["template"]), case["template_sha256"])
+            fixture = benchmark.batch(benchmark.base.message_pb2.Wrapper.FromString(
+                (output / case["template"]).read_bytes()), case["links"])
+            self.assertEqual(hashlib.sha256(fixture.SerializeToString(deterministic=True)).hexdigest(),
+                             case["response_sha256"])
+            first = None
+            for repetition in range(3):
+                rows = {name: [row for row in table if row["case_id"] == case["case_id"] and
+                               int(row["repetition"]) == repetition] for name, table in tables.items()}
+                self.assertEqual(len(rows["summary"]), 1)
+                record = {key: float(value) for key, value in rows["summary"][0].items()
+                          if key not in ("case_id", "repetition")}
+                samples = [{"operation": row["operation"], "iteration": int(row["iteration"]),
+                    "nanoseconds": int(row["nanoseconds"])} for row in rows["timings"]]
+                trace = [{key: value if key == "coefficient_digest" else int(value)
+                          for key, value in row.items() if key not in ("case_id", "repetition")}
+                         for row in rows["trajectory"]]
+                self.assertEqual([int(row["request_index"]) for row in rows["requests"]],
+                                 list(range(int(record["server_channel_requests"]))))
+                server = {"channel_requests": record["server_channel_requests"],
+                    "close_requests": record["server_close_requests"], "peak_rss_bytes": record["rep_server_peak_rss_bytes"],
+                    "requests": [{key: int(row[key]) for key in ("tx_node", "rx_node", "time_ns")}
+                                 for row in rows["requests"]]}
+                benchmark.validate_workload(record, fixture, server, samples, trace, steps, case["depth"], case["enabled"])
+                deterministic = benchmark.deterministic_fields(record), benchmark.deterministic_trajectory(trace)
+                if first is None:
+                    first = deterministic
+                else:
+                    self.assertEqual(deterministic, first)
+                values = [sample["nanoseconds"] for sample in samples]
+                self.assertEqual(record["workload_epoch_median_ns"], np.median(values))
+                self.assertEqual(record["workload_epoch_p95_ns"], np.percentile(values, 95))
 
 
 if __name__ == "__main__":
