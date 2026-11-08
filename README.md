@@ -355,7 +355,12 @@ For the single-AP MU TCP example, set `ENABLE_MU_DIAGNOSTICS=true` to record
 scheduler rejection reasons and per-user eligibility, actual PPDU allocations,
 native PHY airtime, MAC acknowledgment outcomes and CW/backoff changes. It also
 enables existing MIMO SINR/PER traces; full PCAP is unnecessary for these checks.
-Selection, rate control and total transmit power are unchanged. See the
+The MU runner now defaults to `MU_GROUPING=adaptive MU_RATE_CONTROL=ideal-csi`:
+it serves eligible subsets, keeps the oldest-served eligible user, and selects
+MU MCS 0–9 from the group's channel and existing error model. SU Minstrel learning
+excludes externally selected MU outcomes. This is an explicit ideal-CSI policy,
+with no collision prediction. `MU_GROUPING=fixed MU_RATE_CONTROL=station-manager`
+retains the old baseline; power, EDCA and uplink modeling are unchanged. See the
 [MU example and CSV contracts](examples/performance-sionna-mumimo-monolith.md).
 `START_SERVER=true` makes that runner stop its owned server on exit; an externally
 started server must be stopped separately to release GPU memory.

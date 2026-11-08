@@ -24,6 +24,8 @@ SEED=${SEED:-1}
 RNG_RUN=${RNG_RUN:-1}
 
 # Fixed topology: 4 AP antennas, 4 one-antenna STAs, NSS=1/user, 20 MHz.
+MU_GROUPING=${MU_GROUPING:-adaptive} # adaptive or fixed
+MU_RATE_CONTROL=${MU_RATE_CONTROL:-ideal-csi} # ideal-csi or station-manager
 PRECODING=${PRECODING:-zf} # zf or rzf; RZF_ALPHA must be supplied for rzf.
 RZF_ALPHA=${RZF_ALPHA:-}
 ARRAY_ROWS=${ARRAY_ROWS:-1}
@@ -70,7 +72,10 @@ Usage: [ENV=value ...] bash performance-sionna-mumimo-monolith.sh [--name=value 
 One four-antenna AP sends TCP to four one-antenna STAs over a shared full-band
 242-tone RU at 20 MHz. PRECODING=zf is default. For RZF set
 PRECODING=rzf RZF_ALPHA=<positive value>; no calibration beta is needed.
-Minstrel selects AP HE MCS 0--9; MU uses one stream/user and 800 ns GI.
+MU_GROUPING=adaptive uses eligible groups of 2--N; fixed retains the strict group.
+MU_RATE_CONTROL=ideal-csi selects MU MCS 0--9 from the actual group channel.
+AP Minstrel selects SU rates independently; MU uses one stream/user and 800 ns GI.
+For the legacy baseline use MU_GROUPING=fixed MU_RATE_CONTROL=station-manager.
 RATE_ADAPTATION=fixed MCS=5 selects a fixed HE MCS. STA TCP ACK data uses
 legacy OfdmRate24Mbps because the server has global TX/RX array dimensions.
 
@@ -98,10 +103,10 @@ Outputs: OUTPUT_DIR/run/stas-4/{throughput_results.csv,summary.csv,
 mu_summary.csv,config.txt,computationtime.csv}, plus OUTPUT_DIR/run/run.log
 and optional server logs at OUTPUT_DIR. Failed runs move to
 OUTPUT_DIR/run.failed-attempt-N. Details are disabled by default.
-MU requires all four queues and BlockAck agreements plus full-rank channels.
-The native scheduler falls back to SU otherwise. mu_summary.csv records
-actual four-user MU and HE-SU PPDU counts during the measurement window;
-throughput includes both. A zero MU count is reported explicitly.
+MU uses eligible queues with established BlockAck agreements and feasible channels;
+fixed grouping requires the complete configured group. Native SU handles fallback.
+mu_summary.csv records full-group, total MU and HE-SU counts in the measurement
+window; mu_group_sizes.csv reports actual group sizes. Throughput includes both.
 Use --PrintHelp for C++ flags without building or starting a server.
 See performance-sionna-mumimo-monolith.md and ns3sionna_mimo_model.md.
 HELP
@@ -136,6 +141,7 @@ tag="$RUN_LABEL"
 args=(
     "--sim_min_stas=4" "--sim_max_stas=4" "--antennaCount=4" "--streams=1"
     "--channelWidthMhz=20" "--channel=$CHANNEL" "--precoding=$PRECODING"
+    "--muGrouping=$MU_GROUPING" "--muRateControl=$MU_RATE_CONTROL"
     "--arrayRows=$ARRAY_ROWS" "--antennaSpacingLambda=$ANTENNA_SPACING_LAMBDA"
     "--environment=$ENVIRONMENT" "--serverUrl=$SERVER_URL"
     "--mobile_scenario=$MOBILE_SCENARIO" "--mobile_speed=$MOBILE_SPEED"

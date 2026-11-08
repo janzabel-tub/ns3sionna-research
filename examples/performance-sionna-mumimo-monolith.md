@@ -1,3 +1,46 @@
+## Combined MU rate and grouping policy
+
+The default is now `MU_GROUPING=adaptive MU_RATE_CONTROL=ideal-csi`. The configured
+station count is a ceiling: each actual MU transmission has 2–N eligible users
+sharing RU242, one NSS each. The oldest-served eligible user is mandatory during
+bounded weakest-user pruning, so channel-based pruning cannot continually exclude
+that peer. Fewer than two eligible/feasible users use native SU fallback with MRT.
+The strict full-group reference remains available with `MU_GROUPING=fixed`.
+
+MU rates are explicitly ideal-CSI MCS 0–9/BCC, selected with the existing
+ZF/RZF, mean-BER/EESM mapping and receiver error model. A bounded coordinate
+search scores predicted successful PSDU bytes per native complete exchange
+time (common PPDU, protection and acknowledgment). Queue-based size estimates
+are refined once after native aggregation using actual PSDU sizes; the refined
+TxVector is installed only if all MPDUs still satisfy native limits. This is a
+bounded heuristic, not an exhaustive optimal scheduler or collision predictor.
+Physical SINR tables are reused only for exactly unchanged channels, losses,
+frequency grids, RX gains and transmit power; per-group precoders retain the
+existing rank checks and total AP power normalization.
+
+SU still uses Minstrel (or the selected fixed AP rate). The small configure-time
+`ns-3.40-external-mu-rate.patch` excludes externally selected MU data feedback
+from SU Minstrel statistics without disabling native BlockAck/retry bookkeeping.
+The exclusion follows the last actual QoS-data format per peer, including BAR
+recovery; a later SU data transmission re-enables SU learning. The ideal-CSI MU
+policy has no feedback-learning state to mix with SU. This is not a separate
+feedback-driven MU Minstrel implementation.
+
+For the original rate/group behavior select both:
+
+```sh
+MU_GROUPING=fixed MU_RATE_CONTROL=station-manager bash contrib/sionna/examples/performance-sionna-mumimo-monolith.sh
+```
+
+`mu_group_sizes.csv` reports actual user counts. In `mu_summary.csv`,
+`MuPpdusConfiguredUsers` counts only full-ceiling groups; the appended
+`MuPpdusTotal` includes all MU sizes. Existing strict-mode columns keep their
+meaning. `config.txt` records both policies and the ideal-CSI assumption.
+Diagnostics and PHY allocation assertions apply to each actual subset. Native
+EDCA/TXOP, reverse legacy TCP-ACK modeling, bandwidth, power and aggregation
+limits are unchanged. The earlier fixed-group description below applies to the
+explicit legacy baseline.
+
 `performance-sionna-mumimo-monolith.cc` is an additive MU version of
 `performance-sionna-mimo-monolith.cc`. Existing C++ examples and shell runners
 remain usable; the monolith target now accepts one through eight stations and

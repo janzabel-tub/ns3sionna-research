@@ -13,8 +13,9 @@ Usage: [ENV=value ...] bash performance-sionna-mumimo-sta-sweep.sh [--name=value
 
 Runs one eight-antenna AP with 1, 2, ..., 8 single-antenna STAs in separate
 simulations. The one-STA case is a current-CSI MRT TCP baseline; cases with
-2--8 STAs use a fixed full-band MU-MIMO group, one stream per STA, ZF precoding,
-and Minstrel. Apartment STAs use the existing randomized same-room positions.
+2--8 STAs use eligible full-band MU-MIMO groups, one stream per selected STA,
+ZF precoding and ideal-CSI MU rates; SU fallback uses Minstrel.
+MU_GROUPING=fixed MU_RATE_CONTROL=station-manager restores the strict legacy case. Apartment STAs use the existing randomized same-room positions.
 The native MU scheduler is limited to 20 MHz and HE MCS 0--9.
 
 Defaults: ENVIRONMENT=apartment/apartment.xml MOBILE_SCENARIO=false

@@ -43,7 +43,15 @@ enum class SionnaMimoMode
 enum class SionnaMimoDownlinkScheduling
 {
     MU,
+    MU_ADAPTIVE,
     SU_ROUND_ROBIN
+};
+
+/** MU rate source. IDEAL_CSI evaluates the existing channel/error abstraction. */
+enum class SionnaMimoDownlinkRateControl
+{
+    STATION_MANAGER,
+    IDEAL_CSI
 };
 
 /** Stable application user binding for one associated station device. */
@@ -321,7 +329,8 @@ class SionnaMimoHelper
         Ptr<SionnaSpectrumPropagationLossModel> spectrumModel,
         SionnaMimoDownlinkSnapshotProvider snapshotProvider,
         SionnaMimoDownlinkScheduling scheduling,
-        SionnaMimoDownlinkDiagnostic diagnostic = {}) const;
+        SionnaMimoDownlinkDiagnostic diagnostic = {},
+        SionnaMimoDownlinkRateControl rateControl = SionnaMimoDownlinkRateControl::STATION_MANAGER) const;
 
     /** Validate and set the orientation of one ns-3 node ID. */
     void SetNodeOrientation(uint32_t nodeId, const SionnaMimoOrientation& orientation);

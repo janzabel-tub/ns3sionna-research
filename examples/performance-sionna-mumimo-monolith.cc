@@ -69,6 +69,7 @@ struct Options
     std::string outputDirectory{"results/mumimo-monolith"};
     std::string serverUrl{"tcp://localhost:5555"};
     std::string precoding{"zf"};
+    std::string muGrouping{"adaptive"}, muRateControl{"ideal-csi"};
     double rzfAlpha{std::numeric_limits<double>::quiet_NaN()};
     std::string tcpVariant{"ns3::TcpCubic"};
     std::string apPosition;
@@ -126,6 +127,7 @@ std::vector<uint32_t> g_stationIds;
 std::ofstream ofs_mimo, ofs_mu;
 uint64_t g_muPpdus{0}, g_suPpdus{0};
 uint32_t g_expectedMuUsers{4};
+std::map<uint32_t, uint64_t> g_muGroupSizes;
 
 // Counters establish whether the configured full user group was spatially multiplexed.
 // The fixed runtime group rejects incomplete groups rather than using smaller MU.
@@ -138,14 +140,16 @@ DownlinkTxTrace(WifiConstPsduMap psdus, WifiTxVector tx, double)
         return;
     if (tx.GetPreambleType() == WIFI_PREAMBLE_HE_MU)
     {
-        Require(g_expectedMuUsers >= 2 && psdus.size() == g_expectedMuUsers &&
-                    tx.GetHeMuUserInfoMap().size() == g_expectedMuUsers &&
+        Require(g_expectedMuUsers >= 2 && psdus.size() >= 2 && psdus.size() <= g_expectedMuUsers &&
+                    (g_options.muGrouping == "adaptive" || psdus.size() == g_expectedMuUsers) &&
+                    tx.GetHeMuUserInfoMap().size() == psdus.size() &&
                     tx.GetChannelWidth() == 20,
                 "MU PPDU did not contain the configured 20 MHz user group");
         for (const auto& [staId, info] : tx.GetHeMuUserInfoMap())
             Require(info.nss == 1 && info.ru == HeRu::RuSpec(HeRu::RU_242_TONE, 1, true),
                     "MU users must share the full-band RU with one stream each");
         ++g_muPpdus;
+        ++g_muGroupSizes[psdus.size()];
     }
     else if (tx.GetPreambleType() == WIFI_PREAMBLE_HE_SU)
         ++g_suPpdus;
@@ -751,6 +755,7 @@ RunSimulation(  const std::string environment,
                 const bool enable_minstrel_rate_trace)
 {
     g_muPpdus = g_suPpdus = 0;
+    g_muGroupSizes.clear();
     g_expectedMuUsers = numStas;
     g_sinks.clear();
     g_phyRxBeginSamples.clear();
@@ -1138,8 +1143,12 @@ RunSimulation(  const std::string environment,
     else
     {
         SionnaMimoHelper(mimo).InstallDownlink(apDevice,
-            bindings, spectrumLossModel, provider, SionnaMimoDownlinkScheduling::MU,
-            diagnostics.SchedulerCallback());
+            bindings, spectrumLossModel, provider,
+            g_options.muGrouping == "adaptive" ? SionnaMimoDownlinkScheduling::MU_ADAPTIVE
+                                               : SionnaMimoDownlinkScheduling::MU,
+            diagnostics.SchedulerCallback(),
+            g_options.muRateControl == "ideal-csi" ? SionnaMimoDownlinkRateControl::IDEAL_CSI
+                                                  : SionnaMimoDownlinkRateControl::STATION_MANAGER);
     }
     apDevice->GetPhy()->TraceConnectWithoutContext(
         "PhyTxPsduBegin", MakeCallback(&DownlinkTxTrace));
@@ -1255,13 +1264,17 @@ RunSimulation(  const std::string environment,
            << "\nnumStas=" << numStas << "\napAntennas=" << g_options.antennaCount
            << "\nstaAntennas=1\nuserIds=1.." << numStas
            << "\nstreams=" << g_options.streams << "\nprecoding=" << g_options.precoding
+           << "\nmuGrouping=" << g_options.muGrouping << "\nmuRateControl=" << g_options.muRateControl
+           << "\nmuRateAssumption=" << (g_options.muRateControl == "ideal-csi"
+               ? "ideal CSI; no collision prediction or MU feedback learning" : "shared station-manager SU/MU rates")
            << "\narrayRows=" << g_options.arrayRows << "\nantennaSpacingLambda=" << g_options.antennaSpacingLambda
            << "\nchannelNumber=" << wifi_channel_num << "\nchannelWidthMhz=" << channel_width
            << "\neffectiveSinrModel=MEAN_UNCODED_BER\nreceiver=LINEAR_MMSE"
            << "\nnormalization=UNIT_AVERAGE_PAIR_POWER\nrateAdaptation=" << rate_adaptation
            << "\nmcs=" << (rate_adaptation == "fixed" ? std::to_string(mcs) : "adaptive")
            << "\nstreamsMeaning="
-           << (numStas == 1 ? "single-user MRT baseline" : "one per STA; configured group on RU242")
+           << (numStas == 1 ? "single-user MRT baseline" : g_options.muGrouping == "adaptive"
+               ? "one per STA; actual eligible group of 2..N on RU242" : "one per STA; strict configured group on RU242")
            << "\nrzfAlpha=" << g_options.rzfAlpha
            << "\ncsi=current query with configured propagation-cache coherence"
            << "\nmuCoding=BCC\nmaxHeMcs=9\nmuGuardIntervalNs=800"
@@ -1309,14 +1322,18 @@ RunSimulation(  const std::string environment,
     }
     std::ofstream muSummary(out / "mu_summary.csv");
     Require(bool(muSummary), "cannot write mu_summary.csv");
-    muSummary << "MuPpdusConfiguredUsers,SuHePpdus,ConfiguredMuUsers,MeasurementSeconds\n"
-              << std::setprecision(12) << g_muPpdus << ',' << g_suPpdus << ','
-              << (numStas == 1 ? 0 : numStas) << ',' << duration << '\n';
-    std::cout << "configured_group_mu_ppdus=" << g_muPpdus
+    muSummary << "MuPpdusConfiguredUsers,SuHePpdus,ConfiguredMuUsers,MeasurementSeconds,MuPpdusTotal\n"
+              << std::setprecision(12) << g_muGroupSizes[numStas] << ',' << g_suPpdus << ','
+              << (numStas == 1 ? 0 : numStas) << ',' << duration << ',' << g_muPpdus << '\n';
+    std::ofstream groups(out / "mu_group_sizes.csv");
+    Require(bool(groups), "cannot write mu_group_sizes.csv");
+    groups << "Users,Ppdus\n";
+    for (const auto& [users, count] : g_muGroupSizes) if (users >= 2) groups << users << ',' << count << '\n';
+    std::cout << "mu_ppdus=" << g_muPpdus
               << " su_he_ppdus=" << g_suPpdus
               << " configured_mu_users=" << (numStas == 1 ? 0 : numStas) << '\n';
     if (numStas >= 2 && g_muPpdus == 0)
-        std::cerr << "No full-group MU PPDU was sent; inspect queues, BlockAck and channel rank.\n";
+        std::cerr << "No MU PPDU was sent; inspect scheduler diagnostics.\n";
     Simulator::Destroy();
     g_singleUserCache = nullptr;
     g_singleUserSpectrumModel = nullptr;
@@ -1398,6 +1415,8 @@ main(int argc, char* argv[])
     cmd.AddValue("antennaSpacingLambda", "Array spacing in wavelengths", g_options.antennaSpacingLambda);
     cmd.AddValue("streams", "Streams per STA; must be 1", g_options.streams);
     addString("precoding", "zf or rzf; ideal current CSI, common total AP power", g_options.precoding);
+    addString("muGrouping", "adaptive eligible groups or fixed configured group", g_options.muGrouping);
+    addString("muRateControl", "ideal-csi MU rates or station-manager legacy rates", g_options.muRateControl);
     cmd.AddValue("rzfAlpha", "Required positive regularization when precoding=rzf", g_options.rzfAlpha);
     cmd.AddValue("noiseFigureDb", "Matching PHY/MIMO noise figure", g_options.noiseFigureDb);
     cmd.AddValue("ldpc", "Advertise LDPC for SU; native MU scheduler uses BCC, MCS 0--9", g_options.ldpc);
@@ -1424,6 +1443,12 @@ main(int argc, char* argv[])
         Require(rateAdaptation == "fixed" || rateAdaptation == "minstrel", "rateAdaptation must be fixed or minstrel");
         Require(mcs <= 9 && seed > 0 && g_options.run > 0 && dataRate > 0,
                 "native MU BCC requires MCS 0--9; seed, RNG run and data rate must be positive");
+        Require(g_options.muGrouping == "fixed" || g_options.muGrouping == "adaptive",
+                "muGrouping must be fixed or adaptive");
+        Require(g_options.muRateControl == "ideal-csi" || g_options.muRateControl == "station-manager",
+                "muRateControl must be ideal-csi or station-manager");
+        Require(g_options.muGrouping != "adaptive" || g_options.muRateControl == "ideal-csi",
+                "adaptive grouping requires ideal-csi MU rates");
         Require(g_options.channelWidthMhz == 20, "native MU scheduler requires 20 MHz");
         if (!g_options.channelNumber) g_options.channelNumber = 36;
         Require(g_options.antennaCount >= 2 && g_options.antennaCount <= 8 &&

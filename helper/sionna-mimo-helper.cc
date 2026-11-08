@@ -8,9 +8,17 @@
 
 #include "sionna-helper.h"
 #include "../model/sionna-spectrum-propagation-loss-model.h"
+#include "../model/he-data-tone-mask.h"
+#include "ns3/minstrel-ht-wifi-manager.h"
+#include "ns3/error-rate-model.h"
+#include "ns3/spectrum-value.h"
+#include "ns3/wifi-spectrum-value-helper.h"
+#include "ns3/wifi-acknowledgment.h"
+#include "ns3/wifi-protection.h"
 #include "ns3/ap-wifi-mac.h"
 #include "ns3/double.h"
 #include "ns3/he-configuration.h"
+#include "ns3/he-capabilities.h"
 #include "ns3/he-frame-exchange-manager.h"
 #include "ns3/interference-helper.h"
 #include "ns3/pointer.h"
@@ -324,7 +332,9 @@ class SionnaMimoDownlinkScheduler final : public MultiUserScheduler
                    SionnaMimoDownlinkSnapshotProvider snapshotProvider,
                    DlMuMimoRuntimeConfiguration runtimeConfiguration,
                    SionnaMimoDownlinkScheduling scheduling,
-                   SionnaMimoDownlinkDiagnostic diagnostic)
+                   SionnaMimoDownlinkDiagnostic diagnostic,
+                   SionnaMimoDownlinkRateControl rateControl,
+                   const SionnaMimoConfiguration& configuration)
     {
         std::sort(stationBindings.begin(),
                   stationBindings.end(),
@@ -337,6 +347,12 @@ class SionnaMimoDownlinkScheduler final : public MultiUserScheduler
         m_runtime.emplace(std::move(runtimeConfiguration));
         m_scheduling = scheduling;
         m_diagnostic = std::move(diagnostic);
+        m_rateControl = rateControl;
+        m_rateMapping = CreateObject<HeSuMimoLinkAbstraction>();
+        m_rateMapping->SetEffectiveSinrModel(configuration.effectiveSinrModel);
+        for (const auto& [mcs, beta] : configuration.eesmBetaLinear) m_rateMapping->SetEesmBeta(mcs, beta);
+        for (const auto& [key, offset] : configuration.awgnSnrOffsetsDb)
+            m_rateMapping->SetAwgnSnrOffsetDb(key, offset);
         m_phy = apDevice->GetPhy();
         m_phy->TraceConnectWithoutContext(
             "PhyTxPsduBegin",
@@ -412,6 +428,238 @@ class SionnaMimoDownlinkScheduler final : public MultiUserScheduler
         return false;
     }
 
+    using RateTable = std::map<uint32_t, std::array<double, 10>>;
+
+    Ptr<WifiNetDevice> Station(uint32_t userId) const
+    {
+        return std::find_if(m_stationBindings.begin(), m_stationBindings.end(),
+            [userId](const auto& b) { return b.userId == userId; })->stationDevice;
+    }
+
+    WifiTxVector MuVector(const std::vector<Candidate>& users) const
+    {
+        WifiTxVector tx;
+        tx.SetPreambleType(WIFI_PREAMBLE_HE_MU);
+        tx.SetChannelWidth(20);
+        tx.SetGuardInterval(800);
+        tx.SetBssColor(m_apMac->GetHeConfiguration()->GetBssColor());
+        for (const auto& u : users)
+            tx.SetHeMuUserInfo(u.staId, {{HeRu::RU_242_TONE, 1, true}, u.mcs, 1});
+        return tx;
+    }
+
+    void UpdateRateSnapshot(const MultiUserChannelSnapshot& snapshot)
+    {
+        const auto mask = m_phy->GetTxMaskRejectionParams();
+        auto psd = WifiSpectrumValueHelper::CreateHeOfdmTxPowerSpectralDensity(
+            m_phy->GetFrequency(), 20, DbmToW(m_phy->GetTxPowerStart() + m_phy->GetTxGain()),
+            m_phy->GetGuardBandwidth(20), std::get<0>(mask), std::get<1>(mask), std::get<2>(mask));
+        double power = 0;
+        const auto center = (psd->GetValuesN() - 1) / 2;
+        for (const auto& range : HeRu::GetSubcarrierGroup(20, HeRu::RU_242_TONE, 1))
+            for (int sc = range.first; sc <= range.second; ++sc)
+                power += (*psd)[center + sc] * 78125.0;
+        std::vector<double> rxGains;
+        for (const auto& b : m_stationBindings) rxGains.push_back(b.stationDevice->GetPhy()->GetRxGain());
+        bool same = m_rateSnapshot && power == m_ruPower && rxGains == m_rxGains &&
+                    snapshot.users.size() == m_rateSnapshot->users.size();
+        if (same)
+            for (std::size_t i = 0; i < snapshot.users.size(); ++i)
+            {
+                const auto& a = snapshot.users[i];
+                const auto& b = m_rateSnapshot->users[i];
+                same &= a.userId == b.userId && a.widebandLossDb == b.widebandLossDb &&
+                        a.frequencies == b.frequencies &&
+                        a.channel.GetCoefficients() == b.channel.GetCoefficients();
+            }
+        if (!same)
+        {
+            m_rateCache.clear();
+            m_rateSnapshot = snapshot;
+            m_ruPower = power;
+            m_rxGains = std::move(rxGains);
+        }
+    }
+
+    const RateTable& GroupRates(const std::vector<Candidate>& users,
+                                const MultiUserChannelSnapshot& snapshot)
+    {
+        std::vector<uint32_t> ids;
+        for (const auto& u : users) ids.push_back(u.userId);
+        std::sort(ids.begin(), ids.end());
+        auto found = m_rateCache.find(ids);
+        if (found != m_rateCache.end()) return found->second;
+        const auto group = SubsetSnapshot(snapshot, std::set<uint32_t>(ids.begin(), ids.end()));
+        std::vector<DlMuMimoStreamMapping> mappings;
+        std::vector<DlMuMimoUserSnr> snrs;
+        for (const auto& u : group.users)
+        {
+            mappings.push_back({u.userId, 0});
+            const auto rx = Station(u.userId)->GetPhy();
+            const auto budget = WifiLinkBudget::Calculate(
+                WToDbm(m_ruPower) + rx->GetRxGain(), u.widebandLossDb, 20e6, 290,
+                m_spectrumModel->GetReceiverNoiseFigureDb());
+            snrs.push_back({u.userId, budget.GetReferenceSnrLinear(), 0});
+        }
+        const auto precoding = m_runtimeConfiguration.precoder == DlMuMimoRuntimePrecoder::ZERO_FORCING
+            ? DlMuMimoPrecodingMatrix::ZeroForcing(group, mappings, m_runtimeConfiguration.rankTolerance)
+            : DlMuMimoPrecodingMatrix::RegularizedZeroForcing(group, mappings,
+                m_runtimeConfiguration.rzfAlpha, m_runtimeConfiguration.rankTolerance);
+        const auto link = DlMuMimoLinkModel::Calculate(group, precoding, snrs);
+        const auto bins = HeDataToneMask::GetDataBins(20, HeRu::RU_242_TONE, 1,
+            group.users.front().channel.GetNumSubcarriers() / 2);
+        RateTable rates;
+        for (const auto& u : group.users)
+        {
+            std::vector<double> tones;
+            for (auto sc : bins) tones.push_back(link.GetUserById(u.userId).GetSinrLinear(sc, 0));
+            for (uint8_t mcs = 0; mcs < 10; ++mcs)
+                if (m_rateMapping->GetEffectiveSinrModel() != SionnaMimoEffectiveSinrModel::EESM ||
+                    m_rateMapping->HasEesmBeta(mcs))
+                    rates[u.userId][mcs] = m_rateMapping->CalculateEffectiveSinr(tones, mcs);
+        }
+        return m_rateCache.emplace(std::move(ids), std::move(rates)).first->second;
+    }
+
+    // Read-only estimate before aggregation; actual PSDU sizes refine rates once afterward.
+    uint32_t PlannedSize(const Candidate& u, const WifiTxVector& tx) const
+    {
+        const auto tid = u.mpdu->GetHeader().GetQosTid();
+        const WifiContainerQueueId queue{WIFI_QOSDATA_QUEUE, WIFI_UNICAST, u.address, tid};
+        const auto bytes = m_edca->GetWifiMacQueue()->GetNBytes(queue);
+        const auto packets = bytes ? m_edca->GetWifiMacQueue()->GetNPackets(queue) : 0;
+        const uint32_t limit = m_apMac->GetMaxAmpduSize(m_edca->GetAccessCategory());
+        const auto payloadTime = GetPpduMaxTime(WIFI_PREAMBLE_HE_MU) -
+            WifiPhy::CalculatePhyPreambleAndHeaderDuration(tx) - NanoSeconds(12800 + tx.GetGuardInterval());
+        const uint32_t durationLimit = tx.GetMode(u.staId).GetDataRate(tx, u.staId) *
+            payloadTime.GetSeconds() / 8;
+        return std::max(u.mpdu->GetSize() + 4,
+            std::min({bytes + 4 * packets, limit ? limit : u.mpdu->GetSize() + 4, durationLimit}));
+    }
+
+    double RateScore(const std::vector<Candidate>& users, const RateTable& rates,
+                     const std::map<uint16_t, uint32_t>& sizes = {})
+    {
+        WifiTxParameters params;
+        params.m_txVector = MuVector(users);
+        const auto available = m_initialFrame ? Time::Min() : m_availableTime;
+        Time duration;
+        double delivered = 0;
+        for (const auto& u : users)
+        {
+            const auto capabilities = GetWifiRemoteStationManager(m_linkId)->GetStationHeCapabilities(u.address);
+            if (!capabilities || !capabilities->IsSupportedRxMcs(u.mcs)) return 0;
+            const auto sinr = rates.at(u.userId)[u.mcs];
+            if (sinr <= 0 || !GetHeFem(m_linkId)->TryAddMpdu(u.mpdu, params, available)) return 0;
+            const auto size = sizes.empty() ? PlannedSize(u, params.m_txVector) : sizes.at(u.staId);
+            duration = std::max(duration, WifiPhy::CalculateTxDuration(
+                size, params.m_txVector, m_phy->GetPhyBand(), u.staId));
+            PointerValue pointer;
+            Station(u.userId)->GetPhy()->GetAttribute("InterferenceHelper", pointer);
+            auto error = pointer.Get<InterferenceHelper>()->GetErrorRateModel();
+            const double adjusted = m_rateMapping->GetErrorModelSinrLinear(u.mcs,
+                params.m_txVector, size, 1, u.staId, sinr);
+            const double success = error->GetChunkSuccessRate(params.m_txVector.GetMode(u.staId),
+                params.m_txVector, adjusted, uint64_t(size) * 8, 1, WIFI_PPDU_FIELD_DATA, u.staId);
+            delivered += size * success;
+        }
+        if (duration > GetPpduMaxTime(WIFI_PREAMBLE_HE_MU)) return 0;
+        auto fem = GetHeFem(m_linkId);
+        fem->CalculateAcknowledgmentTime(params.m_acknowledgment.get());
+        fem->CalculateProtectionTime(params.m_protection.get());
+        const auto total = duration + params.m_acknowledgment->acknowledgmentTime +
+                           params.m_protection->protectionTime;
+        if (!m_initialFrame && available != Time::Min() && total > available) return 0;
+        return total.IsStrictlyPositive() ? delivered / total.GetSeconds() : 0;
+    }
+
+    double OptimizeRates(std::vector<Candidate>& users, const RateTable& rates,
+                         const std::map<uint16_t, uint32_t>& sizes = {})
+    {
+        // Start at each user's highest supported rate. A low-rate start can trap
+        // coordinate search: speeding up only one user leaves the common PPDU
+        // duration unchanged, so an equally fast group is never considered.
+        for (auto& u : users)
+        {
+            const auto capabilities = GetWifiRemoteStationManager(m_linkId)->GetStationHeCapabilities(u.address);
+            for (uint8_t mcs = 0; mcs < 10; ++mcs)
+                if (capabilities && capabilities->IsSupportedRxMcs(mcs) && rates.at(u.userId)[mcs] > 0)
+                    u.mcs = mcs;
+        }
+        // Bounded coordinate search accounts for the common, longest-user PPDU.
+        for (unsigned pass = 0; pass < 2; ++pass)
+            for (auto& u : users)
+            {
+                uint8_t best = u.mcs;
+                double score = -1;
+                for (uint8_t mcs = 0; mcs < 10; ++mcs)
+                {
+                    u.mcs = mcs;
+                    const auto value = RateScore(users, rates, sizes);
+                    if (value > score) { score = value; best = mcs; }
+                }
+                u.mcs = best;
+            }
+        return RateScore(users, rates, sizes);
+    }
+
+    bool ChooseIdealGroup(std::vector<Candidate>& candidates)
+    {
+        const auto now = Simulator::Now();
+        const auto snapshot = m_snapshotProvider(m_runtimeConfiguration.timing.ResolveCsiTimestamp(now));
+        UpdateRateSnapshot(snapshot);
+        const bool adaptive = m_scheduling == SionnaMimoDownlinkScheduling::MU_ADAPTIVE;
+        if (!adaptive)
+        {
+            for (auto id : m_runtimeConfiguration.requestedUserIds)
+                if (std::none_of(candidates.begin(), candidates.end(),
+                    [id](const auto& u) { return u.userId == id; }))
+                    return RejectGroup("incomplete_fixed_group");
+            candidates.erase(std::remove_if(candidates.begin(), candidates.end(), [this](const auto& u) {
+                return std::find(m_runtimeConfiguration.requestedUserIds.begin(),
+                    m_runtimeConfiguration.requestedUserIds.end(), u.userId) ==
+                    m_runtimeConfiguration.requestedUserIds.end();
+            }), candidates.end());
+            const auto& rates = GroupRates(candidates, snapshot);
+            return OptimizeRates(candidates, rates) > 0 || RejectGroup("no_viable_mu_rate");
+        }
+        // Oldest-served eligible user is mandatory, so pruning cannot starve a weak peer.
+        std::stable_sort(candidates.begin(), candidates.end(), [this](const auto& a, const auto& b) {
+            return std::make_pair(m_lastService[a.userId], a.userId) <
+                   std::make_pair(m_lastService[b.userId], b.userId);
+        });
+        auto group = candidates;
+        std::vector<Candidate> best;
+        double bestScore = 0;
+        while (group.size() >= 2)
+        {
+            const RateTable* rates = nullptr;
+            try
+            {
+                rates = &GroupRates(group, snapshot);
+                const double score = OptimizeRates(group, *rates);
+                if (score > bestScore) { bestScore = score; best = group; }
+            }
+            catch (const std::invalid_argument&) { /* prune an infeasible group */ }
+            auto remove = group.end() - 1;
+            if (rates)
+                remove = std::min_element(group.begin() + 1, group.end(),
+                    [rates](const auto& a, const auto& b) {
+                        return rates->at(a.userId)[0] < rates->at(b.userId)[0];
+                    });
+            group.erase(remove);
+        }
+        if (best.empty()) return RejectGroup("no_viable_mu_group");
+        candidates = std::move(best);
+        auto config = m_runtimeConfiguration;
+        config.groupingMode = DlMuMimoGroupingMode::FIXED;
+        config.requestedGroupSize = 0;
+        config.requestedUserIds.clear();
+        for (const auto& u : candidates) config.requestedUserIds.push_back(u.userId);
+        m_runtime.emplace(config);
+        return true;
+    }
+
     bool BuildDlMuInfo()
     {
         if (m_allowedWidth != 20 || !m_edca || !m_runtime)
@@ -471,18 +719,22 @@ class SionnaMimoDownlinkScheduler final : public MultiUserScheduler
                     ? "queued_not_transmittable" : "empty_queue";
                 continue;
             }
-            const WifiTxVector suTx =
-                GetWifiRemoteStationManager(m_linkId)->GetDataTxVector(mpdu->GetHeader(), m_allowedWidth);
-            if (!suTx.GetModeInitialized() || suTx.GetMode().GetModulationClass() != WIFI_MOD_CLASS_HE ||
-                (m_spectrumModel->GetEffectiveSinrModel() == SionnaMimoEffectiveSinrModel::EESM &&
-                 !m_spectrumModel->HasEesmBeta(suTx.GetMode().GetMcsValue())))
+            uint8_t mcs = 0;
+            if (m_rateControl == SionnaMimoDownlinkRateControl::STATION_MANAGER)
             {
-                ++m_rejectedGroups;
-                if (status) status->eligibility = "invalid_rate";
-                return RejectGroup("invalid_rate");
+                const WifiTxVector suTx =
+                    GetWifiRemoteStationManager(m_linkId)->GetDataTxVector(mpdu->GetHeader(), m_allowedWidth);
+                if (!suTx.GetModeInitialized() || suTx.GetMode().GetModulationClass() != WIFI_MOD_CLASS_HE ||
+                    (m_spectrumModel->GetEffectiveSinrModel() == SionnaMimoEffectiveSinrModel::EESM &&
+                     !m_spectrumModel->HasEesmBeta(suTx.GetMode().GetMcsValue())))
+                {
+                    ++m_rejectedGroups;
+                    if (status) status->eligibility = "invalid_rate";
+                    return RejectGroup("invalid_rate");
+                }
+                mcs = suTx.GetMode().GetMcsValue();
             }
             if (status) status->eligibility = "eligible";
-            const uint8_t mcs = suTx.GetMode().GetMcsValue();
             candidateInfo.txParams.m_txVector.SetHeMuUserInfo(staId, {ru, mcs, 1});
             candidateInfo.psduMap.emplace(staId, Create<WifiPsdu>(mpdu, true));
             candidates.push_back({binding.userId, staId, address, mpdu, mcs});
@@ -490,6 +742,16 @@ class SionnaMimoDownlinkScheduler final : public MultiUserScheduler
         if (candidates.size() < 2)
         {
             return RejectGroup("fewer_than_two_candidates");
+        }
+
+        if (m_rateControl == SionnaMimoDownlinkRateControl::IDEAL_CSI)
+        {
+            try { if (!ChooseIdealGroup(candidates)) return false; }
+            catch (const std::invalid_argument& error) { return RejectGroup("ideal_csi_rejected", error.what()); }
+            candidateInfo = {};
+            candidateInfo.txParams.m_txVector = MuVector(candidates);
+            for (const auto& u : candidates)
+                candidateInfo.psduMap.emplace(u.staId, Create<WifiPsdu>(u.mpdu, true));
         }
 
         std::vector<DlMuMimoStaUserBinding> runtimeBindings;
@@ -579,6 +841,24 @@ class SionnaMimoDownlinkScheduler final : public MultiUserScheduler
                 mpduList.size() > 1 ? Create<WifiPsdu>(std::move(mpduList))
                                     : Create<WifiPsdu>(item, true);
         }
+        if (m_rateControl == SionnaMimoDownlinkRateControl::IDEAL_CSI)
+        {
+            std::map<uint16_t, uint32_t> sizes;
+            for (const auto& [id, psdu] : finalInfo.psduMap) sizes[id] = psdu->GetSize();
+            auto refined = selected;
+            const auto& rates = GroupRates(selected, *m_rateSnapshot);
+            if (OptimizeRates(refined, rates, sizes) > 0)
+            {
+                WifiTxParameters params;
+                params.m_txVector = MuVector(refined);
+                bool fits = true;
+                for (const auto& [id, psdu] : finalInfo.psduMap)
+                    for (const auto& mpdu : *psdu)
+                        fits &= GetHeFem(m_linkId)->TryAddMpdu(mpdu, params, available);
+                if (fits) finalInfo.txParams = std::move(params);
+            }
+            if (m_diagnostic) m_decision.detail = "ideal_csi; bounded rate/size refinement; oldest eligible user retained";
+        }
         m_pendingDlMu = std::move(finalInfo);
         m_hasPendingDlMu = true;
         ++m_muTransmissions;
@@ -590,6 +870,18 @@ class SionnaMimoDownlinkScheduler final : public MultiUserScheduler
         if (!m_apMac)
         {
             return;
+        }
+        if (m_rateControl == SionnaMimoDownlinkRateControl::IDEAL_CSI)
+        {
+            auto minstrel = DynamicCast<MinstrelHtWifiManager>(GetWifiRemoteStationManager(m_linkId));
+            for (const auto& [id, psdu] : psduMap)
+                if (psdu->GetHeader(0).IsQosData())
+                {
+                    if (minstrel) minstrel->SetExternalDataRate(psdu->GetAddr1(), txVector.IsDlMu());
+                    for (const auto& b : m_stationBindings)
+                        if (b.stationDevice->GetMac()->GetAddress() == psdu->GetAddr1())
+                            m_lastService[b.userId] = Simulator::Now();
+                }
         }
         try
         {
@@ -651,6 +943,14 @@ class SionnaMimoDownlinkScheduler final : public MultiUserScheduler
             const Time csiTime = m_runtimeConfiguration.timing.ResolveCsiTimestamp(now);
             const auto csiSnapshot = SubsetSnapshot(m_snapshotProvider(csiTime), userIds);
             const auto transmissionSnapshot = SubsetSnapshot(m_snapshotProvider(now), userIds);
+            if (m_scheduling == SionnaMimoDownlinkScheduling::MU_ADAPTIVE)
+            {
+                auto config = m_runtimeConfiguration;
+                config.groupingMode = DlMuMimoGroupingMode::FIXED;
+                config.requestedGroupSize = 0;
+                config.requestedUserIds.assign(userIds.begin(), userIds.end());
+                m_runtime.emplace(config);
+            }
             m_runtime->SelectAndStore(m_apDevice->GetNode()->GetId(),
                                       csiSnapshot,
                                       emitted,
@@ -702,6 +1002,13 @@ class SionnaMimoDownlinkScheduler final : public MultiUserScheduler
     SionnaMimoDownlinkDiagnostic m_diagnostic;
     SionnaMimoDownlinkDecision m_decision;
     uint64_t m_decisionId{0};
+    SionnaMimoDownlinkRateControl m_rateControl{SionnaMimoDownlinkRateControl::STATION_MANAGER};
+    Ptr<HeSuMimoLinkAbstraction> m_rateMapping;
+    std::optional<MultiUserChannelSnapshot> m_rateSnapshot;
+    std::map<std::vector<uint32_t>, RateTable> m_rateCache;
+    std::map<uint32_t, Time> m_lastService;
+    double m_ruPower{0};
+    std::vector<double> m_rxGains;
 };
 
 } // namespace
@@ -957,7 +1264,8 @@ SionnaMimoHelper::InstallDownlink(
     Ptr<SionnaSpectrumPropagationLossModel> spectrumModel,
     SionnaMimoDownlinkSnapshotProvider snapshotProvider,
     SionnaMimoDownlinkScheduling scheduling,
-    SionnaMimoDownlinkDiagnostic diagnostic) const
+    SionnaMimoDownlinkDiagnostic diagnostic,
+    SionnaMimoDownlinkRateControl rateControl) const
 {
     Validate(m_configuration);
     if (m_configuration.mode != SionnaMimoMode::MU_MIMO || !m_configuration.dlMu)
@@ -1009,6 +1317,15 @@ SionnaMimoHelper::InstallDownlink(
         Reject("configured MU group size is incompatible with AP or station capabilities");
     }
 
+    if (scheduling == SionnaMimoDownlinkScheduling::MU_ADAPTIVE &&
+        (rateControl != SionnaMimoDownlinkRateControl::IDEAL_CSI ||
+         m_configuration.dlMu->precoder == DlMuMimoRuntimePrecoder::FIXED))
+        Reject("adaptive grouping requires ideal-CSI rates and ZF/RZF precoding");
+    if (rateControl == SionnaMimoDownlinkRateControl::IDEAL_CSI &&
+        (m_configuration.dlMu->precoder == DlMuMimoRuntimePrecoder::FIXED ||
+         m_configuration.dlMu->groupingMode != DlMuMimoGroupingMode::FIXED))
+        Reject("ideal-CSI rates require a fixed configured user ceiling with ZF/RZF precoding");
+
     Ptr<SionnaMimoDownlinkScheduler> scheduler = CreateObject<SionnaMimoDownlinkScheduler>();
     scheduler->Configure(apDevice,
                          stationBindings,
@@ -1016,7 +1333,7 @@ SionnaMimoHelper::InstallDownlink(
                          std::move(snapshotProvider),
                          *m_configuration.dlMu,
                          scheduling,
-                         std::move(diagnostic));
+                         std::move(diagnostic), rateControl, m_configuration);
     apMac->AggregateObject(scheduler);
     return scheduler;
 }

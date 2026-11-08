@@ -1,0 +1,83 @@
+--- a/src/wifi/model/rate-control/minstrel-ht-wifi-manager.h
++++ b/src/wifi/model/rate-control/minstrel-ht-wifi-manager.h
+@@ -26,6 +26,7 @@
+ #define MINSTREL_HT_WIFI_MANAGER_H
+ 
+ #include "minstrel-wifi-manager.h"
++#include <set>
+ 
+ #include "ns3/wifi-mpdu-type.h"
+ #include "ns3/wifi-remote-station-manager.h"
+@@ -244,6 +245,11 @@
+     MinstrelHtWifiManager();
+     ~MinstrelHtWifiManager() override;
+ 
++    /** Exclude externally selected data rates from this peer's Minstrel learning.
++     * MAC retry/BlockAck bookkeeping is unaffected. Default: learn all data.
++     */
++    void SetExternalDataRate(Mac48Address address, bool external);
++
+     void SetupPhy(const Ptr<WifiPhy> phy) override;
+     void SetupMac(const Ptr<WifiMac> mac) override;
+     int64_t AssignStreams(int64_t stream) override;
+@@ -257,6 +263,7 @@
+     typedef void (*RateChangeTracedCallback)(const uint64_t rate, const Mac48Address remoteAddress);
+ 
+   private:
++    std::set<Mac48Address> m_externalDataRates;
+     void DoInitialize() override;
+     WifiRemoteStation* DoCreateStation() const override;
+     void DoReportRxOk(WifiRemoteStation* station, double rxSnr, WifiMode txMode) override;
+--- a/src/wifi/model/rate-control/minstrel-ht-wifi-manager.cc
++++ b/src/wifi/model/rate-control/minstrel-ht-wifi-manager.cc
+@@ -606,8 +606,16 @@
+ }
+ 
+ void
++MinstrelHtWifiManager::SetExternalDataRate(Mac48Address address, bool external)
++{
++    if (external) m_externalDataRates.insert(address);
++    else m_externalDataRates.erase(address);
++}
++
++void
+ MinstrelHtWifiManager::DoReportDataFailed(WifiRemoteStation* st)
+ {
++    if (m_externalDataRates.count(GetAddress(st))) return;
+     NS_LOG_FUNCTION(this << st);
+     auto station = static_cast<MinstrelHtWifiRemoteStation*>(st);
+ 
+@@ -643,6 +651,7 @@
+                                       uint16_t dataChannelWidth,
+                                       uint8_t dataNss)
+ {
++    if (m_externalDataRates.count(GetAddress(st))) return;
+     NS_LOG_FUNCTION(this << st << ackSnr << ackMode << dataSnr << dataChannelWidth << +dataNss);
+     auto station = static_cast<MinstrelHtWifiRemoteStation*>(st);
+ 
+@@ -715,6 +724,7 @@
+ void
+ MinstrelHtWifiManager::DoReportFinalDataFailed(WifiRemoteStation* st)
+ {
++    if (m_externalDataRates.count(GetAddress(st))) return;
+     NS_LOG_FUNCTION(this << st);
+     auto station = static_cast<MinstrelHtWifiRemoteStation*>(st);
+ 
+@@ -768,6 +778,7 @@
+                                              uint16_t dataChannelWidth,
+                                              uint8_t dataNss)
+ {
++    if (m_externalDataRates.count(GetAddress(st))) return;
+     NS_LOG_FUNCTION(this << st << nSuccessfulMpdus << nFailedMpdus << rxSnr << dataSnr
+                          << dataChannelWidth << +dataNss);
+     auto station = static_cast<MinstrelHtWifiRemoteStation*>(st);
+--- a/src/wifi/model/rate-control/minstrel-ht-wifi-manager.cc
++++ b/src/wifi/model/rate-control/minstrel-ht-wifi-manager.cc
+@@ -1180,6 +1180,7 @@
+                                             Ptr<const Packet> packet,
+                                             bool normally)
+ {
++    if (m_externalDataRates.count(GetAddress(st))) return normally;
+     NS_LOG_FUNCTION(this << st << packet << normally);
+ 
+     auto station = static_cast<MinstrelHtWifiRemoteStation*>(st);

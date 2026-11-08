@@ -3,7 +3,8 @@ set(CMAKE_CXX_STANDARD 17)
 
 # Apply the native ns-3.40 integration fixes, or verify an already patched checkout.
 find_program(SIONNA_PATCH_EXECUTABLE patch REQUIRED)
-foreach(patch_name ns-3.40-he-calibration-context.patch ns-3.40-mimo-stream-limits.patch)
+foreach(patch_name ns-3.40-he-calibration-context.patch ns-3.40-mimo-stream-limits.patch
+                   ns-3.40-external-mu-rate.patch)
     set(core_patch "${CMAKE_CURRENT_SOURCE_DIR}/patches/${patch_name}")
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${core_patch}")
     execute_process(COMMAND ${SIONNA_PATCH_EXECUTABLE} --batch --dry-run --forward -p1 -i "${core_patch}"
