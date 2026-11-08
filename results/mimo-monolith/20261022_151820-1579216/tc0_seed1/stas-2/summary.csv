@@ -1,0 +1,3 @@
+NumStas,STA_Index,STA_NodeId,ReceivedBytes,MeasurementSeconds,MeanGoodput_Mbps
+2,0,0,33636672,9,29.899264
+2,1,1,55117568,9,48.9933937778

@@ -1,0 +1,27 @@
+Env: apartment/apartment.xml
+Apartment executed
+ns3sionna configured with fc= 5180MHz, B=60MHz, FFT=768, Evo model:position, FixedTc=0ms
+ns3sionna configured for mode: 2, submode: 16
+ns3sionna: trying to connect to sionna via tcp://localhost:5555
+ns3sionna: connection ... OK
+ns3sionna socket closed
+Finished simulation with 1 stations in 30.9469 sec
+
+Env: apartment/apartment.xml
+Apartment executed
+ns3sionna configured with fc= 5180MHz, B=60MHz, FFT=768, Evo model:position, FixedTc=0ms
+ns3sionna configured for mode: 2, submode: 16
+ns3sionna: trying to connect to sionna via tcp://localhost:5555
+ns3sionna: connection ... OK
+ns3sionna socket closed
+Finished simulation with 2 stations in 50.1241 sec
+
+Env: apartment/apartment.xml
+Apartment executed
+ns3sionna configured with fc= 5180MHz, B=60MHz, FFT=768, Evo model:position, FixedTc=0ms
+ns3sionna configured for mode: 2, submode: 16
+ns3sionna: trying to connect to sionna via tcp://localhost:5555
+ns3sionna: connection ... OK
+ns3sionna socket closed
+Finished simulation with 4 stations in 63.6567 sec
+

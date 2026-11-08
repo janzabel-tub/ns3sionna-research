@@ -1,0 +1,19 @@
+ns3sionna v1.0
+Using config: model_folder=/home/ccs-lab/jan.zabel/ns-allinone-3.40/ns-3.40/contrib/sionna/examples/../model/ns3sionna/models, single_run=False, mode=2, rt_fast=True, rt_max_parallel_links=256, est_csi=True
+Waiting for new job ...
+Init ns3sionna with rt_fast=True, est_csi=True
+Using GPU ray-tracing backend: cuda_ad_mono_polarized
+Sionna server socket ready ...
+[31m2026-10-28 12:46:06 WARN  [HDRFilm] Monochrome mode enabled, setting film output pixel format to 'luminance' (was rgb).
+[0mOperating in mode: 2, sub_mode: 16, time_evo_model: position, fc: 5180 MHz, B: 60 MHz, FFT size: 768
+Sionna server init sucessful ...
+2.5e-05s: Computed CSI with Tc: 10000.0ms, #links: 2
+0.000378002s: Computed CSI with Tc: 10000.0ms, #links: 2
+0.000378008s: Computed CSI with Tc: 10000.0ms, #links: 2
+Computed no. CSI samples: 6
+Sionna server socket closed.
+Using config: model_folder=/home/ccs-lab/jan.zabel/ns-allinone-3.40/ns-3.40/contrib/sionna/examples/../model/ns3sionna/models, single_run=False, mode=2, rt_fast=True, rt_max_parallel_links=256, est_csi=True
+Waiting for new job ...
+Init ns3sionna with rt_fast=True, est_csi=True
+Using GPU ray-tracing backend: cuda_ad_mono_polarized
+Sionna server socket ready ...

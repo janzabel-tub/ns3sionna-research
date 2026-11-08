@@ -1,0 +1,5 @@
+Env: apartment/apartment.xml
+Apartment executed
+ns3sionna configured with fc= 5210MHz, B=240MHz, FFT=3072, Evo model:position, FixedTc=0ms
+ns3sionna configured for mode: 2, submode: 16
+ns3sionna: trying to connect to sionna via tcp://localhost:5555

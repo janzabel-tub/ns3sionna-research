@@ -1,0 +1,6 @@
+ns3sionna v1.0
+Using config: model_folder=/home/ccs-lab/jan.zabel/ns-allinone-3.40/ns-3.40/contrib/sionna/examples/../model/ns3sionna/models, single_run=False, mode=2, rt_fast=True, rt_max_parallel_links=256, est_csi=True
+Waiting for new job ...
+Init ns3sionna with rt_fast=True, est_csi=True
+Using GPU ray-tracing backend: cuda_ad_mono_polarized
+Sionna server socket ready ...

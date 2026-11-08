@@ -1,0 +1,4 @@
+link_id,received_bytes,measurement_seconds,mean_goodput_mbps
+0,3956736,9,3.517098667
+1,4174592,9,3.710748444
+-1,8131328,9,7.227847111
