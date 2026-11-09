@@ -440,11 +440,11 @@ class SionnaMimoDownlinkScheduler final : public MultiUserScheduler
     {
         WifiTxVector tx;
         tx.SetPreambleType(WIFI_PREAMBLE_HE_MU);
-        tx.SetChannelWidth(20);
+        tx.SetChannelWidth(m_allowedWidth);
         tx.SetGuardInterval(800);
         tx.SetBssColor(m_apMac->GetHeConfiguration()->GetBssColor());
         for (const auto& u : users)
-            tx.SetHeMuUserInfo(u.staId, {{HeRu::RU_242_TONE, 1, true}, u.mcs, 1});
+            tx.SetHeMuUserInfo(u.staId, {{HeRu::GetRuType(m_allowedWidth), 1, true}, u.mcs, 1});
         return tx;
     }
 
@@ -452,11 +452,11 @@ class SionnaMimoDownlinkScheduler final : public MultiUserScheduler
     {
         const auto mask = m_phy->GetTxMaskRejectionParams();
         auto psd = WifiSpectrumValueHelper::CreateHeOfdmTxPowerSpectralDensity(
-            m_phy->GetFrequency(), 20, DbmToW(m_phy->GetTxPowerStart() + m_phy->GetTxGain()),
-            m_phy->GetGuardBandwidth(20), std::get<0>(mask), std::get<1>(mask), std::get<2>(mask));
+            m_phy->GetFrequency(), m_allowedWidth, DbmToW(m_phy->GetTxPowerStart() + m_phy->GetTxGain()),
+            m_phy->GetGuardBandwidth(m_allowedWidth), std::get<0>(mask), std::get<1>(mask), std::get<2>(mask));
         double power = 0;
         const auto center = (psd->GetValuesN() - 1) / 2;
-        for (const auto& range : HeRu::GetSubcarrierGroup(20, HeRu::RU_242_TONE, 1))
+        for (const auto& range : HeRu::GetSubcarrierGroup(m_allowedWidth, HeRu::GetRuType(m_allowedWidth), 1))
             for (int sc = range.first; sc <= range.second; ++sc)
                 power += (*psd)[center + sc] * 78125.0;
         std::vector<double> rxGains;
@@ -497,7 +497,7 @@ class SionnaMimoDownlinkScheduler final : public MultiUserScheduler
             mappings.push_back({u.userId, 0});
             const auto rx = Station(u.userId)->GetPhy();
             const auto budget = WifiLinkBudget::Calculate(
-                WToDbm(m_ruPower) + rx->GetRxGain(), u.widebandLossDb, 20e6, 290,
+                WToDbm(m_ruPower) + rx->GetRxGain(), u.widebandLossDb, m_allowedWidth * 1e6, 290,
                 m_spectrumModel->GetReceiverNoiseFigureDb());
             snrs.push_back({u.userId, budget.GetReferenceSnrLinear(), 0});
         }
@@ -506,7 +506,7 @@ class SionnaMimoDownlinkScheduler final : public MultiUserScheduler
             : DlMuMimoPrecodingMatrix::RegularizedZeroForcing(group, mappings,
                 m_runtimeConfiguration.rzfAlpha, m_runtimeConfiguration.rankTolerance);
         const auto link = DlMuMimoLinkModel::Calculate(group, precoding, snrs);
-        const auto bins = HeDataToneMask::GetDataBins(20, HeRu::RU_242_TONE, 1,
+        const auto bins = HeDataToneMask::GetDataBins(m_allowedWidth, HeRu::GetRuType(m_allowedWidth), 1,
             group.users.front().channel.GetNumSubcarriers() / 2);
         RateTable rates;
         for (const auto& u : group.users)
@@ -662,7 +662,10 @@ class SionnaMimoDownlinkScheduler final : public MultiUserScheduler
 
     bool BuildDlMuInfo()
     {
-        if (m_allowedWidth != 20 || !m_edca || !m_runtime)
+        // Full-channel MU only; a narrowed channel-access opportunity uses SU.
+        if ((m_allowedWidth != 20 && m_allowedWidth != 40 &&
+             m_allowedWidth != 80 && m_allowedWidth != 160) ||
+            !m_edca || !m_runtime || !m_phy || m_allowedWidth != m_phy->GetChannelWidth())
         {
             ++m_rejectedGroups;
             return RejectGroup("unsupported_scheduler_context");
@@ -674,7 +677,7 @@ class SionnaMimoDownlinkScheduler final : public MultiUserScheduler
         }
         const uint8_t tid = first->GetHeader().GetQosTid();
         if (m_diagnostic) m_decision.tid = tid;
-        const HeRu::RuSpec ru{HeRu::RU_242_TONE, 1, true};
+        const HeRu::RuSpec ru{HeRu::GetRuType(m_allowedWidth), 1, true};
         std::vector<Candidate> candidates;
         DlMuInfo candidateInfo;
         candidateInfo.txParams.m_txVector.SetPreambleType(WIFI_PREAMBLE_HE_MU);

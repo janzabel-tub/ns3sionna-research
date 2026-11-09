@@ -144,10 +144,10 @@ DownlinkTxTrace(WifiConstPsduMap psdus, WifiTxVector tx, double)
         Require(g_expectedMuUsers >= 2 && psdus.size() >= 2 && psdus.size() <= g_expectedMuUsers &&
                     (g_options.muGrouping == "adaptive" || psdus.size() == g_expectedMuUsers) &&
                     tx.GetHeMuUserInfoMap().size() == psdus.size() &&
-                    tx.GetChannelWidth() == 20,
-                "MU PPDU did not contain the configured 20 MHz user group");
+                    tx.GetChannelWidth() == g_options.channelWidthMhz,
+                "MU PPDU did not contain the configured full-band user group");
         for (const auto& [staId, info] : tx.GetHeMuUserInfoMap())
-            Require(info.nss == 1 && info.ru == HeRu::RuSpec(HeRu::RU_242_TONE, 1, true),
+            Require(info.nss == 1 && info.ru == HeRu::RuSpec(HeRu::GetRuType(tx.GetChannelWidth()), 1, true),
                     "MU users must share the full-band RU with one stream each");
         ++g_muPpdus;
         ++g_muGroupSizes[psdus.size()];
@@ -1117,7 +1117,9 @@ RunSimulation(  const std::string environment,
     // Reuse the live performance cache, not the deterministic Snapshot() of the
     // MU example. Freeze one complete snapshot per simulator timestamp so every
     // selection/installation at that time uses the same channels even uncached.
-    auto provider = [propagationCache, wifiApNode, wifiStaNodes,
+    const auto channelBins = getFFTSize(WIFI_STANDARD_80211ax, g_options.channelWidthMhz) *
+                             SionnaHelper::GUARD_MULTIPLIER;
+    auto provider = [propagationCache, wifiApNode, wifiStaNodes, channelBins,
                      snapshot = std::optional<MultiUserChannelSnapshot>{}](Time now) mutable {
         Require(now == Simulator::Now(), "live provider supports current CSI only");
         if (snapshot && snapshot->csiTimestamp == now) return *snapshot;
@@ -1130,8 +1132,8 @@ RunSimulation(  const std::string environment,
             auto frequencies = propagationCache->GetPropagationFreq(ap, sta);
             Require(channel.GetNumTxAntennas() == g_options.antennaCount &&
                         channel.GetNumRxAntennas() == 1 &&
-                        channel.GetNumSubcarriers() == 768 && frequencies.size() == 768,
-                    "live channels must have a 768-bin 1xN HE 20 MHz grid");
+                        channel.GetNumSubcarriers() == channelBins && frequencies.size() == channelBins,
+                    "live channels must match the configured 1xN HE frequency grid");
             Require(current.users.empty() || frequencies == current.users.front().frequencies,
                     "MU user frequency grids differ");
             current.users.push_back({i + 1, wifiApNode.Get(0)->GetId(),
@@ -1287,7 +1289,7 @@ RunSimulation(  const std::string environment,
            << "\nmcs=" << (rate_adaptation == "fixed" ? std::to_string(mcs) : "adaptive")
            << "\nstreamsMeaning="
            << (numStas == 1 ? "single-user MRT baseline" : g_options.muGrouping == "adaptive"
-               ? "one per STA; actual eligible group of 2..N on RU242" : "one per STA; strict configured group on RU242")
+               ? "one per STA; actual eligible group of 2..N on full-band RU" : "one per STA; strict configured group on full-band RU")
            << "\nrzfAlpha=" << g_options.rzfAlpha
            << "\ncsi=current query with configured propagation-cache coherence"
            << "\nmuCoding=BCC\nmaxHeMcs=9\nmuGuardIntervalNs=800"
@@ -1408,9 +1410,9 @@ main(int argc, char* argv[])
     addString("outputDirectory", "Result root; writes stas-N", g_options.outputDirectory);
     cmd.AddValue("sim_min_stas", "First station count; doubles through sim_max_stas", minStas);
     cmd.AddValue("sim_max_stas", "Maximum station count, up to eight", maxStas);
-    cmd.AddValue("channel", "5 GHz 20 MHz channel; 0 selects 36", g_options.channelNumber);
+    cmd.AddValue("channel", "5 GHz channel; 0 selects a default matching channelWidthMhz", g_options.channelNumber);
     cmd.AddValue("channelNumber", "Alias for channel", g_options.channelNumber);
-    cmd.AddValue("channelWidthMhz", "Must be 20 MHz for the native MU scheduler", g_options.channelWidthMhz);
+    cmd.AddValue("channelWidthMhz", "HE channel width: 20, 40, 80 or 160 MHz", g_options.channelWidthMhz);
     cmd.AddValue("mobile_scenario", "Enable station random walks; AP remains static", mobile_scenario);
     cmd.AddValue("mobile_speed", "Station walking speed in m/s", mobile_speed);
     cmd.AddValue("caching", "Reuse propagation-cache entries", caching);
@@ -1469,8 +1471,12 @@ main(int argc, char* argv[])
                 "adaptive grouping requires ideal-csi MU rates");
         Require(g_options.reversePath == "legacy24" || g_options.reversePath == "reciprocal-he",
                 "reversePath must be legacy24 or reciprocal-he");
-        Require(g_options.channelWidthMhz == 20, "native MU scheduler requires 20 MHz");
-        if (!g_options.channelNumber) g_options.channelNumber = 36;
+        Require(g_options.channelWidthMhz == 20 || g_options.channelWidthMhz == 40 ||
+                    g_options.channelWidthMhz == 80 || g_options.channelWidthMhz == 160,
+                "HE MU channel width must be 20, 40, 80 or 160 MHz");
+        if (!g_options.channelNumber)
+            g_options.channelNumber = WifiPhyOperatingChannel::GetDefaultChannelNumber(
+                g_options.channelWidthMhz, WIFI_STANDARD_80211ax, WIFI_PHY_BAND_5GHZ);
         Require(g_options.antennaCount >= 2 && g_options.antennaCount <= 8 &&
                     g_options.streams == 1 && g_options.arrayRows > 0 &&
                     g_options.antennaCount % g_options.arrayRows == 0 &&

@@ -9,7 +9,7 @@ import numpy as np
 @dataclass(frozen=True)
 class ResourceLimits:
     """Positive inclusive limits; wire planning is a conservative upper bound."""
-    max_subcarriers: int = 4096
+    max_subcarriers: int = 6144  # HE160 including the threefold guard grid
     max_rx_antennas: int = 64
     max_tx_antennas: int = 64
     max_coefficients_per_channel: int = 4194304

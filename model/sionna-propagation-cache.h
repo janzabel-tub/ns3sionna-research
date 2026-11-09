@@ -97,7 +97,7 @@ class SionnaPropagationCache : public ns3::Object
         /** Positive, inclusive resource limits. Payload excludes allocator/RSS overhead. */
         struct ResourceLimits
         {
-            uint64_t maxSubcarriers{4096};
+            uint64_t maxSubcarriers{6144}; // HE160 including the threefold guard grid
             uint64_t maxRxAntennas{64};
             uint64_t maxTxAntennas{64};
             uint64_t maxCoefficientsPerChannel{4194304};

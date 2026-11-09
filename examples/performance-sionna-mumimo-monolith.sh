@@ -23,14 +23,15 @@ REPORT_INTERVAL_MS=${REPORT_INTERVAL_MS:-100}
 SEED=${SEED:-1}
 RNG_RUN=${RNG_RUN:-1}
 
-# Fixed topology: 4 AP antennas, 4 one-antenna STAs, NSS=1/user, 20 MHz.
+# Default topology: 4 AP antennas, 4 one-antenna STAs, NSS=1/user.
 MU_GROUPING=${MU_GROUPING:-adaptive} # adaptive or fixed
 MU_RATE_CONTROL=${MU_RATE_CONTROL:-ideal-csi} # ideal-csi or station-manager
 PRECODING=${PRECODING:-zf} # zf or rzf; RZF_ALPHA must be supplied for rzf.
 RZF_ALPHA=${RZF_ALPHA:-}
 ARRAY_ROWS=${ARRAY_ROWS:-1}
 ANTENNA_SPACING_LAMBDA=${ANTENNA_SPACING_LAMBDA:-0.5}
-CHANNEL=${CHANNEL:-36}
+CHANNEL_WIDTH_MHZ=${CHANNEL_WIDTH_MHZ:-20} # HE: 20, 40, 80 or 160.
+CHANNEL=${CHANNEL:-0} # Select the default channel matching the width.
 TX_POWER=${TX_POWER:-20} # Total AP power, shared across four MU streams.
 NOISE_FIGURE_DB=${NOISE_FIGURE_DB:-7}
 RATE_ADAPTATION=${RATE_ADAPTATION:-minstrel} # AP rate policy.
@@ -71,7 +72,8 @@ Usage: [ENV=value ...] bash performance-sionna-mumimo-monolith.sh [--name=value 
        bash performance-sionna-mumimo-monolith.sh --dry-run [--name=value ...]
 
 One four-antenna AP sends TCP to four one-antenna STAs over a shared full-band
-242-tone RU at 20 MHz. PRECODING=zf is default. For RZF set
+full-band RU at CHANNEL_WIDTH_MHZ=20/40/80/160 (default 20).
+CHANNEL=0 selects a matching channel. PRECODING=zf is default. For RZF set
 PRECODING=rzf RZF_ALPHA=<positive value>; no calibration beta is needed.
 MU_GROUPING=adaptive uses eligible groups of 2--N; fixed retains the strict group.
 REVERSE_PATH=reciprocal-he (default) uses reciprocal STA-1/AP-N HE reception
@@ -143,7 +145,7 @@ run_dir="$OUTPUT_DIR/run"
 tag="$RUN_LABEL"
 args=(
     "--sim_min_stas=4" "--sim_max_stas=4" "--antennaCount=4" "--streams=1"
-    "--channelWidthMhz=20" "--channel=$CHANNEL" "--precoding=$PRECODING"
+    "--channelWidthMhz=$CHANNEL_WIDTH_MHZ" "--channel=$CHANNEL" "--precoding=$PRECODING"
     "--muGrouping=$MU_GROUPING" "--muRateControl=$MU_RATE_CONTROL" "--reversePath=$REVERSE_PATH"
     "--arrayRows=$ARRAY_ROWS" "--antennaSpacingLambda=$ANTENNA_SPACING_LAMBDA"
     "--environment=$ENVIRONMENT" "--serverUrl=$SERVER_URL"

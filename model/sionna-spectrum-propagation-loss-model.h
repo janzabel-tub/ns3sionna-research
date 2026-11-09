@@ -189,7 +189,8 @@ class SionnaSpectrumPropagationLossModel : public SpectrumPropagationLossModel
     /**
      * Evaluate the SU-MIMO abstraction for an already path-loss-attenuated signal.
      * Set useConfiguredPrecoder=false for an unprecoded reciprocal uplink;
-     * this leaves installed downlink state untouched.
+     * this leaves installed downlink state untouched. receptionPrecoder optionally
+     * supplies the same precoder sampled onto a narrower transmitted frequency grid.
      */
     SionnaMimoSpectrumRxResult CalculateMimoRx(
         const MimoChannelMatrix& channel,
@@ -202,7 +203,8 @@ class SionnaSpectrumPropagationLossModel : public SpectrumPropagationLossModel
         double receiverNoiseFigureDb,
         Ptr<ErrorRateModel> errorRateModel,
         const std::vector<uint32_t>& dataIndices = {},
-        bool useConfiguredPrecoder = true) const;
+        bool useConfiguredPrecoder = true,
+        const MimoPrecodingMatrix* receptionPrecoder = nullptr) const;
 
     /**
      * Evaluate one complete HE-DL-MU transmission before scalar PSD conversion.

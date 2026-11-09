@@ -16,13 +16,13 @@ simulations. The one-STA case is a current-CSI MRT TCP baseline; cases with
 2--8 STAs use eligible full-band MU-MIMO groups, one stream per selected STA,
 ZF precoding and ideal-CSI MU rates; SU fallback uses Minstrel.
 MU_GROUPING=fixed MU_RATE_CONTROL=station-manager restores the strict legacy case. Apartment STAs use the existing randomized same-room positions.
-The native MU scheduler is limited to 20 MHz and HE MCS 0--9.
+HE supports CHANNEL_WIDTH_MHZ=20/40/80/160 and MCS 0--9.
 REVERSE_PATH=reciprocal-he (default) enables single-stream HE uplink with
 ideal reciprocal CFRs and all AP receive antennas; legacy24 restores the baseline.
 
 Defaults: ENVIRONMENT=apartment/apartment.xml MOBILE_SCENARIO=false
 MOBILE_SPEED=1 DATA_RATE=600 (Mb/s per STA) RATE_ADAPTATION=minstrel
-ANTENNA_COUNT=8 ARRAY_ROWS=2 CHANNEL_WIDTH_MHZ=20 CHANNEL=36 PRECODING=zf TX_POWER=20
+ANTENNA_COUNT=8 ARRAY_ROWS=2 CHANNEL_WIDTH_MHZ=20 CHANNEL=0 PRECODING=zf TX_POWER=20
 OUTPUT_DIR=<ns-3>/results/mumimo-sta-sweep/<timestamp>
 BUILD=true SIMULATION_TIME_SECONDS=10 TRAFFIC_START_SECONDS=1
 ENABLE_SNR=false ENABLE_POSITIONS=false ENABLE_RATE_TRACE=false
@@ -69,7 +69,7 @@ for stas in {1..8}; do
     printf '[sweep] %s STA(s) -> %s\n' "$stas" "$case_dir"
     runner_args=("${forwarded[@]}"
         "--sim_min_stas=$stas" "--sim_max_stas=$stas"
-        "--antennaCount=8" "--streams=1" "--channelWidthMhz=20"
+        "--antennaCount=8" "--streams=1"
         "--outputDirectory=$case_dir")
     runner_prefix=()
     [[ $DRY_RUN == false ]] || runner_prefix+=(--dry-run)
@@ -83,7 +83,7 @@ for stas in {1..8}; do
     ARRAY_ROWS=${ARRAY_ROWS:-2} \
     ANTENNA_SPACING_LAMBDA=${ANTENNA_SPACING_LAMBDA:-0.5} \
     CHANNEL_WIDTH_MHZ=${CHANNEL_WIDTH_MHZ:-20} \
-    CHANNEL=${CHANNEL:-36} \
+    CHANNEL=${CHANNEL:-0} \
     TX_POWER=${TX_POWER:-20} \
     LDPC=${LDPC:-false} \
     SIMULATION_TIME_SECONDS=${SIMULATION_TIME_SECONDS:-10} \

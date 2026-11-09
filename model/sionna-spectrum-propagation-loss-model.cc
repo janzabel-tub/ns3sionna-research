@@ -460,17 +460,21 @@ SionnaSpectrumPropagationLossModel::CalculateMimoRx(
     double receiverNoiseFigureDb,
     Ptr<ErrorRateModel> errorRateModel,
     const std::vector<uint32_t>& dataIndices,
-    bool useConfiguredPrecoder) const
+    bool useConfiguredPrecoder,
+    const MimoPrecodingMatrix* receptionPrecoder) const
 {
     NS_ABORT_MSG_IF(!std::isfinite(receivedPowerW) || receivedPowerW <= 0.0,
                     "Received MIMO power must be finite and positive");
     NS_ABORT_MSG_IF(txVector.GetPreambleType() != WIFI_PREAMBLE_HE_SU,
                     "The minimal MIMO SpectrumWifiPhy path supports HE SU PPDUs only");
 
-    const bool precoded = useConfiguredPrecoder && m_precodingMatrix.has_value();
+    const auto* precoder = useConfiguredPrecoder
+        ? (receptionPrecoder ? receptionPrecoder : (m_precodingMatrix ? &*m_precodingMatrix : nullptr))
+        : nullptr;
+    const bool precoded = precoder != nullptr;
     const uint8_t nss = txVector.GetNss();
     const uint32_t expectedNss = precoded
-                                     ? m_precodingMatrix->GetNumStreams()
+                                     ? precoder->GetNumStreams()
                                      : channel.GetNumTxAntennas();
     NS_ABORT_MSG_IF(nss != expectedNss,
                     "WifiTxVector NSS must equal the transmitted stream dimension");
@@ -483,7 +487,7 @@ SionnaSpectrumPropagationLossModel::CalculateMimoRx(
     NS_ABORT_MSG_IF(!errorRateModel, "SpectrumWifiPhy ErrorRateModel must be configured");
     if (precoded)
     {
-        m_precodingMatrix->ValidateForChannel(channel);
+        precoder->ValidateForChannel(channel);
     }
 
     const auto linkBudget =
@@ -497,7 +501,7 @@ SionnaSpectrumPropagationLossModel::CalculateMimoRx(
     SionnaMimoSpectrumRxResult result;
     result.m_linkResult = precoded
                               ? m_linkAbstraction->Calculate(channel,
-                                                             *m_precodingMatrix,
+                                                             *precoder,
                                                              linkBudget,
                                                              txVector,
                                                              packetSizeBytes, dataIndices)
@@ -803,13 +807,57 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
                    : (m_fixedChannelEnabled
                           ? m_fixedPathLossDb
                           : m_propagationCache->GetPropagationLoss(a, b)));
-    const MimoChannelMatrix channel =
+    MimoChannelMatrix channel =
         transmissionReceiver ? transmissionReceiver->channel
                              : (muReceiver ? muReceiver->channel
                    : (m_fixedChannelEnabled
                           ? m_fixedChannel
                           : m_propagationCache->GetPropagationChannelMatrix(a, b)));
     const uint32_t psdSubcarriers = params->psd->GetValuesN() - 1;
+    std::optional<MimoPrecodingMatrix> sampledPrecoder;
+    const MimoPrecodingMatrix* suPrecoder = m_precodingMatrix ? &*m_precodingMatrix : nullptr;
+    // Minstrel and legacy responses can occupy a narrower primary channel.
+    // Sample actual frequency centres, preserving the original wideband loss.
+    if (hasWifiPpdu && m_propagationCache && !m_fixedChannelEnabled &&
+        channel.GetNumSubcarriers() != psdSubcarriers &&
+        !(!heMuPayload && preamble != WIFI_PREAMBLE_HE_SU &&
+          spectrum_bin_size == 312500.0 && channel.GetNumSubcarriers() == 4 * psdSubcarriers))
+    {
+        const auto transmitter = GetTransmitterSpectrumWifiPhy(params);
+        const double firstHz = transmitter->GetFrequency() * 1e6 -
+                               (channel.GetNumSubcarriers() / 2) * 78125.0;
+        const double offset = (params->psd->GetSpectrumModel()->Begin()->fc - firstHz) / 78125.0;
+        const double spacing = spectrum_bin_size / 78125.0;
+        const auto first = std::llround(offset), stride = std::llround(spacing);
+        NS_ABORT_MSG_IF(first < 0 || stride < 1 || std::abs(offset - first) > 1e-6 ||
+                        std::abs(spacing - stride) > 1e-6 ||
+                        first + (static_cast<int64_t>(psdSubcarriers) - 1) * stride >=
+                            channel.GetNumSubcarriers(),
+                        "Transmitted spectrum lies outside the configured HE CFR grid");
+        MimoChannelMatrix selected(psdSubcarriers, channel.GetNumRxAntennas(), channel.GetNumTxAntennas());
+        const bool selectPrecoder = preamble == WIFI_PREAMBLE_HE_SU &&
+                                    !reciprocalUplink && !overheardUplink && suPrecoder;
+        std::vector<std::complex<double>> coefficients;
+        if (selectPrecoder) suPrecoder->ValidateForChannel(channel);
+        for (uint32_t sc = 0; sc < psdSubcarriers; ++sc)
+        {
+            const auto source = first + sc * stride;
+            for (uint32_t rx = 0; rx < channel.GetNumRxAntennas(); ++rx)
+                for (uint32_t tx = 0; tx < channel.GetNumTxAntennas(); ++tx)
+                    selected.Set(sc, rx, tx, channel.Get(source, rx, tx));
+            if (selectPrecoder)
+                for (uint32_t tx = 0; tx < suPrecoder->GetNumTxAntennas(); ++tx)
+                    for (uint32_t stream = 0; stream < suPrecoder->GetNumStreams(); ++stream)
+                        coefficients.push_back(suPrecoder->Get(source, tx, stream));
+        }
+        if (selectPrecoder)
+        {
+            sampledPrecoder.emplace(psdSubcarriers, suPrecoder->GetNumTxAntennas(),
+                                     suPrecoder->GetNumStreams(), coefficients);
+            suPrecoder = &*sampledPrecoder;
+        }
+        channel = std::move(selected);
+    }
     // ns-3 sends the common non-HE part on a 312.5 kHz grid; the installed
     // HE CFR uses 78.125 kHz. Sample the same frequency centres for that part.
     const bool coarseCommonGrid = !heMuPayload && preamble != WIFI_PREAMBLE_HE_SU &&
@@ -831,14 +879,14 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
         NS_ABORT_MSG_IF(GetEffectiveSinrModel() == SionnaMimoEffectiveSinrModel::EESM &&
                         !HasEesmBeta(wifiParams->ppdu->GetTxVector().GetMode().GetMcsValue()),
                         "Every HE data MCS in EESM mode requires an explicit beta");
-        const uint32_t expectedNss = !reciprocalUplink && m_precodingMatrix
-                                         ? m_precodingMatrix->GetNumStreams()
+        const uint32_t expectedNss = !reciprocalUplink && suPrecoder
+                                         ? suPrecoder->GetNumStreams()
                                          : channel.GetNumTxAntennas();
         NS_ABORT_MSG_IF(wifiParams->ppdu->GetTxVector().GetNss() != expectedNss,
                         "WifiTxVector NSS must equal the transmitted stream dimension");
-        if (!reciprocalUplink && m_precodingMatrix)
+        if (!reciprocalUplink && suPrecoder)
         {
-            m_precodingMatrix->ValidateForChannel(channel);
+            suPrecoder->ValidateForChannel(channel);
         }
     }
 
@@ -1126,7 +1174,7 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
                                             rxPhy->GetNumberOfAntennas(),
                                             txVector.GetChannelWidth() * 1e6,
                                             m_receiverNoiseFigureDb,
-                                            GetErrorRateModel(rxPhy), dataIndices, !reciprocalUplink);
+                                            GetErrorRateModel(rxPhy), dataIndices, !reciprocalUplink, suPrecoder);
 
         const double equivalentPowerBeforeRxGain =
             mimoRx.GetEquivalentReceivedPowerW() / rxGainLinear;
