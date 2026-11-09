@@ -70,6 +70,7 @@ struct Options
     std::string serverUrl{"tcp://localhost:5555"};
     std::string precoding{"zf"};
     std::string muGrouping{"adaptive"}, muRateControl{"ideal-csi"};
+    std::string reversePath{"reciprocal-he"};
     double rzfAlpha{std::numeric_limits<double>::quiet_NaN()};
     std::string tcpVariant{"ns3::TcpCubic"};
     std::string apPosition;
@@ -811,6 +812,13 @@ RunSimulation(  const std::string environment,
     propagationCache->SetCaching(caching);
     // MU requires real dimensioned CFRs, including at long distances.
     propagationCache->SetOptimize(false);
+    const bool reciprocalHe = g_options.reversePath == "reciprocal-he";
+    if (reciprocalHe)
+    {
+        std::vector<uint32_t> stations;
+        for (uint32_t i = 0; i < numStas; ++i) stations.push_back(wifiStaNodes.Get(i)->GetId());
+        propagationCache->ConfigureReciprocalStar(wifiApNode.Get(0)->GetId(), stations);
+    }
 
     Ptr<MultiModelSpectrumChannel> spectrumChannel =
         CreateObject<MultiModelSpectrumChannel>();
@@ -929,10 +937,15 @@ RunSimulation(  const std::string environment,
     Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(1472));
 
     WifiHelper staWifi = wifi;
-    staWifi.SetRemoteStationManager("ns3::ConstantRateWifiManager",
-        "DataMode", StringValue("OfdmRate24Mbps"),
-        "ControlMode", StringValue("OfdmRate24Mbps"),
-        "RtsCtsThreshold", UintegerValue(rtsThreshold));
+    if (reciprocalHe)
+        staWifi.SetRemoteStationManager("ns3::MinstrelHtWifiManager",
+            "UseLatestAmendmentOnly", BooleanValue(true),
+            "RtsCtsThreshold", UintegerValue(rtsThreshold));
+    else
+        staWifi.SetRemoteStationManager("ns3::ConstantRateWifiManager",
+            "DataMode", StringValue("OfdmRate24Mbps"),
+            "ControlMode", StringValue("OfdmRate24Mbps"),
+            "RtsCtsThreshold", UintegerValue(rtsThreshold));
     NetDeviceContainer staDevices;
     mac.SetType("ns3::StaWifiMac",
                 "Ssid",        SsidValue(ssid),
@@ -1278,7 +1291,11 @@ RunSimulation(  const std::string environment,
            << "\nrzfAlpha=" << g_options.rzfAlpha
            << "\ncsi=current query with configured propagation-cache coherence"
            << "\nmuCoding=BCC\nmaxHeMcs=9\nmuGuardIntervalNs=800"
-           << "\nstaDataMode=OfdmRate24Mbps\nstaUplinkModel=legacy first antenna pair"
+           << "\nreversePath=" << g_options.reversePath
+           << "\nstaDataMode=" << (reciprocalHe ? "MinstrelHt HE MCS 0--9 NSS 1" : "OfdmRate24Mbps")
+           << "\nstaUplinkModel=" << (reciprocalHe
+               ? "ideal reciprocity H_UL=transpose(H_DL); full AP RX array; scalar STA overhearing"
+               : "legacy first antenna pair")
            << "\nldpc=" << g_options.ldpc
            << "\ndataRateMbpsPerStation=" << data_Rate_mbps << "\ntcpVariant=" << tcpVariant
            << "\ntxPowerDbm=" << TX_POWER_DBM << "\nnoiseFigureDb=" << g_options.noiseFigureDb
@@ -1403,7 +1420,8 @@ main(int argc, char* argv[])
     cmd.AddValue("verbose", "Enable Sionna debug logging", verbose);
     cmd.AddValue("fixedCoherenceTimeMs", "Fixed cache coherence in ms; 0 uses dynamic value", coherenceMs);
     cmd.AddValue("dataRate", "Offered TCP load in Mb/s PER STATION", dataRate);
-    addString("rateAdaptation", "minstrel (AP HE MCS 0--9), or fixed; STAs use legacy OFDM", rateAdaptation);
+    addString("rateAdaptation", "minstrel (AP HE MCS 0--9), or fixed; STA policy follows reversePath", rateAdaptation);
+    addString("reversePath", "reciprocal-he (STA HE Minstrel, reciprocal CFR), or legacy24", g_options.reversePath);
     cmd.AddValue("mcs", "HE MCS for rateAdaptation=fixed, 0--9; ignored by Minstrel", mcs);
     addString("tcpVariant", "TCP congestion-control TypeId", g_options.tcpVariant);
     cmd.AddValue("seed", "Shared ns-3/Sionna seed", seed);
@@ -1449,6 +1467,8 @@ main(int argc, char* argv[])
                 "muRateControl must be ideal-csi or station-manager");
         Require(g_options.muGrouping != "adaptive" || g_options.muRateControl == "ideal-csi",
                 "adaptive grouping requires ideal-csi MU rates");
+        Require(g_options.reversePath == "legacy24" || g_options.reversePath == "reciprocal-he",
+                "reversePath must be legacy24 or reciprocal-he");
         Require(g_options.channelWidthMhz == 20, "native MU scheduler requires 20 MHz");
         if (!g_options.channelNumber) g_options.channelNumber = 36;
         Require(g_options.antennaCount >= 2 && g_options.antennaCount <= 8 &&

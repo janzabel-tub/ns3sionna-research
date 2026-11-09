@@ -29,6 +29,8 @@
 #include "../helper/sionna-helper.h"
 
 #include <map>
+#include <optional>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -114,6 +116,14 @@ class SionnaPropagationCache : public ns3::Object
         static MultiUserChannelSnapshot DeserializeMultiUserChannelSnapshot(
             const ns3sionna::ChannelStateResponse::ChannelState& message,
             const ResourceLimits& limits);
+
+        /** Opt in before the first lookup: query AP->STA and transpose reverse CFRs.
+         * Assumes reciprocal antenna ports. Scalar loss/delay and cache validity are shared.
+         * Other links keep their existing propagation semantics.
+         */
+        void ConfigureReciprocalStar(uint32_t apNodeId, const std::vector<uint32_t>& staNodeIds);
+        bool IsReciprocalUplink(uint32_t txNodeId, uint32_t rxNodeId) const;
+        bool IsReciprocalStation(uint32_t nodeId) const;
 
         // propagation delay between two nodes
         Time GetPropagationDelay(Ptr<MobilityModel> a, Ptr<MobilityModel> b) const;
@@ -287,6 +297,8 @@ class SionnaPropagationCache : public ns3::Object
         void PurgeExpired(Time now) const;
         void UpdateStoragePeaks() const;
 
+        std::optional<uint32_t> m_reciprocalAp;
+        std::set<uint32_t> m_reciprocalStations;
         SionnaHelper *m_sionnaHelper;
         bool m_caching;
         typedef std::map<CacheKey, std::vector<CacheEntry>> Cache;

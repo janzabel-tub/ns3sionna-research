@@ -4877,6 +4877,116 @@ AddCacheState(ns3sionna::Wrapper& reply, Ptr<SionnaMobilityModel> tx,
     }
 }
 
+class ReciprocalCacheTest : public TestCase
+{
+  public:
+    explicit ReciprocalCacheTest(bool caching)
+        : TestCase(caching ? "reciprocal star first uplink, reverse P2MP poisoning and expiry"
+                           : "reciprocal star fresh uncached uplink"), m_caching(caching) {}
+
+  private:
+    bool m_caching;
+    void DoRun() override
+    {
+        auto ap = MakeCacheRadio(), sta = MakeCacheRadio(), other = MakeCacheRadio();
+        auto forward = [&](uint64_t start, uint64_t end, double loss) {
+            ns3sionna::Wrapper reply;
+            AddCacheState(reply, ap, sta, start, end, loss, true);
+            auto* rx = reply.mutable_channel_state_response()->mutable_csi(0)->mutable_rx_nodes(0);
+            rx->set_num_tx_antennas(8);
+            rx->clear_csi_real(); rx->clear_csi_imag();
+            for (unsigned i = 0; i < 8; ++i)
+            {
+                rx->add_csi_real((i + 1) / std::sqrt(212.75 / 8));
+                rx->add_csi_imag(-0.25 * i / std::sqrt(212.75 / 8));
+            }
+            return reply.SerializeAsString();
+        };
+        ns3sionna::Wrapper poison;
+        AddCacheState(poison, sta, other, 0, 100, 90);
+        AddCacheState(poison, sta, ap, 0, 100, 99); // Global TX array is wrong for a STA.
+        std::vector<std::string> replies{poison.SerializeAsString(), forward(0, 10, 41),
+                                         forward(11, 20, 42)};
+        CachePeer peer(replies);
+        SionnaHelper helper("reciprocal-cache", peer.endpoint);
+        helper.m_zmq_socket.set(zmq::sockopt::linger, 0);
+        helper.m_zmq_socket.set(zmq::sockopt::rcvtimeo, 3000);
+        auto cache = CreateObject<SionnaPropagationCache>();
+        cache->SetSionnaHelper(helper);
+        cache->SetOptimize(false);
+        cache->SetCaching(m_caching);
+        cache->ConfigureReciprocalStar(CacheRadioId(ap), {CacheRadioId(sta), CacheRadioId(other)});
+        NS_TEST_ASSERT_MSG_EQ(cache->GetPropagationLoss(sta, other), 90, "Unrelated link changed");
+        const auto reverse = cache->GetPropagationChannelMatrix(sta, ap);
+        NS_TEST_ASSERT_MSG_EQ(reverse.GetNumTxAntennas(), 1, "Uplink must have one TX port");
+        NS_TEST_ASSERT_MSG_EQ(reverse.GetNumRxAntennas(), 8, "All AP RX ports required");
+        for (unsigned i = 0; i < 8; ++i)
+            NS_TEST_ASSERT_MSG_EQ(reverse.Get(0, i, 0),
+                                  std::complex<double>(i + 1, -0.25*i) / std::sqrt(212.75 / 8),
+                                  "Reciprocity must transpose without conjugation");
+        if (m_caching)
+        {
+            NS_TEST_ASSERT_MSG_EQ(cache->GetPropagationLoss(sta, ap), 41, "Reverse P2MP entry leaked");
+            NS_TEST_ASSERT_MSG_EQ(cache->GetPropagationDelay(sta, ap), NanoSeconds(1), "Delay changed");
+            const auto down = cache->GetPropagationChannelMatrix(ap, sta);
+            NS_TEST_ASSERT_MSG_EQ(down.GetNumTxAntennas(), 8, "Downlink dimensions changed");
+            NS_TEST_ASSERT_MSG_EQ(cache->GetPropagationCSI(sta, ap).at(7), reverse.Get(0, 7, 0),
+                                  "Raw CSI disagrees with reciprocal matrix");
+            Simulator::Schedule(NanoSeconds(11), [&]() {
+                NS_TEST_ASSERT_MSG_EQ(cache->GetPropagationLoss(sta, ap), 42, "Expired channel reused");
+            });
+        }
+        else
+        {
+            Simulator::Schedule(NanoSeconds(11), [&]() {
+                const auto channel = cache->GetPropagationChannelMatrix(sta, ap);
+                NS_TEST_ASSERT_MSG_EQ(channel.GetNumRxAntennas(), 8, "Fresh reply not transposed");
+                NS_TEST_ASSERT_MSG_EQ(cache->GetStorageStatistics().snapshots, 0, "Uncached CSI retained");
+            });
+        }
+        Simulator::Run();
+        const auto requests = peer.Finish();
+        NS_TEST_ASSERT_MSG_EQ(requests.size(), 3, "Unexpected RPC count");
+        for (unsigned i = 1; i < requests.size(); ++i)
+        {
+            NS_TEST_ASSERT_MSG_EQ(requests[i].tx_node(), CacheRadioId(ap), "Uplink RPC must use AP TX array");
+            NS_TEST_ASSERT_MSG_EQ(requests[i].rx_node(), CacheRadioId(sta), "Wrong canonical receiver");
+        }
+        Simulator::Destroy();
+    }
+};
+
+class ReciprocalCombiningTest : public TestCase
+{
+  public:
+    ReciprocalCombiningTest() : TestCase("reciprocal 1x8 combining preserves downlink precoder and counts gain once") {}
+  private:
+    void DoRun() override
+    {
+        auto model = CreateObject<SionnaSpectrumPropagationLossModel>();
+        model->SetEffectiveSinrModel(SionnaMimoEffectiveSinrModel::MEAN_UNCODED_BER);
+        auto error = CreateObject<TableBasedErrorRateModel>();
+        const auto tx = MakeHeTxVector(HePhy::GetHeMcs0(), 1);
+        MimoChannelMatrix down(2, 1, 8), up(2, 8, 1);
+        for (unsigned sc = 0; sc < 2; ++sc)
+            for (unsigned port = 0; port < 8; ++port)
+            {
+                down.Set(sc, 0, port, {1, 0}); up.Set(sc, port, 0, {1, 0});
+            }
+        model->SetPrecodingMatrix(MimoPrecodingMatrix::MaximumRatioTransmission(down));
+        const auto budget = WifiLinkBudget::Calculate(-60, 0, 20e6, 290, 7);
+        const auto before = model->CalculateMimoRx(down, 1e-9, tx, 100, 8, 1, 20e6, 7, error);
+        const auto reverse = model->CalculateMimoRx(up, 1e-9, tx, 100, 1, 8, 20e6, 7, error, {}, false);
+        NS_TEST_ASSERT_MSG_EQ_TOL(reverse.GetLinkResult().GetMimoResult().GetSinrLinear(0, 0),
+            8 * budget.GetReferenceSnrLinear(), 1e-7, "AP combining gain is incorrect");
+        NS_TEST_ASSERT_MSG_EQ_TOL(reverse.GetEquivalentReceivedPowerW(), 1e-9, 1e-18,
+            "Native AWGN diversity would count the eight branches twice");
+        const auto after = model->CalculateMimoRx(down, 1e-9, tx, 100, 8, 1, 20e6, 7, error);
+        NS_TEST_ASSERT_MSG_EQ(before.GetEquivalentReceivedPowerW(), after.GetEquivalentReceivedPowerW(),
+            "Uplink changed downlink precoder state");
+    }
+};
+
 class CacheContractTest : public TestCase
 {
   public:
@@ -5646,6 +5756,9 @@ class SionnaTestSuite : public TestSuite
     {
         AddTestCase(new SionnaRandomStreamsTest, TestCase::QUICK);
         AddTestCase(new DisabledCacheFreshReplyTest, TestCase::QUICK);
+        AddTestCase(new ReciprocalCacheTest(true), TestCase::QUICK);
+        AddTestCase(new ReciprocalCacheTest(false), TestCase::QUICK);
+        AddTestCase(new ReciprocalCombiningTest, TestCase::QUICK);
         AddTestCase(new CacheGetterOwnershipTest, TestCase::QUICK);
         AddTestCase(new CacheBudgetTest, TestCase::QUICK);
         AddTestCase(new CacheBatchPoolReuseTest, TestCase::QUICK);

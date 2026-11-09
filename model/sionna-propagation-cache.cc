@@ -232,6 +232,10 @@ SionnaPropagationCache::GetPropagationCSI(Ptr<const MobilityModel> a, Ptr<const 
     Ptr<MobilityModel> tmp_a = ConstCast<MobilityModel>(a);
     Ptr<MobilityModel> tmp_b = ConstCast<MobilityModel>(b);
     CacheEntry uncached;
+    if (IsReciprocalUplink(a->GetObject<Node>()->GetId(), b->GetObject<Node>()->GetId()))
+    {
+        return GetPropagationChannelMatrix(a, b).GetCoefficients();
+    }
     return GetPropagationData(tmp_a, tmp_b, uncached).m_cfr.GetCoefficients();
 }
 
@@ -242,7 +246,45 @@ SionnaPropagationCache::GetPropagationChannelMatrix(Ptr<const MobilityModel> a,
     Ptr<MobilityModel> tmp_a = ConstCast<MobilityModel>(a);
     Ptr<MobilityModel> tmp_b = ConstCast<MobilityModel>(b);
     CacheEntry uncached;
-    return GetPropagationData(tmp_a, tmp_b, uncached).m_cfr;
+    const auto& entry = GetPropagationData(tmp_a, tmp_b, uncached);
+    if (!IsReciprocalUplink(a->GetObject<Node>()->GetId(), b->GetObject<Node>()->GetId()))
+    {
+        return entry.m_cfr;
+    }
+    const auto& forward = entry.m_cfr;
+    if (!forward.GetNumSubcarriers()) return forward;
+    MimoChannelMatrix reverse(forward.GetNumSubcarriers(), forward.GetNumTxAntennas(),
+                              forward.GetNumRxAntennas());
+    for (uint32_t sc = 0; sc < forward.GetNumSubcarriers(); ++sc)
+        for (uint32_t rx = 0; rx < forward.GetNumRxAntennas(); ++rx)
+            for (uint32_t tx = 0; tx < forward.GetNumTxAntennas(); ++tx)
+                reverse.Set(sc, tx, rx, forward.Get(sc, rx, tx)); // transpose, not adjoint
+    return reverse;
+}
+
+void
+SionnaPropagationCache::ConfigureReciprocalStar(uint32_t apNodeId,
+                                               const std::vector<uint32_t>& staNodeIds)
+{
+    const std::set<uint32_t> stations(staNodeIds.begin(), staNodeIds.end());
+    if (stations.empty() || stations.size() != staNodeIds.size() || stations.count(apNodeId))
+        throw std::invalid_argument("Reciprocal star requires distinct AP and station IDs");
+    if (m_cache_hits != 0 || m_cache_miss != 0)
+        throw std::invalid_argument("Configure reciprocal star before any propagation lookup");
+    m_reciprocalAp = apNodeId;
+    m_reciprocalStations = stations;
+}
+
+bool
+SionnaPropagationCache::IsReciprocalUplink(uint32_t txNodeId, uint32_t rxNodeId) const
+{
+    return m_reciprocalAp && rxNodeId == *m_reciprocalAp && IsReciprocalStation(txNodeId);
+}
+
+bool
+SionnaPropagationCache::IsReciprocalStation(uint32_t nodeId) const
+{
+    return m_reciprocalStations.count(nodeId) != 0;
 }
 
 void
@@ -672,6 +714,10 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
                                            CacheEntry& uncached) const
 {
     NS_ASSERT_MSG(m_sionnaHelper, "SionnaPropagationCache must have reference to SionnaHelper.");
+    // Canonicalize before cache lookup and RPC, including a first-ever uplink
+    // request. The server retains its global AP-TX / STA-RX array configuration.
+    if (IsReciprocalUplink(a->GetObject<Node>()->GetId(), b->GetObject<Node>()->GetId()))
+        std::swap(a, b);
     Ptr<SionnaMobilityModel> sionna_a = DynamicCast<SionnaMobilityModel> (a);
     Ptr<SionnaMobilityModel> sionna_b = DynamicCast<SionnaMobilityModel> (b);
     NS_ASSERT_MSG(sionna_a && sionna_b, "Not using SionnaMobilityModel.");
@@ -681,6 +727,15 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
     Ptr<Node> node_a = a->GetObject<Node>();
     Ptr<Node> node_b = b->GetObject<Node>();
     NS_ASSERT_MSG(node_a && node_b, "Nodes not found.");
+
+    const bool canonicalStar = m_reciprocalAp && node_a->GetId() == *m_reciprocalAp &&
+        IsReciprocalStation(node_b->GetId());
+    auto matchesRequested = [&](const CacheEntry& entry) {
+        // P2MP replies to other transmitters may include this pair in reverse.
+        // Their globally configured TX array is not the physical STA array.
+        return Matches(entry, node_a->GetId(), node_b->GetId(), current_time) &&
+               (!canonicalStar || (entry.m_a == node_a->GetId() && entry.m_b == node_b->GetId()));
+    };
 
     NS_LOG_DEBUG("ns3sionna::GetPropagationData for lnk: " << node_a->GetId() << " to " << node_b->GetId());
 
@@ -698,7 +753,7 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
             for (const auto& c_entry : it->second) {
                 //NS_LOG_INFO(" " << c_entry.m_start_time << " " << c_entry.m_end_time << " " << current_time);
                 // If delay and loss exist in the cache, check if the entry is not outdated
-                if (Matches(c_entry, node_a->GetId(), node_b->GetId(), current_time))
+                if (matchesRequested(c_entry))
                 {
                     NS_LOG_DEBUG("\t: Cache hit for lnk: " << node_a->GetId() << " to " << node_b->GetId());
                     m_cache_hits += 1;
@@ -878,7 +933,7 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
 
     const auto fresh = std::find_if(pendingEntries.begin(), pendingEntries.end(),
         [&](const auto& pending) {
-            return Matches(pending.second, node_a->GetId(), node_b->GetId(), current_time);
+            return matchesRequested(pending.second);
         });
     if (fresh == pendingEntries.end())
     {
@@ -916,7 +971,7 @@ SionnaPropagationCache::GetPropagationData(Ptr<MobilityModel> a, Ptr<MobilityMod
         // iterate over all stored entries for that link
         for (const auto& c_entry : cache_it->second) {
             // If delay and loss exist in the cache, check if the entry is not outdated
-            if (Matches(c_entry, node_a->GetId(), node_b->GetId(), current_time))
+            if (matchesRequested(c_entry))
             {
                 // Reacquire after all insertions, which may reallocate link vectors.
                 return c_entry;

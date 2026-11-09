@@ -459,15 +459,17 @@ SionnaSpectrumPropagationLossModel::CalculateMimoRx(
     double bandwidthHz,
     double receiverNoiseFigureDb,
     Ptr<ErrorRateModel> errorRateModel,
-    const std::vector<uint32_t>& dataIndices) const
+    const std::vector<uint32_t>& dataIndices,
+    bool useConfiguredPrecoder) const
 {
     NS_ABORT_MSG_IF(!std::isfinite(receivedPowerW) || receivedPowerW <= 0.0,
                     "Received MIMO power must be finite and positive");
     NS_ABORT_MSG_IF(txVector.GetPreambleType() != WIFI_PREAMBLE_HE_SU,
                     "The minimal MIMO SpectrumWifiPhy path supports HE SU PPDUs only");
 
+    const bool precoded = useConfiguredPrecoder && m_precodingMatrix.has_value();
     const uint8_t nss = txVector.GetNss();
-    const uint32_t expectedNss = m_precodingMatrix
+    const uint32_t expectedNss = precoded
                                      ? m_precodingMatrix->GetNumStreams()
                                      : channel.GetNumTxAntennas();
     NS_ABORT_MSG_IF(nss != expectedNss,
@@ -479,7 +481,7 @@ SionnaSpectrumPropagationLossModel::CalculateMimoRx(
     NS_ABORT_MSG_IF(rxPhyAntennas < nss,
                     "Receiver PHY needs at least one antenna per spatial stream");
     NS_ABORT_MSG_IF(!errorRateModel, "SpectrumWifiPhy ErrorRateModel must be configured");
-    if (m_precodingMatrix)
+    if (precoded)
     {
         m_precodingMatrix->ValidateForChannel(channel);
     }
@@ -493,7 +495,7 @@ SionnaSpectrumPropagationLossModel::CalculateMimoRx(
     m_linkAbstraction->SetErrorRateModel(errorRateModel);
 
     SionnaMimoSpectrumRxResult result;
-    result.m_linkResult = m_precodingMatrix
+    result.m_linkResult = precoded
                               ? m_linkAbstraction->Calculate(channel,
                                                              *m_precodingMatrix,
                                                              linkBudget,
@@ -728,6 +730,12 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
                         preamble == WIFI_PREAMBLE_EHT_TB,
                     "The Sionna MIMO adapter does not support EHT MU PPDUs");
     const bool isHeMu = preamble == WIFI_PREAMBLE_HE_MU;
+    const bool reciprocalUplink = m_propagationCache &&
+        m_propagationCache->IsReciprocalUplink(aId, bId);
+    // STA-to-STA overhearing retains the documented scalar approximation.
+    const bool overheardUplink = m_propagationCache &&
+        m_propagationCache->IsReciprocalStation(aId) &&
+        m_propagationCache->IsReciprocalStation(bId);
 
     Ptr<const HePpdu> heMuPpdu =
         isHeMu ? DynamicCast<const HePpdu>(wifiParams->ppdu) : nullptr;
@@ -818,17 +826,17 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
         wifiParams->ppdu->GetTxVector().GetMode().GetModulationClass() ==
             WIFI_MOD_CLASS_HE;
 
-    if (isHeSu)
+    if (isHeSu && !overheardUplink)
     {
         NS_ABORT_MSG_IF(GetEffectiveSinrModel() == SionnaMimoEffectiveSinrModel::EESM &&
                         !HasEesmBeta(wifiParams->ppdu->GetTxVector().GetMode().GetMcsValue()),
                         "Every HE data MCS in EESM mode requires an explicit beta");
-        const uint32_t expectedNss = m_precodingMatrix
+        const uint32_t expectedNss = !reciprocalUplink && m_precodingMatrix
                                          ? m_precodingMatrix->GetNumStreams()
                                          : channel.GetNumTxAntennas();
         NS_ABORT_MSG_IF(wifiParams->ppdu->GetTxVector().GetNss() != expectedNss,
                         "WifiTxVector NSS must equal the transmitted stream dimension");
-        if (m_precodingMatrix)
+        if (!reciprocalUplink && m_precodingMatrix)
         {
             m_precodingMatrix->ValidateForChannel(channel);
         }
@@ -839,7 +847,7 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
     NS_ABORT_MSG_IF(isHeSu && !legacySiso &&
                     GetEffectiveSinrModel() == SionnaMimoEffectiveSinrModel::LEGACY_SISO,
                     "LEGACY_SISO requires 1x1 reception");
-    const bool scalarCompatibilityPath = legacySiso || !isHeSu;
+    const bool scalarCompatibilityPath = legacySiso || !isHeSu || overheardUplink;
 
     Ptr<const WifiPsdu> addressedMuPsdu;
     if (heMuPayload && muReceiver)
@@ -1118,7 +1126,7 @@ SionnaSpectrumPropagationLossModel::DoCalcRxPowerSpectralDensity(Ptr<const Spect
                                             rxPhy->GetNumberOfAntennas(),
                                             txVector.GetChannelWidth() * 1e6,
                                             m_receiverNoiseFigureDb,
-                                            GetErrorRateModel(rxPhy), dataIndices);
+                                            GetErrorRateModel(rxPhy), dataIndices, !reciprocalUplink);
 
         const double equivalentPowerBeforeRxGain =
             mimoRx.GetEquivalentReceivedPowerW() / rxGainLinear;

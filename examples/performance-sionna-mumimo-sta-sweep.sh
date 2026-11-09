@@ -17,6 +17,8 @@ simulations. The one-STA case is a current-CSI MRT TCP baseline; cases with
 ZF precoding and ideal-CSI MU rates; SU fallback uses Minstrel.
 MU_GROUPING=fixed MU_RATE_CONTROL=station-manager restores the strict legacy case. Apartment STAs use the existing randomized same-room positions.
 The native MU scheduler is limited to 20 MHz and HE MCS 0--9.
+REVERSE_PATH=reciprocal-he (default) enables single-stream HE uplink with
+ideal reciprocal CFRs and all AP receive antennas; legacy24 restores the baseline.
 
 Defaults: ENVIRONMENT=apartment/apartment.xml MOBILE_SCENARIO=false
 MOBILE_SPEED=1 DATA_RATE=600 (Mb/s per STA) RATE_ADAPTATION=minstrel
@@ -76,6 +78,7 @@ for stas in {1..8}; do
     MOBILE_SPEED=${MOBILE_SPEED:-1} \
     DATA_RATE=${DATA_RATE:-600} \
     RATE_ADAPTATION=${RATE_ADAPTATION:-minstrel} \
+    REVERSE_PATH=${REVERSE_PATH:-reciprocal-he} \
     PRECODING=${PRECODING:-zf} \
     ARRAY_ROWS=${ARRAY_ROWS:-2} \
     ANTENNA_SPACING_LAMBDA=${ANTENNA_SPACING_LAMBDA:-0.5} \

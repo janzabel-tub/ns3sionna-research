@@ -1,6 +1,6 @@
 # ns3sionna: MIMO-Abstraktionsmodell für IEEE 802.11ax/be
 
-Stand: 20. Oktober 2026. Phasen 1–5 und die ns3sionna-MU-MIMO-Implementierung
+Stand: 9. November 2026. Phasen 1–5 und die ns3sionna-MU-MIMO-Implementierung
 sind im vereinbarten Umfang abgeschlossen. R6 wurde nach erfolgreichem
 CPU-/RTX-3060-Vergleich vom Anwender abgenommen (Abschnitt 7.17).
 Frühere Offen-Vermerke dokumentieren historische Zwischenstände.
@@ -2839,6 +2839,62 @@ Quellen: [exakte AWGN-BER-Ausdrücke](https://www.mathworks.com/help/comm/ug/ana
 BER-Mittelung über Subcarrier/MIMO-Streams für 802.11n; daraus folgt keine
 HE-/MU-Genauigkeitsgarantie.
 
+### 5.21 Reziproker HE-Rückkanal für TCP-ACKs (9. November 2026)
+
+Das MU-Performanzbeispiel bietet `reversePath=reciprocal-he` als neuen Default
+und `reversePath=legacy24` als explizite Vergleichsoption. Der Shellparameter
+heißt `REVERSE_PATH`. Im HE-Modus sendet jede STA genau einen Stream mit
+HE-Minstrel, MCS 0–9, und der nativen A-MPDU-Aggregation. Der AP verwendet
+alle vorhandenen Empfangsports im bestehenden MMSE-Kern; bei einem Stream ist
+dies MRC-äquivalent. Leistungs-, Rauschzahl-, Datenton- und BER-Verträge aus
+den vorigen Abschnitten bleiben erhalten.
+
+`SionnaPropagationCache::ConfigureReciprocalStar(apNodeId, staNodeIds)` aktiviert
+vor dem ersten Lookup ausdrücklich ideale Portreziprozität. AP und STAs müssen
+verschiedene, eindeutige IDs besitzen. Die Konfiguration ist standardmäßig
+inaktiv und verändert keine bisherigen Aufrufer. Alle AP/STA-Lookups werden
+vor Cachezugriff und RPC auf AP→STA kanonisiert, auch bei einer ersten
+Uplinkübertragung. Rückwärts gerichtete P2MP-Nebeneinträge anderer Anfragen
+können einen kanonischen AP-Kanal nicht ersetzen. Das gemeinsame Serverarray
+und das IPC-Format bleiben unverändert.
+
+Für jede gültige AP→STA-Matrix gilt im selben Frequenzraster:
+
+\[
+H_{\mathrm{UL}}[k]=H_{\mathrm{DL}}[k]^T.
+\]
+
+Es wird transponiert, nicht komplex konjugiert. Ein 1×N-Downlink wird zum
+N×1-Uplink; Portmuster und Ausrichtungen bleiben an die physischen Ports
+gleich gebunden. Der skalare Verlust, die Laufzeit, Normierung und bestehende
+Kohärenz-/Cachegültigkeit werden unverändert übernommen. Neue Simulatorzeiten
+verwenden den jeweils gültigen AP-Kanaleintrag, keinen festgehaltenen alten
+CSI-Zustand. Deaktiviertes Caching behält keine abgeleiteten Rückkanäle.
+
+Die SU-Spectrumberechnung kann den konfigurierten Downlink-Precoder pro
+Empfang auslassen (`useConfiguredPrecoder=false`). Dies verändert weder den
+gespeicherten MRT-/SVD-Precoder noch den MU-Zustand. Der Rückkanal wird mit
+einer TX-Antenne und N AP-RX-Antennen validiert. Die bereits vorhandene
+Division der äquivalenten Empfangsleistung durch den nativen AWGN-
+Diversitätsfaktor N verhindert doppelten Kombinationsgewinn: bei acht
+Einheitskoeffizienten ist die numerische SINR achtmal die Referenz-SNR, die
+äquivalente PSD vor ns-3s Diversitätsfaktor enthält diesen Faktor nicht erneut.
+
+Der kleine native Patch `ns-3.40-minstrel-he-mcs-list.patch` begrenzt die
+Initialisierung auf die tatsächliche lokale HE-MCS-Liste. Damit funktioniert
+die STA-MCS-9-Grenze ohne den bisherigen Zugriff auf zwölf vorausgesetzte
+Einträge. Rate-Lernen und Retryregeln ändern sich dadurch nicht.
+
+**Grenzen.** Dies ist ein ideal reziprokes AP/STA-Modell, keine unabhängige
+Uplink-Raytracing-Messung. STA-zu-STA-Mithören und Nicht-HE-Kontrollrahmen
+verwenden weiter die skalare Kompatibilitätsnäherung. Uplink-HE-Mithörer
+umgehen deshalb die adressierte MIMO-Dimensionsprüfung. Globale Serverarrays,
+EDCA/TXOP, Downlink-Gruppierung und -Raten, BlockAck-Sequenz, Aggregationslimits
+und das separate BAR-Zeitbudgetproblem werden nicht verändert. Insbesondere
+entsteht kein Trigger-Uplink-Scheduler. `legacy24` erhält den früheren
+24-Mbit/s-TCP-ACK-Pfad; Vergleiche benötigen identische Quellen und Serverparameter.
+`config.txt` protokolliert Modus, STA-Datenratenpolitik und Reziprozitätsannahme.
+
 ## 6. High-Level-API-Vertrag bis Unterphase 4.8
 
 ### 6.1 Typen, Besitz und Defaults
@@ -4311,6 +4367,52 @@ Binäridentitäten werden getrennt aufgezeichnet; ein frischer Buildnachweis wir
 bei Wiederverwendung nicht behauptet. Das lokale Übertragungsarchiv heißt
 `experiments/r6/r6-existing-ns3-update.tar.gz`.
 
+### 7.18 Validierung des reziproken HE-Rückkanals
+
+Auf ai1 im vorhandenen `sionna-venv` wurden Modell, Tests und MU-Beispiele neu
+gebaut. Alle sieben Suiten `sionna`, `dl-mu-mimo-runtime`,
+`he-effective-sinr-mapping`, `he-dl-mu-spectrum-ru`, `wifi-block-ack`,
+`wifi-mac-ofdma` und `wifi-txop` bestanden. Neue Tests prüfen komplexe
+Transposition ohne Konjugation, die erste Uplinkanfrage, umgekehrte P2MP-
+Nebeneinträge, Ablauf und deaktiviertes Caching sowie analytischen 1×8-
+Kombinationsgewinn ohne doppelten AWGN-Gewinn und unverändertes Downlink-W.
+Das native MU-Referenzbeispiel bestand zusätzlich vier DL-Verfahren, zwei
+Kanäle, zwei CSI-Zeitfälle und drei UL-Verfahren. Seine expliziten EESM-/RZF-
+Referenzparameter wurden nicht für die TCP-Experimente verwendet.
+
+Vier serielle TCP-Läufe verwendeten identische aktuelle Quellen, Seed/Run 1,
+statische Apartmentpositionen, 2×4 AP-Ports, eine Antenne/NSS je STA, 20 MHz,
+20 dBm Gesamtleistung, NF 7 dB, ZF/adaptive/ideal-CSI im Downlink und jeweils
+einen frischen eigenen Server mit `RT_FAST=false`. Das Messfenster war 1–10 s.
+Innerhalb jedes Paares unterscheiden sich nur der Rückkanalmodus und dessen
+zwei beschreibende Konfigurationsfelder.
+
+| STAs | legacy24 Mbit/s | reciprocal-he Mbit/s | Änderung |
+|---|---:|---:|---:|
+| 1 | 41,0381 | 82,3221 | +100,60 Prozent |
+| 8 | 72,3962 | 202,7500 | +180,06 Prozent |
+
+Der Acht-STA-Legacylauf reproduziert Durchsatzintervalle, STA-Summary,
+MU-Summary und Gruppengrößen der verbesserten November-8-Referenz bytegenau.
+Im HE-Modus sinken die Acht-STA-Uplink-Daten-PPDUs von 39.191 auf 4.100;
+4.050 sind aggregiert, maximal 45 MPDUs je PPDU. Alle TCP-Uplinks verwenden
+HE, NSS 1 und MCS 0–9. Rückkanal-Sendezeit je zugestelltem TCP-Gbit sinkt um
+52,81 Prozent, bei einem STA um 76,94 Prozent. Alle STAs erhalten mehr Daten;
+die neuen Acht-STA-Einzelraten liegen zwischen 16,81 und 31,58 Mbit/s.
+Die Offlineprüfung bestätigt PHY-Dauer und Gesamtleistung für 174.385
+PPDUs im Messfenster. Tatsächliche MU-Gruppengrößen werden weiter ausgewiesen.
+
+Dies sind gezielte Einzel-Seed-Integrationsmessungen. Reziprozität, HE-Raten,
+Aggregation und RX-Kombination werden gemeinsam verglichen, nicht einzeln
+abgetragen. Absolute Acht-STA-Rückkanal-Sendezeit und Retry-Markierungsanteil
+steigen mit dem höheren Verkehr; der belegte Effizienzgewinn betrifft Zeit
+je zugestelltem Bit und weniger konkurrierende PPDUs. Weitere MAC-/TCP-
+Optimierung und das getrennte BAR-Zeitbudgetproblem bleiben offen.
+
+Rohdaten, Build-/Testlogs, Kommandoablauf und reproduzierbare Offlineprüfung
+liegen unter `analysis/reverse-path-20261109` im Workspace. Die Modell-PDF
+wird nach dieser abschließenden Dokumentationsänderung genau einmal erzeugt.
+
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 
 - SionnaMimoHelper überträgt eine gemeinsame TX- und RX-Geometrie für die
@@ -4392,9 +4494,11 @@ bei Wiederverwendung nicht behauptet. Das lokale Übertragungsarchiv heißt
   jedem Subcarrier.
 - Die MI-Kompression bleibt eine Diagnosemetrik; nur die explizit konfigurierte
   EESM-Ausgabe wird an ErrorRateModel übergeben.
-- Explizit identifizierte Phase-4.1-Rohkanaleinträge werden nur in ihrer
-  gespeicherten TX-/RX-Richtung getroffen. Nur identitätsfreie Legacy-Einträge
-  behalten die bisherige reziproke Cacheverwendung. Die
+- Standardmäßig werden explizit identifizierte Phase-4.1-Rohkanaleinträge nur
+  in ihrer gespeicherten TX-/RX-Richtung getroffen; identitätsfreie Legacy-Einträge
+  behalten die bisherige reziproke Cacheverwendung. Der explizite reziproke
+  AP-Stern aus Abschnitt 5.21 kanonisiert seine Links gesondert und transponiert
+  Rückkanäle unter der dort dokumentierten Portreziprozitätsannahme. Die
   Precoder-Zustandsidentität enthält ebenfalls gerichtete TX-/RX-Knoten,
   beide Arraykonfigurationen, Modus, Feedbackkonfiguration und CSI-Zeitpunkt.
   Der Helper gibt diese Identität maschinenlesbar weiter, bindet sie aber

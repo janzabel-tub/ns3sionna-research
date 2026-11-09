@@ -1,3 +1,32 @@
+## Reciprocal HE reverse path
+
+`REVERSE_PATH=reciprocal-he` (the example and station-sweep default) sends
+STA TCP ACK data using single-stream HE Minstrel, MCS 0–9, and native
+A-MPDU aggregation. The AP combines all of its receive antenna ports with the
+existing MMSE/MRC abstraction. `REVERSE_PATH=legacy24` restores the fixed
+legacy 24 Mbit/s reverse-data baseline. The equivalent C++ option is
+`--reversePath=reciprocal-he|legacy24`.
+
+This is an explicit ideal-reciprocity model: `H_UL[k] = transpose(H_DL[k])`,
+without conjugation, with the same antenna ports, loss, delay, frequency grid,
+and propagation-cache validity. An opt-in AP/STA registration canonicalizes
+requests to AP→STA even when the first transmission is uplink; no server or
+IPC changes are required. Uplink reception ignores the downlink precoder for
+that reception while preserving installed downlink state. STA-to-STA
+hearing and non-HE control retain the existing scalar approximation.
+
+The small configure-time `ns-3.40-minstrel-he-mcs-list.patch` makes native
+Minstrel initialization honor the actual local HE MCS list rather than indexing
+12 entries unconditionally. This enables the existing STA MCS-9 capability
+ceiling without changing rate learning or native aggregation.
+
+`config.txt` records `reversePath`, `staDataMode`, and `staUplinkModel`.
+This change neither schedules uplink users nor changes EDCA/TXOP, downlink
+rates/grouping, BlockAck sequence, power, or aggregation limits. Legacy and HE
+comparisons must use the same source version and channel/cache settings.
+The older legacy-reverse descriptions and November 8 results below describe
+`REVERSE_PATH=legacy24`.
+
 ## Combined MU rate and grouping policy
 
 The default is now `MU_GROUPING=adaptive MU_RATE_CONTROL=ideal-csi`. The configured
@@ -37,8 +66,8 @@ MU_GROUPING=fixed MU_RATE_CONTROL=station-manager bash contrib/sionna/examples/p
 `MuPpdusTotal` includes all MU sizes. Existing strict-mode columns keep their
 meaning. `config.txt` records both policies and the ideal-CSI assumption.
 Diagnostics and PHY allocation assertions apply to each actual subset. Native
-EDCA/TXOP, reverse legacy TCP-ACK modeling, bandwidth, power and aggregation
-limits are unchanged. The earlier fixed-group description below applies to the
+EDCA/TXOP, bandwidth, power and aggregation limits are unchanged.
+The reverse-data model follows `REVERSE_PATH` as described above. The earlier fixed-group description below applies to the
 explicit legacy baseline.
 
 `performance-sionna-mumimo-monolith.cc` is an additive MU version of

@@ -33,7 +33,8 @@ ANTENNA_SPACING_LAMBDA=${ANTENNA_SPACING_LAMBDA:-0.5}
 CHANNEL=${CHANNEL:-36}
 TX_POWER=${TX_POWER:-20} # Total AP power, shared across four MU streams.
 NOISE_FIGURE_DB=${NOISE_FIGURE_DB:-7}
-RATE_ADAPTATION=${RATE_ADAPTATION:-minstrel} # AP only; STAs use OfdmRate24Mbps.
+RATE_ADAPTATION=${RATE_ADAPTATION:-minstrel} # AP rate policy.
+REVERSE_PATH=${REVERSE_PATH:-reciprocal-he} # reciprocal-he or legacy24; STA uplink policy.
 MCS=${MCS:-9} # Fixed-mode HE MCS 0--9. Native MU scheduler uses BCC.
 LDPC=${LDPC:-false} # Optional SU support; MU remains BCC.
 
@@ -73,6 +74,8 @@ One four-antenna AP sends TCP to four one-antenna STAs over a shared full-band
 242-tone RU at 20 MHz. PRECODING=zf is default. For RZF set
 PRECODING=rzf RZF_ALPHA=<positive value>; no calibration beta is needed.
 MU_GROUPING=adaptive uses eligible groups of 2--N; fixed retains the strict group.
+REVERSE_PATH=reciprocal-he (default) uses reciprocal STA-1/AP-N HE reception
+and STA Minstrel with native aggregation. legacy24 restores legacy TCP ACK data.
 MU_RATE_CONTROL=ideal-csi selects MU MCS 0--9 from the actual group channel.
 AP Minstrel selects SU rates independently; MU uses one stream/user and 800 ns GI.
 For the legacy baseline use MU_GROUPING=fixed MU_RATE_CONTROL=station-manager.
@@ -141,7 +144,7 @@ tag="$RUN_LABEL"
 args=(
     "--sim_min_stas=4" "--sim_max_stas=4" "--antennaCount=4" "--streams=1"
     "--channelWidthMhz=20" "--channel=$CHANNEL" "--precoding=$PRECODING"
-    "--muGrouping=$MU_GROUPING" "--muRateControl=$MU_RATE_CONTROL"
+    "--muGrouping=$MU_GROUPING" "--muRateControl=$MU_RATE_CONTROL" "--reversePath=$REVERSE_PATH"
     "--arrayRows=$ARRAY_ROWS" "--antennaSpacingLambda=$ANTENNA_SPACING_LAMBDA"
     "--environment=$ENVIRONMENT" "--serverUrl=$SERVER_URL"
     "--mobile_scenario=$MOBILE_SCENARIO" "--mobile_speed=$MOBILE_SPEED"

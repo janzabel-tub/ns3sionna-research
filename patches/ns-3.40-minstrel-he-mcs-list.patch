@@ -1,0 +1,11 @@
+--- a/src/wifi/model/rate-control/minstrel-ht-wifi-manager.cc
++++ b/src/wifi/model/rate-control/minstrel-ht-wifi-manager.cc
+@@ -371,7 +371,7 @@
+ 
+                             // Calculate tx time for all rates of the group
+                             WifiModeList heMcsList = GetHeDeviceMcsList();
+-                            for (uint8_t i = 0; i < MAX_HE_GROUP_RATES; i++)
++                            for (uint8_t i = 0; i < heMcsList.size(); i++)
+                             {
+                                 WifiMode mode = heMcsList.at(i);
+                                 // Check for invalid HE MCSs and do not add time to array.
