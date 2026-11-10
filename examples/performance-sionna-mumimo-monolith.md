@@ -1,3 +1,10 @@
+## TCP and saturated UDP
+
+TCP remains the default. Set `TRANSPORT=udp` (or `--transport=udp`) in either
+monolith/sweep for continuously-on UDP, preserving the same offered load and
+native Wi-Fi acknowledgments. See [transport comparison](performance-sionna-transport-comparison.md)
+for commands, diagnostics, and fixed-NSS controls.
+
 ## Reciprocal HE reverse path
 
 `REVERSE_PATH=reciprocal-he` (the example and station-sweep default) sends

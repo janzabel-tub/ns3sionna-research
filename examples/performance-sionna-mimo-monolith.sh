@@ -10,7 +10,7 @@ if [[ ${1:-} == --help || ${1:-} == -h ]]; then
 Usage: [ENV=value ...] bash performance-sionna-mimo-monolith.sh [--name=value ...]
        bash performance-sionna-mimo-monolith.sh --dry-run [--name=value ...]
 
-One AP sends one TCP flow to each STA on one shared channel. Throughput is
+One AP sends one TCP (default) or UDP flow to each STA on one shared channel. Throughput is
 recorded per station. By default compare 1, 2 and 4 STAs; no beta is needed.
 NUM_STAS=N selects one station count. Otherwise SIM_MIN_STAS=1 SIM_MAX_STAS=4
 select a doubling sweep (1,2,4,...). Extra CLI options override env defaults.
@@ -25,7 +25,7 @@ MIMO and timing variables:
   ANTENNA_COUNT=2 STREAMS=0 PRECODING=open-loop ARRAY_ROWS=1
   ANTENNA_SPACING_LAMBDA=0.5 CHANNEL_WIDTH_MHZ=20 CHANNEL=0 NOISE_FIGURE_DB=7
   SIMULATION_TIME_SECONDS=10 TRAFFIC_START_SECONDS=1 REPORT_INTERVAL_MS=100
-  TCP_VARIANT=ns3::TcpCubic RNG_RUN=1 LDPC=true
+  TRANSPORT=tcp (or udp) TCP_VARIANT=ns3::TcpCubic RNG_RUN=1 LDPC=true
   AP_POSITION='x,y,z' STA_POSITIONS='x,y,z;x,y,z' (optional scene overrides)
   SERVER_URL=tcp://localhost:5555 BUILD=true VERBOSE=false PRINT_THROUGHPUT=false
   RUN_TIMEOUT_SECONDS=1800 (wall-clock limit; 0 disables it)
@@ -78,6 +78,7 @@ args=(
     "--noiseFigureDb=${NOISE_FIGURE_DB:-7}" "--ldpc=${LDPC:-true}"
     "--simulationTimeSeconds=${SIMULATION_TIME_SECONDS:-10}"
     "--trafficStartSeconds=${TRAFFIC_START_SECONDS:-1}" "--reportIntervalMs=${REPORT_INTERVAL_MS:-100}"
+    "--transport=${TRANSPORT:-tcp}"
     "--tcpVariant=${TCP_VARIANT:-ns3::TcpCubic}" "--serverUrl=${SERVER_URL:-tcp://localhost:5555}"
     "--snr=${ENABLE_SNR:-false}" "--positions=${ENABLE_POSITIONS:-false}"
     "--minstrelRateTrace=${ENABLE_RATE_TRACE:-false}" "--pcap=${ENABLE_PCAP:-false}"

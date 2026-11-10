@@ -72,6 +72,7 @@ struct Options
     std::string muGrouping{"adaptive"}, muRateControl{"ideal-csi"};
     std::string reversePath{"reciprocal-he"};
     double rzfAlpha{std::numeric_limits<double>::quiet_NaN()};
+    std::string transport{"tcp"};
     std::string tcpVariant{"ns3::TcpCubic"};
     std::string apPosition;
     std::string staPositions;
@@ -928,13 +929,18 @@ RunSimulation(  const std::string environment,
                                      "RtsCtsThreshold", UintegerValue(rtsThreshold));
     }
 
-    // TCP Setup
+    // Transport setup: UDP keeps the same continuously-on offered load.
     DataRate dataRate(std::to_string(data_Rate_mbps) + "Mb/s");
     const std::string& tcpVariant = g_options.tcpVariant;
 
-    Config::SetDefault("ns3::TcpL4Protocol::SocketType",
-        TypeIdValue(TypeId::LookupByName(tcpVariant)));
-    Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(1472));
+    const std::string socketFactory = g_options.transport == "udp"
+                                          ? "ns3::UdpSocketFactory" : "ns3::TcpSocketFactory";
+    if (g_options.transport == "tcp")
+    {
+        Config::SetDefault("ns3::TcpL4Protocol::SocketType",
+            TypeIdValue(TypeId::LookupByName(tcpVariant)));
+        Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(1472));
+    }
 
     WifiHelper staWifi = wifi;
     if (reciprocalHe)
@@ -1191,8 +1197,8 @@ RunSimulation(  const std::string environment,
 
     Ipv4GlobalRoutingHelper::PopulateRoutingTables();
 
-    /* Install TCP receivers on all STAs */
-    PacketSinkHelper sinkHelper("ns3::TcpSocketFactory",
+    /* Install receivers on all STAs; UDP sinks generate no transport ACKs. */
+    PacketSinkHelper sinkHelper(socketFactory,
         InetSocketAddress(Ipv4Address::GetAny(), 9));
     ApplicationContainer clientApps;
     for (uint32_t i = 0; i < numStas; ++i)
@@ -1202,11 +1208,11 @@ RunSimulation(  const std::string environment,
         g_sinks.push_back(StaticCast<PacketSink>(staSinkApps.Get(0)));
     }
 
-    /* Install one downstream TCP transmitter on the AP per STA */
+    /* Install one continuously-on downstream transmitter on the AP per STA. */
     ApplicationContainer serverApps;
     for (uint32_t i = 0; i < numStas; ++i)
     {
-        OnOffHelper server("ns3::TcpSocketFactory",
+        OnOffHelper server(socketFactory,
                            InetSocketAddress(wifiStaInterfaces.GetAddress(i), 9));
         server.SetAttribute("PacketSize", UintegerValue(1472));
         server.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
@@ -1299,6 +1305,7 @@ RunSimulation(  const std::string environment,
                ? "ideal reciprocity H_UL=transpose(H_DL); full AP RX array; scalar STA overhearing"
                : "legacy first antenna pair")
            << "\nldpc=" << g_options.ldpc
+           << "\ntransport=" << g_options.transport << "\napplicationPacketSizeBytes=1472"
            << "\ndataRateMbpsPerStation=" << data_Rate_mbps << "\ntcpVariant=" << tcpVariant
            << "\ntxPowerDbm=" << TX_POWER_DBM << "\nnoiseFigureDb=" << g_options.noiseFigureDb
            << "\nmobile_scenario=" << mobile_scenario << "\nmobile_speed=" << mobile_speed
@@ -1421,7 +1428,8 @@ main(int argc, char* argv[])
     cmd.AddValue("subMode", "Alias for sub_mode", subMode);
     cmd.AddValue("verbose", "Enable Sionna debug logging", verbose);
     cmd.AddValue("fixedCoherenceTimeMs", "Fixed cache coherence in ms; 0 uses dynamic value", coherenceMs);
-    cmd.AddValue("dataRate", "Offered TCP load in Mb/s PER STATION", dataRate);
+    cmd.AddValue("dataRate", "Offered application load in Mb/s PER STATION", dataRate);
+    addString("transport", "tcp (default) or udp; continuously-on downlink load", g_options.transport);
     addString("rateAdaptation", "minstrel (AP HE MCS 0--9), or fixed; STA policy follows reversePath", rateAdaptation);
     addString("reversePath", "reciprocal-he (STA HE Minstrel, reciprocal CFR), or legacy24", g_options.reversePath);
     cmd.AddValue("mcs", "HE MCS for rateAdaptation=fixed, 0--9; ignored by Minstrel", mcs);
@@ -1443,7 +1451,7 @@ main(int argc, char* argv[])
     addString("apPosition", "Optional AP x,y,z; otherwise scene default", g_options.apPosition);
     addString("staPositions", "Optional x,y,z;x,y,z; requires one entry per STA and one station count", g_options.staPositions);
     cmd.AddValue("simulationTimeSeconds", "Simulation end time", g_options.simulationTimeSeconds);
-    cmd.AddValue("trafficStartSeconds", "TCP start after association warmup", g_options.trafficStartSeconds);
+    cmd.AddValue("trafficStartSeconds", "Traffic start after association warmup", g_options.trafficStartSeconds);
     cmd.AddValue("reportIntervalMs", "Per-station throughput interval; default 100 ms", g_options.reportIntervalMs);
     cmd.AddValue("prtTput", "Print per-station interval throughput", g_options.prtTput);
     cmd.AddValue("throughput10ms", "Also record legacy 10 ms per-station throughput", g_options.throughput10ms);
@@ -1496,10 +1504,15 @@ main(int argc, char* argv[])
                     Seconds(g_options.simulationTimeSeconds) > Seconds(g_options.trafficStartSeconds) &&
                     std::isfinite(g_options.reportIntervalMs) && g_options.reportIntervalMs > 0 &&
                     Seconds(g_options.reportIntervalMs / 1000.0).IsStrictlyPositive(), "invalid measurement window or interval");
-        TypeId tcpType;
-        Require(TypeId::LookupByNameFailSafe(g_options.tcpVariant, &tcpType) && tcpType.HasConstructor() &&
-                    DynamicCast<TcpCongestionOps>(ObjectFactory(g_options.tcpVariant).Create<Object>()) != nullptr,
-                "invalid TCP congestion-control TypeId");
+        Require(g_options.transport == "tcp" || g_options.transport == "udp",
+                "transport must be tcp or udp");
+        if (g_options.transport == "tcp")
+        {
+            TypeId tcpType;
+            Require(TypeId::LookupByNameFailSafe(g_options.tcpVariant, &tcpType) && tcpType.HasConstructor() &&
+                        DynamicCast<TcpCongestionOps>(ObjectFactory(g_options.tcpVariant).Create<Object>()) != nullptr,
+                    "invalid TCP congestion-control TypeId");
+        }
         // Reject existing results before starting the simulation.
         for (uint32_t n = minStas; n <= maxStas; n *= 2)
             Require(!std::filesystem::exists(std::filesystem::path(g_options.outputDirectory) /

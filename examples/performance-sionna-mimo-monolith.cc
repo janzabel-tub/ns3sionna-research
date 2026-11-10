@@ -38,6 +38,7 @@
 #include "ns3/sionna-propagation-loss-model.h"
 #include "ns3/sionna-spectrum-propagation-loss-model.h"
 #include "ns3/cfr-tag.h"
+#include "ns3/he-data-tone-mask.h"
 #include "ns3/spectrum-module.h"
 #include "ns3/spectrum-wifi-helper.h"
 
@@ -57,6 +58,7 @@
 #include "ns3/wifi-tx-vector.h"
 #include "ns3/tcp-westwood-plus.h"
 #include "ns3/minstrel-wifi-manager.h"
+#include "mu-mimo-diagnostics.h"
 
 using namespace ns3;
 
@@ -67,6 +69,7 @@ struct Options
     std::string outputDirectory{"results/mimo-monolith"};
     std::string serverUrl{"tcp://localhost:5555"};
     std::string precoding{"open-loop"};
+    std::string transport{"tcp"};
     std::string tcpVariant{"ns3::TcpCubic"};
     std::string apPosition;
     std::string staPositions;
@@ -140,6 +143,9 @@ class ExperimentSpectrumLoss : public SpectrumPropagationLossModel
     double subcarrierSpacingHz{78125};
     std::map<Mac48Address, Ptr<MobilityModel>> receivers;
     std::map<uint32_t, Ptr<MobilityModel>> peers;
+    // One initial intended-link snapshot per transmitter/width, for offline
+    // singular-value and post-SVD SINR analysis. This is not a mobility trace.
+    mutable std::ofstream channelSnapshots;
 
   private:
     struct Selection
@@ -151,6 +157,29 @@ class ExperimentSpectrumLoss : public SpectrumPropagationLossModel
     // Bounded to one most-recent PPDU per transmitter and a small set of
     // frequency-flat antenna-selection matrices indexed by grid size/NSS.
     mutable std::map<uint32_t, Selection> m_selections;
+    mutable std::set<std::pair<uint32_t, uint16_t>> m_snapshots;
+
+    void RecordChannel(const MimoChannelMatrix& csi,
+                       Ptr<const SpectrumSignalParameters> params,
+                       Ptr<const MobilityModel> a,
+                       Ptr<const MobilityModel> b,
+                       const WifiTxVector& vector) const
+    {
+        const auto txId = a->GetObject<Node>()->GetId();
+        const auto width = vector.GetChannelWidth();
+        if (!channelSnapshots.is_open() || !m_snapshots.emplace(txId, width).second)
+            return;
+        const auto type = width == 20 ? HeRu::RU_242_TONE : width == 40 ? HeRu::RU_484_TONE :
+                          width == 80 ? HeRu::RU_996_TONE : HeRu::RU_2x996_TONE;
+        const auto bins = HeDataToneMask::GetDataBins(width, type, 1, csi.GetNumSubcarriers() / 2);
+        for (const auto sc : bins)
+            for (uint32_t rx = 0; rx < csi.GetNumRxAntennas(); ++rx)
+                for (uint32_t tx = 0; tx < csi.GetNumTxAntennas(); ++tx)
+                    channelSnapshots << Simulator::Now().GetSeconds() << ',' << txId << ','
+                        << b->GetObject<Node>()->GetId() << ',' << width << ',' << sc << ','
+                        << rx << ',' << tx << ',' << csi.Get(sc, rx, tx).real() << ','
+                        << csi.Get(sc, rx, tx).imag() << ',' << Integral(*params->psd) << '\n';
+    }
     mutable std::map<std::pair<uint32_t, uint32_t>, MimoPrecodingMatrix> m_openLoop;
 
     MimoChannelMatrix OnTransmitGrid(const MimoChannelMatrix& full,
@@ -212,6 +241,8 @@ class ExperimentSpectrumLoss : public SpectrumPropagationLossModel
                     auto target = destination != receivers.end() ? destination->second : peers.at(txId);
                     const auto csi = target == b ? channel :
                         OnTransmitGrid(cache->GetPropagationChannelMatrix(a, target), params);
+                    if (target == b)
+                        RecordChannel(csi, params, a, b, wifi->ppdu->GetTxVector());
                     if (selected != m_selections.end() &&
                         selected->second.matrix.GetNumStreams() == nss &&
                         selected->second.channel.GetCoefficients() == csi.GetCoefficients())
@@ -812,6 +843,7 @@ RunSimulation(  const std::string environment,
     // Each station-count experiment owns a separate directory, including traces.
     Require(!std::filesystem::exists(out), "output directory already exists: " + out.string());
     std::filesystem::create_directories(out);
+    MuMimoDiagnostics diagnostics(out, g_options.mimoTrace);
     auto open = [&out](std::ofstream& stream, const char* name) {
         stream.open(out / name);
         Require(bool(stream), "cannot write " + (out / name).string());
@@ -866,6 +898,13 @@ RunSimulation(  const std::string environment,
     adapter->cache = propagationCache;
     adapter->beamforming = g_options.precoding == "svd";
     adapter->streams = g_options.streams;
+    if (g_options.mimoTrace && adapter->beamforming)
+    {
+        adapter->channelSnapshots.open(out / "channel_snapshot.csv");
+        Require(bool(adapter->channelSnapshots), "cannot write channel_snapshot.csv");
+        adapter->channelSnapshots << std::setprecision(17)
+            << "Time_s,TxNodeId,RxNodeId,ChannelWidth_MHz,Subcarrier,RxPort,TxPort,Real,Imag,ReceivedPowerW\n";
+    }
     spectrumChannel->AddSpectrumPropagationLossModel(adapter);
 
     Ptr<SionnaPropagationDelayModel> delayModel =
@@ -948,13 +987,18 @@ RunSimulation(  const std::string environment,
                                      "RtsCtsThreshold", UintegerValue(rtsThreshold));
     }
 
-    // TCP Setup
+    // Transport setup: UDP keeps the same continuously-on offered load.
     DataRate dataRate(std::to_string(data_Rate_mbps) + "Mb/s");
     const std::string& tcpVariant = g_options.tcpVariant;
 
-    Config::SetDefault("ns3::TcpL4Protocol::SocketType",
-        TypeIdValue(TypeId::LookupByName(tcpVariant)));
-    Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(1472));
+    const std::string socketFactory = g_options.transport == "udp"
+                                          ? "ns3::UdpSocketFactory" : "ns3::TcpSocketFactory";
+    if (g_options.transport == "tcp")
+    {
+        Config::SetDefault("ns3::TcpL4Protocol::SocketType",
+            TypeIdValue(TypeId::LookupByName(tcpVariant)));
+        Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(1472));
+    }
 
     NetDeviceContainer staDevices;
     mac.SetType("ns3::StaWifiMac",
@@ -1131,6 +1175,8 @@ RunSimulation(  const std::string environment,
         spectrumPhy.EnablePcap((out / "wifi").string(), allDevices);
     }
 
+    diagnostics.Connect(allDevices);
+
     // configure IP
     InternetStackHelper stack;
     stack.Install(wifiApNode);
@@ -1143,8 +1189,8 @@ RunSimulation(  const std::string environment,
 
     Ipv4GlobalRoutingHelper::PopulateRoutingTables();
 
-    /* Install TCP receivers on all STAs */
-    PacketSinkHelper sinkHelper("ns3::TcpSocketFactory",
+    /* Install receivers on all STAs; UDP sinks generate no transport ACKs. */
+    PacketSinkHelper sinkHelper(socketFactory,
         InetSocketAddress(Ipv4Address::GetAny(), 9));
     ApplicationContainer clientApps;
     for (uint32_t i = 0; i < numStas; ++i)
@@ -1154,11 +1200,11 @@ RunSimulation(  const std::string environment,
         g_sinks.push_back(StaticCast<PacketSink>(staSinkApps.Get(0)));
     }
 
-    /* Install one downstream TCP transmitter on the AP per STA */
+    /* Install one continuously-on downstream transmitter on the AP per STA. */
     ApplicationContainer serverApps;
     for (uint32_t i = 0; i < numStas; ++i)
     {
-        OnOffHelper server("ns3::TcpSocketFactory",
+        OnOffHelper server(socketFactory,
                            InetSocketAddress(wifiStaInterfaces.GetAddress(i), 9));
         server.SetAttribute("PacketSize", UintegerValue(1472));
         server.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
@@ -1240,6 +1286,7 @@ RunSimulation(  const std::string environment,
            << "\nstreamsMeaning=" << (rate_adaptation == "minstrel" ? "maximumNss" : "fixedNss")
            << "\nopenLoopSpatialMapping=stream s uses antenna port s"
            << "\nldpc=" << g_options.ldpc
+           << "\ntransport=" << g_options.transport << "\napplicationPacketSizeBytes=1472"
            << "\ndataRateMbpsPerStation=" << data_Rate_mbps << "\ntcpVariant=" << tcpVariant
            << "\ntxPowerDbm=" << TX_POWER_DBM << "\nnoiseFigureDb=" << g_options.noiseFigureDb
            << "\nmobile_scenario=" << mobile_scenario << "\nmobile_speed=" << mobile_speed
@@ -1338,7 +1385,8 @@ main(int argc, char* argv[])
     cmd.AddValue("subMode", "Alias for sub_mode", subMode);
     cmd.AddValue("verbose", "Enable Sionna debug logging", verbose);
     cmd.AddValue("fixedCoherenceTimeMs", "Fixed cache coherence in ms; 0 uses dynamic value", coherenceMs);
-    cmd.AddValue("dataRate", "Offered TCP load in Mb/s PER STATION", dataRate);
+    cmd.AddValue("dataRate", "Offered application load in Mb/s PER STATION", dataRate);
+    addString("transport", "tcp (default) or udp; continuously-on downlink load", g_options.transport);
     addString("rateAdaptation", "minstrel (adaptive HE MCS/NSS/width/GI), or fixed", rateAdaptation);
     cmd.AddValue("mcs", "HE MCS for rateAdaptation=fixed, 0--11; ignored by Minstrel", mcs);
     addString("tcpVariant", "TCP congestion-control TypeId", g_options.tcpVariant);
@@ -1356,7 +1404,7 @@ main(int argc, char* argv[])
     addString("apPosition", "Optional AP x,y,z; otherwise scene default", g_options.apPosition);
     addString("staPositions", "Optional x,y,z;x,y,z; requires one entry per STA and one station count", g_options.staPositions);
     cmd.AddValue("simulationTimeSeconds", "Simulation end time", g_options.simulationTimeSeconds);
-    cmd.AddValue("trafficStartSeconds", "TCP start after association warmup", g_options.trafficStartSeconds);
+    cmd.AddValue("trafficStartSeconds", "Traffic start after association warmup", g_options.trafficStartSeconds);
     cmd.AddValue("reportIntervalMs", "Per-station throughput interval; default 100 ms", g_options.reportIntervalMs);
     cmd.AddValue("prtTput", "Print per-station interval throughput", g_options.prtTput);
     cmd.AddValue("throughput10ms", "Also record legacy 10 ms per-station throughput", g_options.throughput10ms);
@@ -1401,10 +1449,15 @@ main(int argc, char* argv[])
                     Seconds(g_options.simulationTimeSeconds) > Seconds(g_options.trafficStartSeconds) &&
                     std::isfinite(g_options.reportIntervalMs) && g_options.reportIntervalMs > 0 &&
                     Seconds(g_options.reportIntervalMs / 1000.0).IsStrictlyPositive(), "invalid measurement window or interval");
-        TypeId tcpType;
-        Require(TypeId::LookupByNameFailSafe(g_options.tcpVariant, &tcpType) && tcpType.HasConstructor() &&
-                    DynamicCast<TcpCongestionOps>(ObjectFactory(g_options.tcpVariant).Create<Object>()) != nullptr,
-                "invalid TCP congestion-control TypeId");
+        Require(g_options.transport == "tcp" || g_options.transport == "udp",
+                "transport must be tcp or udp");
+        if (g_options.transport == "tcp")
+        {
+            TypeId tcpType;
+            Require(TypeId::LookupByNameFailSafe(g_options.tcpVariant, &tcpType) && tcpType.HasConstructor() &&
+                        DynamicCast<TcpCongestionOps>(ObjectFactory(g_options.tcpVariant).Create<Object>()) != nullptr,
+                    "invalid TCP congestion-control TypeId");
+        }
         // Reject an existing sweep before starting any simulations.
         for (uint32_t n = minStas; n <= maxStas; n *= 2)
             Require(!std::filesystem::exists(std::filesystem::path(g_options.outputDirectory) /

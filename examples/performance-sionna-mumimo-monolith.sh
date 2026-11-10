@@ -15,7 +15,8 @@ AP_POSITION=${AP_POSITION:-}
 STA_POSITIONS=${STA_POSITIONS:-}
 MOBILE_SCENARIO=${MOBILE_SCENARIO:-false}
 MOBILE_SPEED=${MOBILE_SPEED:-1}
-DATA_RATE=${DATA_RATE:-600} # Mb/s offered to EACH STA, using TCP OnOff.
+DATA_RATE=${DATA_RATE:-600} # Mb/s offered to EACH STA, using continuously-on OnOff.
+TRANSPORT=${TRANSPORT:-tcp} # tcp or udp; UDP has no transport feedback.
 TCP_VARIANT=${TCP_VARIANT:-ns3::TcpCubic}
 SIMULATION_TIME_SECONDS=${SIMULATION_TIME_SECONDS:-10}
 TRAFFIC_START_SECONDS=${TRAFFIC_START_SECONDS:-1}
@@ -71,7 +72,7 @@ if [[ ${1:-} == --help || ${1:-} == -h ]]; then
 Usage: [ENV=value ...] bash performance-sionna-mumimo-monolith.sh [--name=value ...]
        bash performance-sionna-mumimo-monolith.sh --dry-run [--name=value ...]
 
-One four-antenna AP sends TCP to four one-antenna STAs over a shared full-band
+One four-antenna AP sends TCP (default) or UDP to four one-antenna STAs over a shared full-band
 full-band RU at CHANNEL_WIDTH_MHZ=20/40/80/160 (default 20).
 CHANNEL=0 selects a matching channel. PRECODING=zf is default. For RZF set
 PRECODING=rzf RZF_ALPHA=<positive value>; no calibration beta is needed.
@@ -81,11 +82,11 @@ and STA Minstrel with native aggregation. legacy24 restores legacy TCP ACK data.
 MU_RATE_CONTROL=ideal-csi selects MU MCS 0--9 from the actual group channel.
 AP Minstrel selects SU rates independently; MU uses one stream/user and 800 ns GI.
 For the legacy baseline use MU_GROUPING=fixed MU_RATE_CONTROL=station-manager.
-RATE_ADAPTATION=fixed MCS=5 selects a fixed HE MCS. STA TCP ACK data uses
-legacy OfdmRate24Mbps because the server has global TX/RX array dimensions.
+RATE_ADAPTATION=fixed MCS=5 selects a fixed AP HE MCS. STA data uses REVERSE_PATH.
+TRANSPORT=udp removes transport ACKs; Wi-Fi ACK/BlockAck exchanges remain.
 
 All settings are grouped at the top of this file. Common overrides:
-  MOBILE_SCENARIO=true MOBILE_SPEED=1 SEED=1 RNG_RUN=1 DATA_RATE=600
+  MOBILE_SCENARIO=true MOBILE_SPEED=1 SEED=1 RNG_RUN=1 DATA_RATE=600 TRANSPORT=tcp
   ENVIRONMENT=apartment/apartment.xml AP_POSITION='x,y,z'
   STA_POSITIONS='x,y,z;x,y,z;x,y,z;x,y,z' TX_POWER=20 ARRAY_ROWS=1
   SIMULATION_TIME_SECONDS=10 TRAFFIC_START_SECONDS=1 REPORT_INTERVAL_MS=100
@@ -152,6 +153,7 @@ args=(
     "--mobile_scenario=$MOBILE_SCENARIO" "--mobile_speed=$MOBILE_SPEED"
     "--caching=$CACHING" "--mode=$MODE" "--sub_mode=$NUM_RES"
     "--fixedCoherenceTimeMs=$COHERENCE_TIME" "--dataRate=$DATA_RATE"
+    "--transport=$TRANSPORT"
     "--rateAdaptation=$RATE_ADAPTATION" "--mcs=$MCS" "--tcpVariant=$TCP_VARIANT"
     "--txPower=$TX_POWER" "--noiseFigureDb=$NOISE_FIGURE_DB" "--ldpc=$LDPC"
     "--seed=$SEED" "--run=$RNG_RUN"

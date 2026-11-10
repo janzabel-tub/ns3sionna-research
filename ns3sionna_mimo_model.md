@@ -1,6 +1,6 @@
 # ns3sionna: MIMO-Abstraktionsmodell für IEEE 802.11ax/be
 
-Stand: 9. November 2026. Phasen 1–5 und die ns3sionna-MU-MIMO-Implementierung
+Stand: 10. November 2026. Phasen 1–5 und die ns3sionna-MU-MIMO-Implementierung
 sind im vereinbarten Umfang abgeschlossen. R6 wurde nach erfolgreichem
 CPU-/RTX-3060-Vergleich vom Anwender abgenommen (Abschnitt 7.17).
 Frühere Offen-Vermerke dokumentieren historische Zwischenstände.
@@ -4412,6 +4412,89 @@ Optimierung und das getrennte BAR-Zeitbudgetproblem bleiben offen.
 Rohdaten, Build-/Testlogs, Kommandoablauf und reproduzierbare Offlineprüfung
 liegen unter `analysis/reverse-path-20261109` im Workspace. Die Modell-PDF
 wird nach dieser abschließenden Dokumentationsänderung genau einmal erzeugt.
+
+### 7.19 Gesättigte UDP-Kontrollen und SU-Antennenskalierung
+
+Beide Performance-Monolithen unterstützen nun `--transport=tcp|udp`, ihre
+Shellrunner und beide Sweeps `TRANSPORT=tcp|udp`. TCP/Cubic bleibt Default.
+UDP verwendet dieselben kontinuierlichen OnOff-Quellen, PacketSinks,
+1472 Anwendungsbytes, angebotene Rate je STA und Messfenster. Nur im TCP-Modus
+werden TCP-Sockettyp und Segmentgröße angewandt; UDP ignoriert `tcpVariant`.
+`config.txt` dokumentiert Transport und Anwendungspaketgröße. Die native
+Wi-Fi-ACK-/BlockAck-/BAR-Behandlung, EDCA, Aggregationsgrenzen, MIMO- und
+Fehlermodelle werden nicht verändert.
+
+Der SU-Monolith ergänzt bei `mimoTrace=true` die vorhandenen passiven PPDU-,
+PHY-, MAC- und Queuetraces. Bei SVD speichert `channel_snapshot.csv` die erste
+adressierte normierte CFR je Sender/Kanalbreite auf HE-Datentönen und die
+physikalische skalare Empfangsleistung. Dies ist kein Kanalverlauf bei
+Bewegung. Die unabhängige NumPy-SVD und BER-Abbildung reproduzieren die
+nativen effektiven SINRs; dieselben gerichteten Matrizen werden nicht als
+bitgleich zwischen GPU-Prozessen vorausgesetzt.
+
+Serielle ai1-Läufe im vorhandenen `sionna-venv` verwenden frische eigene Server
+mit `RT_FAST=false`, Seed/Run 1, 20 MHz, 20 dBm Gesamtleistung, NF 7 dB und
+unveränderte statische Apartmentpositionen. Das Messfenster ist 1–10 s. Die
+SU-Konfiguration bleibt SVD/LDPC mit einer Arrayzeile und 10000 Mbit/s Last.
+Die TCP-Referenzen reproduzieren die gespeicherten SU-Antennenergebnisse.
+
+| SU-Fall | TCP Mbit/s | UDP Mbit/s | TCP / UDP in 8–10 s |
+|---|---:|---:|---:|
+| 4×4 | 140,220757 | 165,789070 | 229,107968 / 273,544704 |
+| 8×8 | 143,448690 | 166,663111 | 151,810304 / 175,703808 |
+
+Im MU-Paar bleiben 2×4 AP-Ports, eine Antenne/NSS je STA, 600 Mbit/s je STA,
+reziproker HE-Uplink sowie adaptive Gruppen und ideale MU-Raten unverändert.
+Bei einem STA steigen TCP/UDP von 82,322091 auf 94,597916 Mbit/s; bei
+acht STAs von 202,750009 auf 405,179449 Mbit/s. Im Acht-STA-Paar steigen
+Entscheidungen mit acht bereiten Nutzern von 132 auf 1495, tatsächliche
+Acht-Nutzer-PPDUs von 14 auf 538. Die UDP-Schedulerbeobachtungen enthalten
+keine leeren Nutzerqueues, gegenüber 2912 unter TCP. Diese Beobachtungen sind
+Abtastungen an Entscheidungen, keine Zeitanteile. Wi-Fi-ACKs, BlockAcks und
+BAR-Polls bleiben aktiv; das separate BAR-Zeitbudgetproblem ist unverändert.
+
+Die exakten CSV-Werte und die gerundete Tabelle werden im Arbeitsbereich
+`analysis/udp-throughput-20261110` geprüft. UDP allein beseitigt das
+Antennenplateau nicht. Im kurzen 8×8-TCP- und UDP-Lauf sendet der AP nur MCS 0
+und 3; MCS 7 wird nicht erprobt. Die 4×4-TCP-Verbindung erreicht MCS 7 erstmals
+bei Anwendungsdaten um 6,476 s. Mit sechs SVD-Streams besitzt der 8×8-Kanal
+für MCS 7 etwa 37,35 dB effektive SINR, gegenüber 29,21 dB bei 4×4/NSS 4.
+Seine numerisch acht Moden sind unterschiedlich stark; der schwache achte
+Modus erklärt jedoch nicht die fehlenden MCS-7-Proben bei sechs Streams.
+
+Native Minstrel-Proben warten `16 + 2 * averageAmpduLength`; bei rund
+41–42 MPDUs sind das etwa 98–100 Auswahlgelegenheiten. Die Zahl unterstützter
+20-MHz-NSS/GI-Gruppen verdoppelt sich von zwölf auf 24. Zusätzlich benutzt die
+Durchsatzrangfolge die 1200-Byte-First-MPDU-Zeit statt einer beobachteten
+A-MPDU-/Austauschzeit. Ein separater nativer Dauercrosscheck zeigt bei MCS 3
+130,602 µs für NSS 6 und 134,951 µs für NSS 8 in diesem Score; eine
+64286-Byte-HE-PPDU benötigt dagegen 2586,4 beziehungsweise 1976,8 µs.
+Auch bei MCS 7 bevorzugt der Score NSS 4 gegenüber NSS 6, während die große
+Aggregation NSS 6 begünstigt. Diese Studie verändert den Controller nicht.
+Die vorliegende neunsekündige Antennenkurve ist deshalb keine reine
+räumliche Kapazitätskurve. Eine längere Trainingsphase und eine gemeinsame
+aggregationsbewusste NSS-/MCS-Auswahl bleiben getrennte Folgeschritte.
+Für Training müssen Nutzdaten früh beginnen und spätere CSV-Intervalle
+bewertet werden; ein späterer `trafficStartSeconds` verschiebt Verkehr und
+Messbeginn gemeinsam und trainiert Minstrel nicht mit Nutzdaten.
+
+Auf derselben 8×8-Geometrie liefern feste UDP-Kontrollen mit NSS 4/MCS 7
+283,702158 Mbit/s, mit NSS 6/MCS 7 394,489458 Mbit/s und mit NSS 8/MCS 3
+229,184512 Mbit/s. Die sechs Streams bei MCS 7 übertreffen den adaptiven
+8×8-UDP-Lauf damit um 136,70 Prozent. Diese Kontrollen umgehen Exploration
+und den First-MPDU-Score; sie suchen nicht das globale Optimum. Die drei
+serverfreien Transportregressionen und alle elf akzeptierten Live-Läufe
+bestehen. SU-Durchsatz- und Summary-CSVs stimmen bytegenau mit den gespeicherten
+Antennenreferenzen überein; bei acht MU-STAs zusätzlich auch MU-Summary und
+Gruppengrößen mit der reziproken HE-Referenz. Nach Abschluss wurden keine
+Sionna-Serverprozesse mehr gefunden; der GPU-Verbrauch auf ai1 fällt auf den
+ursprünglichen Wert von 5869 MiB zurück.
+
+Die Arbeitsbereichsstudie enthält Transportpaare, feste NSS-/MCS-Kontrollen,
+tatsächliche MU-Gruppen, Rohdaten, Quell-/Binärhashes, Offlineprüfung und
+reproduzierbare Plots. Eigene Server werden nach jedem Lauf und bei Fehlern
+beendet. Ausführbare Befehle und Diagnosegrenzen stehen unter
+`examples/performance-sionna-transport-comparison.md`.
 
 ## 8. Bekannte Grenzen und nächste Entscheidungspunkte
 

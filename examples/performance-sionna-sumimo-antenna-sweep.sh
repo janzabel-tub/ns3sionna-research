@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SISO-to-SU-MIMO TCP sweep: one AP and one STA, from 1x1 through 8x8.
+# SISO-to-SU-MIMO TCP/UDP sweep: one AP and one STA, from 1x1 through 8x8.
 set -euo pipefail
 
 EXAMPLES_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
@@ -12,13 +12,13 @@ Usage: [ENV=value ...] bash performance-sionna-sumimo-antenna-sweep.sh [--name=v
        bash performance-sionna-sumimo-antenna-sweep.sh --dry-run
 
 Runs one AP and one STA at matching antenna counts 1x1 through 8x8. All eight
-cases use the same apartment positions and one TCP flow. Antenna counts 2--8
-use open-loop SU spatial multiplexing; Minstrel can use up to the antenna count
-of streams. Defaults use 80 MHz, HE LDPC and a high offered TCP rate.
+cases use the same apartment positions and one flow (TRANSPORT=tcp by default; udp for saturated downlink). Counts 2--8
+use ideal-CSI SVD; Minstrel can use up to the antenna count
+of streams. Defaults use 20 MHz, HE LDPC and a high offered application rate.
 
 Defaults: ENVIRONMENT=apartment/apartment.xml MOBILE_SCENARIO=false
-MOBILE_SPEED=1 DATA_RATE=10000 RATE_ADAPTATION=minstrel PRECODING=open-loop
-CHANNEL_WIDTH_MHZ=80 CHANNEL=42 ARRAY_ROWS=1 TX_POWER=20 LDPC=true
+MOBILE_SPEED=1 DATA_RATE=10000 RATE_ADAPTATION=minstrel TRANSPORT=tcp PRECODING=SVD-for-2--8
+CHANNEL_WIDTH_MHZ=20 CHANNEL=40 ARRAY_ROWS=1 TX_POWER=20 LDPC=true
 AP_POSITION='-1,0.5,1.5' STA_POSITIONS='-2,1.5,1.6'
 OUTPUT_DIR=<ns-3>/results/sumimo-antenna-sweep/<timestamp>
 BUILD=true SIMULATION_TIME_SECONDS=10 TRAFFIC_START_SECONDS=1

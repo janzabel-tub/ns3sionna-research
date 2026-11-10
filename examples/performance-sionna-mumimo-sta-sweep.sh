@@ -12,16 +12,17 @@ Usage: [ENV=value ...] bash performance-sionna-mumimo-sta-sweep.sh [--name=value
        bash performance-sionna-mumimo-sta-sweep.sh --dry-run
 
 Runs one eight-antenna AP with 1, 2, ..., 8 single-antenna STAs in separate
-simulations. The one-STA case is a current-CSI MRT TCP baseline; cases with
+simulations. The one-STA case is a current-CSI MRT baseline; cases with
 2--8 STAs use eligible full-band MU-MIMO groups, one stream per selected STA,
 ZF precoding and ideal-CSI MU rates; SU fallback uses Minstrel.
+TRANSPORT=tcp is the default; TRANSPORT=udp uses continuously-on UDP per STA.
 MU_GROUPING=fixed MU_RATE_CONTROL=station-manager restores the strict legacy case. Apartment STAs use the existing randomized same-room positions.
 HE supports CHANNEL_WIDTH_MHZ=20/40/80/160 and MCS 0--9.
 REVERSE_PATH=reciprocal-he (default) enables single-stream HE uplink with
 ideal reciprocal CFRs and all AP receive antennas; legacy24 restores the baseline.
 
 Defaults: ENVIRONMENT=apartment/apartment.xml MOBILE_SCENARIO=false
-MOBILE_SPEED=1 DATA_RATE=600 (Mb/s per STA) RATE_ADAPTATION=minstrel
+MOBILE_SPEED=1 DATA_RATE=600 (Mb/s per STA) TRANSPORT=tcp RATE_ADAPTATION=minstrel
 ANTENNA_COUNT=8 ARRAY_ROWS=2 CHANNEL_WIDTH_MHZ=20 CHANNEL=0 PRECODING=zf TX_POWER=20
 OUTPUT_DIR=<ns-3>/results/mumimo-sta-sweep/<timestamp>
 BUILD=true SIMULATION_TIME_SECONDS=10 TRAFFIC_START_SECONDS=1
