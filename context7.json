@@ -1,0 +1,33 @@
+{
+  "$schema": "https://context7.com/schema/context7.json",
+  "projectTitle": "ns3sionna MIMO",
+  "description": "Ray-traced Sionna channels for ns-3.40 Wi-Fi, with SU-MIMO, beamforming, MU-MIMO and reproducible validation.",
+  "branch": "feature/su-mimo-minimal",
+  "folders": [],
+  "excludeFolders": [
+    "data",
+    "results",
+    "experiments",
+    "model",
+    "helper",
+    "test",
+    "tools",
+    "docker",
+    "examples/plots",
+    "doc/img",
+    ".idea"
+  ],
+  "excludeFiles": [
+    "AGENTS.md",
+    "ns3sionna_mimo_model.md",
+    "ns3sionna_mimo_model.pdf"
+  ],
+  "rules": [
+    "Use the MIMO fork and feature/su-mimo-minimal branch; upstream ns3sionna documentation may describe only the legacy scalar channel.",
+    "Target this project's modified ns-3.40 and pinned Sionna 2.2.0 / Sionna RT 2.2.0 environment; do not substitute newer APIs.",
+    "Sionna exports channels; ns-3 computes MIMO precoding, detection, SINR and packet outcomes.",
+    "CFR coefficients are serialized in [subcarrier, rx, tx] order, with tx varying fastest.",
+    "Prefer SionnaMimoHelper; distinguish the default mean-uncoded-BER mapping from explicit EESM, which requires an MCS-specific beta.",
+    "Separate implemented capabilities from validated calibration scope; do not claim general EHT or arbitrary MIMO PER calibration."
+  ]
+}

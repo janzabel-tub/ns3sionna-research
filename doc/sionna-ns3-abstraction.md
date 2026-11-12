@@ -4,13 +4,13 @@ Sionna RT supplies the physical channel; ns-3 computes MIMO reception and packet
 
 - **Sionna:** ray traces the scene and antenna arrays, then exports wideband path loss, propagation delay and normalized complex matrices $H[k]$ with antenna dimensions and validity times.
 - **Interface:** Protobuf/ZMQ transfers channel snapshots. ns-3 validates whole replies before caching them, preserves directed MU identities and future snapshots, and removes expired entries on cache access. Configurable admission budgets reject oversized replies before CFR/cache allocation; with caching disabled, each request uses its fresh reply.
-- **ns-3:** selects/applies precoding, computes stream SINRs (SU MMSE, DL-MU with inter-user interference, UL-MU ZF/MMSE), and maps them through EESM and the configured error model to packet reception in `SpectrumWifiPhy`. CSI feedback and aging also belong to ns-3; UL integration uses explicit simultaneous-user channel state.
+- **ns-3:** selects/applies precoding, computes stream SINRs (SU MMSE, DL-MU with inter-user interference, UL-MU ZF/MMSE), and maps them through mean uncoded BER (the current helper default) or explicitly selected EESM and the configured error model to packet reception in `SpectrumWifiPhy`. EESM requires an MCS-specific calibrated beta. CSI feedback and aging also belong to ns-3; UL integration uses explicit simultaneous-user channel state.
 
 ```text
 Sionna RT → path loss + delay + normalized H[k]
           → Protobuf/ZMQ → validated ns-3 cache
           → ns-3 precoding/detection → stream SINRs
-          → EESM → error model / PER → SpectrumWifiPhy
+          → mean uncoded BER or EESM → error model / PER → SpectrumWifiPhy
 ```
 
 This is a packet-level abstraction, without waveform demodulation. PER calibration is validated only for HE MCS 0/BCC/32-byte/1x1; EHT PER and broader profiles remain open. The sections below detail the SU path; current MU behavior and validation are documented in [the model](../ns3sionna_mimo_model.md).

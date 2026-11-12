@@ -19,6 +19,9 @@ Sionna (https://nvlabs.github.io/sionna/) to the widely used ns-3 network simula
 
 The implemented MIMO model and its validation are documented in [ns3sionna_mimo_model.md](./ns3sionna_mimo_model.md).
 
+For an English MIMO API entry point, Context7 indexing and coding-assistant
+setup, see [Using Context7 with the MIMO fork](./doc/context7.md).
+
 
 More information can be found in our paper: [Ns3Sionna paper](https://arxiv.org/abs/2412.20524)
 
